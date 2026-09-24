@@ -14,6 +14,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+import soil_vision as sv
+
 # ─────────────────────────────────────────────
 # 基本設定
 # ─────────────────────────────────────────────
@@ -59,7 +61,7 @@ with st.sidebar:
 
 tabs = st.tabs(
     ["🏠 ホーム", "🌱 小麦の播種シミュレーター", "📡 圃場モニター",
-     "🍞 原料レジリエンス", "🎓 探究学習プログラム", "📝 活動ログ", "📷 圃場フォト"]
+     "🍞 原料レジリエンス", "🎓 探究学習プログラム", "📝 活動ログ", "📷 圃場フォト", "🔬 AI土壌診断"]
 )
 
 # ═════════════════════════════════════════════
@@ -363,14 +365,16 @@ with tabs[5]:
         st.session_state.log = pd.DataFrame([
             dict(日付=date(2026, 9, 13), カテゴリ="圃場", 内容="草刈り後、小麦畑の整備を開始。"),
             dict(日付=date(2026, 9, 17), カテゴリ="圃場", 内容="ハウス脇・母屋裏の2区画で草刈り。工具・ガラの片付けと土壌診断の準備へ。"),
+            dict(日付=date(2026, 9, 17), カテゴリ="獣害対策", 内容="イノシシ対策：物理的な柵と周囲の草刈り（隠れ場所・エサをなくす環境整備）を開始、継続中。"),
             dict(日付=date(2026, 9, 23), カテゴリ="圃場", 内容="圃場に風車を設置。"),
+            dict(日付=date(2026, 9, 24), カテゴリ="発信", 内容="AI土壌診断（写真→生育ムラ→施肥設計、指標植物のベイズ推定）をダッシュボードに追加。"),
             dict(日付=date(2026, 9, 23), カテゴリ="発信", 内容="「スマートパン屋農家を始める！」発信開始。"),
         ])
 
     with st.expander("✏️ 記録を追加（このセッション内のみ保持）"):
         with st.form("add_log", clear_on_submit=True):
             d = st.date_input("日付", value=date.today())
-            cat = st.selectbox("カテゴリ", ["圃場", "栽培", "パン", "探究学習", "発信"])
+            cat = st.selectbox("カテゴリ", ["圃場", "栽培", "獣害対策", "パン", "探究学習", "発信"])
             txt = st.text_area("内容")
             if st.form_submit_button("追加") and txt.strip():
                 st.session_state.log = pd.concat(
@@ -403,6 +407,144 @@ with tabs[6]:
         cols = st.columns(4)
         for i, p in enumerate(photos):
             cols[i % 4].image(str(p), width="stretch")
+
+# ═════════════════════════════════════════════
+# 8. AI土壌診断（写真 → 生育ムラ → 施肥設計／指標植物）
+# ═════════════════════════════════════════════
+with tabs[7]:
+    st.header("🔬 AI土壌診断：写真から畑のムラを読む")
+    st.write(
+        "スマホ写真から植物の緑の濃さと分布を計算し、**どこに・どれだけ肥料を撒くか**、"
+        "**どこの土を本格的に分析すべきか**を提案します。生えている雑草（指標植物）から土の傾向も推定します。"
+    )
+    st.markdown(
+        "| Step | 内容 | このタブ |\n|---|---|---|\n"
+        "| 1 | 画像撮影（スマホ／ドローン） | 写真を選ぶ・アップロード |\n"
+        "| 2 | AI解析（生育ムラ・雑草分布） | 植生指数ExGで自動計算 |\n"
+        "| 3 | 施肥設計（処方箋） | 区画ごとの肥料量を算出 |\n"
+        "| 4 | ピンポイント施肥 | 区画表を見ながら手撒き |"
+    )
+
+    # ── 写真の選択 ──
+    all_photos = sorted(ASSETS.glob("*/*.jp*g")) if ASSETS.exists() else []
+    src_mode = st.radio("写真", ["圃場フォトから選ぶ", "アップロード"], horizontal=True)
+    img_src = None
+    if src_mode == "アップロード":
+        img_src = st.file_uploader("畑の写真（できるだけ真上から）", type=["jpg", "jpeg", "png"], key="soil_up")
+    elif all_photos:
+        img_src = st.selectbox("写真を選択", all_photos,
+                               format_func=lambda p: f"{p.parent.name} / {p.name}")
+
+    if img_src is None:
+        st.info("写真を選ぶかアップロードしてください。")
+    else:
+        rgb = sv.load_image(img_src)
+        with st.expander("✂️ 解析範囲を畑の部分だけに絞る（壁・空・通路を除く）"):
+            cr1, cr2 = st.columns(2)
+            top, bottom = cr1.slider("上下の範囲 %", 0, 100, (0, 100), key="crop_v")
+            left, right = cr2.slider("左右の範囲 %", 0, 100, (0, 100), key="crop_h")
+            H0, W0 = rgb.shape[:2]
+            if bottom - top >= 10 and right - left >= 10:
+                rgb = rgb[H0 * top // 100: H0 * bottom // 100, W0 * left // 100: W0 * right // 100]
+        idx = sv.vegetation_indices(rgb)
+
+        st.subheader("① 計算する：植物と土を分ける")
+        p1, p2, p3 = st.columns(3)
+        th_mode = p1.radio("しきい値", ["固定（推奨）", "大津の自動二値化"])
+        th = p1.slider("ExG しきい値", 0.0, 0.3, 0.05, 0.01) if th_mode.startswith("固定") \
+            else sv.otsu_threshold(idx["ExG"])
+        rows_n = p2.slider("グリッド 行", 2, 8, 4)
+        cols_n = p2.slider("グリッド 列", 2, 8, 4)
+        mask = (idx["ExG"] > th) & (rgb[..., 1] > rgb[..., 0])  # 黄色い物体などを除外
+        p3.metric("植被率（写真全体）", f"{mask.mean() * 100:.0f} %")
+        p3.metric("しきい値", f"{th:.3f}")
+        p3.caption("ExG = 2g − r − b（r,g,b は明るさで正規化したRGB）")
+
+        st.subheader("② 可視化する：生育ムラマップ")
+        grid = sv.grid_stats(idx["ExG"], mask, rows_n, cols_n)
+        v1, v2 = st.columns(2)
+        overlay = rgb.copy()
+        overlay[mask] = overlay[mask] * 0.4 + np.array([40, 220, 60]) * 0.6
+        v1.image(overlay.astype(np.uint8), caption="緑色＝植物と判定した部分", width="stretch")
+        heat = grid.pivot(index="行", columns="列", values="緑の濃さ").to_numpy()
+        labels = grid.pivot(index="行", columns="列", values="区画").to_numpy()
+        fig = px.imshow(heat, color_continuous_scale="YlGn", aspect="auto",
+                        labels=dict(color="緑の濃さ(ExG)"))
+        fig.update_traces(text=labels, texttemplate="%{text}<br>%{z:.2f}")
+        fig.update_xaxes(showticklabels=False)
+        fig.update_yaxes(showticklabels=False)
+        fig.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10))
+        v2.plotly_chart(fig, width="stretch")
+        v2.caption("色が薄い区画ほど緑が薄い＝窒素不足の可能性。空欄は植物がほぼ無い区画。")
+
+        st.subheader("③ 自分の条件で判断する：可変施肥の処方箋")
+        f1, f2, f3, f4 = st.columns(4)
+        area = f1.number_input("写真に写る範囲の面積 ㎡", 1.0, 1000.0, float(FIELD_AREA_M2), 1.0)
+        base_n = f2.number_input("標準の追肥 窒素 kg/10a", 0.0, 10.0, 2.0, 0.5)
+        fert = f3.selectbox("肥料", {"硫安（N 21%）": 0.21, "尿素（N 46%）": 0.46,
+                                   "化成肥料 8-8-8（N 8%）": 0.08, "油かす（N 約5%）": 0.05})
+        n_ratio = {"硫安（N 21%）": 0.21, "尿素（N 46%）": 0.46,
+                   "化成肥料 8-8-8（N 8%）": 0.08, "油かす（N 約5%）": 0.05}[fert]
+        gain = f4.slider("ムラへの反応の強さ", 0.0, 1.0, 0.5, 0.1)
+        rx = sv.prescription(grid, base_n, n_ratio, area, gain)
+
+        t1, t2 = st.columns([3, 2])
+        t1.dataframe(
+            rx[["区画", "植被率", "緑の濃さ", "倍率", "肥料量(g)", "判定"]].style.format(
+                {"植被率": "{:.0%}", "緑の濃さ": "{:.3f}", "倍率": "{:.2f}", "肥料量(g)": "{:.0f}"}),
+            hide_index=True, width="stretch", height=320)
+        uniform = base_n * area / n_ratio
+        t2.metric("可変施肥の肥料合計", f"{rx['肥料量(g)'].sum():.0f} g",
+                  f"{(rx['肥料量(g)'].sum() / uniform - 1) * 100:+.0f} % vs 均一散布", delta_color="inverse")
+        pts = sv.sampling_points(rx)
+        t2.success("**本格的な土壌分析に回す区画**：" + "・".join(pts))
+        t2.caption("裸地・最も緑が薄い区画・比較対照として最も濃い区画を選んでいます。"
+                   "画像で当たりをつけ、その場所だけ土壌分析へ（ハイブリッド方式）。")
+        t2.download_button("処方箋をCSVで保存", rx.to_csv(index=False).encode("utf-8-sig"),
+                           "prescription.csv", "text/csv")
+
+        st.divider()
+        st.subheader("指標植物から土の傾向を推定する（ベイズ更新）")
+        w1, w2 = st.columns([2, 3])
+        with w1:
+            if sv.ai_available():
+                if st.button("🤖 生成AIに雑草の候補を提案させる"):
+                    with st.spinner("解析中…"):
+                        try:
+                            res = sv.ai_suggest_weeds(rgb)
+                            st.session_state.ai_weeds = res
+                            st.session_state.weeds = [c["name"] for c in res.get("candidates", [])
+                                                      if c.get("name") in sv.INDICATORS
+                                                      and c.get("confidence", 0) >= 0.5]
+                        except Exception as e:  # noqa: BLE001
+                            st.error(f"AI解析に失敗しました：{e}")
+                if "ai_weeds" in st.session_state:
+                    for c in st.session_state.ai_weeds.get("candidates", []):
+                        st.caption(f"・{c.get('name')}（確信度 {c.get('confidence', 0):.2f}）{c.get('reason', '')}")
+            else:
+                st.caption("※ `ANTHROPIC_API_KEY` を設定すると、生成AIが写真から雑草の候補を提案します"
+                           "（最終判断は人が行う半自動方式）。未設定のため手動で選んでください。")
+            observed = st.multiselect("多く生えている雑草", list(sv.INDICATORS), key="weeds")
+            prior = st.slider("事前確率（何も見ていない時点の確からしさ）", 0.05, 0.9, 0.3, 0.05)
+        post = sv.bayes_soil(observed, prior)
+        fig = px.bar(post, x="事後確率", y="傾向", orientation="h", range_x=[0, 1],
+                     text=post["事後確率"].map("{:.0%}".format),
+                     color_discrete_sequence=["#6a9a4a"])
+        fig.add_vline(x=prior, line_dash="dot", annotation_text="事前確率")
+        fig.update_layout(height=260, margin=dict(l=10, r=10, t=30, b=10))
+        w2.plotly_chart(fig, width="stretch")
+        w2.caption("事後オッズ ＝ 事前オッズ × Π（雑草ごとの尤度比）。尤度比は資料に基づく仮定値で、"
+                   "実際の土壌分析の結果が出たら見直します。")
+
+        with st.expander("⚠️ この診断の限界"):
+            st.markdown(
+                "- 本物のNDVIには近赤外（NIR）が必要です。ここではRGBで代わりになる指数（ExG）を使っています。\n"
+                "- pHや成分量（mg単位）は出せません。**傾向をつかみ、土壌分析をする場所を絞る**ための道具です。\n"
+                "- 壁・空・生け垣など畑以外が写っている場合は、上の「解析範囲」で除いてください。\n"
+                "- 斜めに撮ると奥の区画ほど面積が小さく写ります。施肥設計には真上からの写真が向いています。\n"
+                "- 施肥設計が最も効くのは、小麦が育ち始めた後の**追肥**の時期（2〜3月頃）です。今の時期の写真は雑草の分布を見る練習になります。\n"
+                "- 雑草の種類は地域差があり、AIの判定は間違えることがあります。必ず人の目で確認してください。"
+            )
 
 st.divider()
 st.caption("© スマートパン屋農家プロジェクト ｜ 数値モデルは説明用の仮定を含みます。")
