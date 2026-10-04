@@ -5,6 +5,7 @@ Streamlit + Plotly
 起動: streamlit run app.py
 構成: 計算する → 可視化する → 自分の条件で判断する（3段構え）
 """
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -25,7 +26,9 @@ ASSETS = Path(__file__).parent / "assets"
 PHOTO_LOG = {  # フォルダ名(YYYYMMDD) → 写真キャプション
     "20260913": "草刈り後、小麦畑の整備を開始",
     "20260923": "圃場に風車（かざぐるま）を設置",
+    "20261003": "米ぬか発酵肥料・果樹の植栽・AI土壌診断・獣害対策",
 }
+SOW_DAY = date(2026, 10, 20)  # 播種目標日（実体験上の発芽率最適期）
 
 st.set_page_config(
     page_title="スマートパン屋農家を始める！",
@@ -36,11 +39,18 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .hero {padding: 1.6rem 1.8rem; border-radius: 14px;
+    .hero {padding: 1.8rem 2rem 1.6rem; border-radius: 16px;
            background: linear-gradient(120deg, #f6e7c8 0%, #e3efd6 100%);
            color: #3b2f1e; margin-bottom: 1rem;}
-    .hero h1 {margin: 0 0 .3rem 0; font-size: 2.1rem;}
-    .hero p {margin: 0; font-size: 1.05rem;}
+    .hero .eyebrow {font-size: .85rem; letter-spacing: .08em; color: #8a6a3a; margin: 0 0 .4rem 0;}
+    .hero h1 {margin: 0 0 .6rem 0; font-size: 2.2rem; line-height: 1.25; color: #3b2f1e;}
+    .hero .lead {margin: 0 0 .9rem 0; font-size: 1.08rem; line-height: 1.8;}
+    .hero .motto {display: inline-block; margin: 0; padding: .35rem .8rem; border-radius: 999px;
+                  background: rgba(255,255,255,.65); font-size: .95rem; font-weight: 600;}
+    .cycle {display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin: .4rem 0 1rem;}
+    .cycle span.step {padding: .35rem .75rem; border-radius: 10px; background: #f3ecdf;
+                      color: #3b2f1e; font-size: .92rem; white-space: nowrap;}
+    .cycle span.arrow {color: #a08a68;}
     .note {font-size: .85rem; color: #7a6a55;}
     </style>
     """,
@@ -52,12 +62,50 @@ st.markdown(
 # ─────────────────────────────────────────────
 with st.sidebar:
     st.header("🌾 スマートパン屋農家")
-    st.write("麦を育て、データで判断し、パンを焼く。")
+    st.write("麦を育て、数値で判断し、パンを焼く。")
     st.link_button("📘 Facebookで活動を見る", FACEBOOK_URL, width="stretch")
     st.divider()
     st.caption("拠点：広島県三原市西部（ハウス・畑区画）")
     st.caption(f"圃場面積：約 {FIELD_AREA_M2} ㎡")
     st.caption("このページの数値モデルは説明用の仮定値を含みます。")
+
+# ─────────────────────────────────────────────
+# データ：ロードマップと活動ログ（ホームと活動ログタブで共用）
+# ─────────────────────────────────────────────
+ROADMAP = [
+    ("草刈り・片付け",                 "2026-09-13", "2026-09-30"),
+    ("獣害対策（柵・周囲の草刈り）",   "2026-09-17", "2026-10-31"),
+    ("米ぬか発酵肥料づくり",           "2026-09-22", "2026-10-31"),
+    ("土壌診断（AI画像解析＋分析）",   "2026-09-24", "2026-10-14"),
+    ("ハウス周囲の通路（車椅子対応）", "2026-10-04", "2026-10-25"),
+    ("耕起・畝立て",                   "2026-10-10", "2026-10-18"),
+    ("播種（最適期 10/20頃）",         "2026-10-18", "2026-10-31"),
+    ("生育管理・センサー観測",         "2026-11-01", "2027-05-31"),
+    ("追肥（AI生育ムラ診断）",         "2027-02-01", "2027-03-31"),
+    ("収穫・乾燥・製粉",               "2027-06-01", "2027-07-15"),
+    ("試作パン・探究学習の実施",       "2027-07-01", "2027-09-30"),
+]
+
+
+def roadmap_with_status(today: date) -> pd.DataFrame:
+    df = pd.DataFrame(ROADMAP, columns=["工程", "開始", "終了"])
+    s, e = pd.to_datetime(df["開始"]).dt.date, pd.to_datetime(df["終了"]).dt.date
+    df["状態"] = np.where(e < today, "完了", np.where(s <= today, "進行中", "予定"))
+    return df
+
+
+if "log" not in st.session_state:
+    st.session_state.log = pd.DataFrame([
+        dict(日付=date(2026, 9, 13), カテゴリ="圃場", 内容="草刈り後、小麦畑の整備を開始。"),
+        dict(日付=date(2026, 9, 17), カテゴリ="圃場", 内容="ハウス脇・母屋裏の2区画で草刈り。工具・ガラの片付けと土壌診断の準備へ。"),
+        dict(日付=date(2026, 9, 17), カテゴリ="獣害対策", 内容="イノシシ対策：物理的な柵と周囲の草刈り（隠れ場所・エサをなくす環境整備）を開始、継続中。焼き畑の煙は数日で効果が切れるため主対策にしない。"),
+        dict(日付=date(2026, 9, 23), カテゴリ="土づくり", 内容="米ぬか発酵肥料づくり開始。柿の小枝・天日干しした雑草の上に米ぬか2袋を投入。"),
+        dict(日付=date(2026, 9, 23), カテゴリ="圃場", 内容="ペットボトルでモグラよけ風車を作り、圃場に設置。"),
+        dict(日付=date(2026, 9, 23), カテゴリ="発信", 内容="「スマートパン屋農家を始める！」発信開始。"),
+        dict(日付=date(2026, 9, 24), カテゴリ="発信", 内容="AI土壌診断（写真→生育ムラ→施肥設計、指標植物のベイズ推定）をダッシュボードに追加。"),
+        dict(日付=date(2026, 10, 3), カテゴリ="栽培", 内容="果樹（柿・キウイ・栗）を植栽。"),
+        dict(日付=date(2026, 10, 4), カテゴリ="圃場", 内容="ハウスの周囲に通路づくりを開始。車椅子でも一周できる幅で整備中。"),
+    ])
 
 tabs = st.tabs(
     ["🏠 ホーム", "🌱 小麦の播種シミュレーター", "📡 圃場モニター",
@@ -69,46 +117,66 @@ tabs = st.tabs(
 # ═════════════════════════════════════════════
 with tabs[0]:
     st.markdown(
-        """
+        f"""
         <div class="hero">
+          <p class="eyebrow">広島県三原市 ・ 約{FIELD_AREA_M2}㎡の小さな畑から</p>
           <h1>スマートパン屋農家を始める！</h1>
-          <p>畑の小麦から一斤のパンまで。センサー・AI・ロボットで「見える化」しながら、
-          小さな農とパンの循環を三原でつくります。</p>
+          <p class="lead">畑の小麦から、一斤のパンまで。<br>
+          土の状態も、麦の育ち方も、パンの原価も。センサー・AI・ロボットで<b>数字にして見える化</b>し、
+          小さな農とパンの循環を、三原でひとつずつ形にしていきます。</p>
+          <p class="motto">噂や雰囲気ではなく、自分の数値で決める。</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    c1, c2, c3, c4 = st.columns(4)
-    sow_day = date(2026, 10, 20)
-    today = date.today()
-    c1.metric("圃場面積", f"{FIELD_AREA_M2} ㎡")
-    c2.metric("播種目標日", sow_day.strftime("%m/%d"),
-              f"あと {(sow_day - today).days} 日" if sow_day >= today else "播種済み")
-    c3.metric("栽培品目", "パン用小麦")
-    c4.metric("現在のフェーズ", "圃場整備")
+    # この畑でつくる循環（米ぬか・残渣 → 発酵肥料 → 土 へ戻す）
+    cycle = ["🌱 土づくり", "🌾 小麦を育てる", "⚙️ 収穫・製粉", "🍞 パンを焼く", "♻️ 米ぬか・残渣を発酵肥料に"]
+    st.markdown(
+        '<div class="cycle">'
+        + '<span class="arrow">→</span>'.join(f'<span class="step">{s}</span>' for s in cycle)
+        + '<span class="arrow">→ 土へ戻す</span></div>',
+        unsafe_allow_html=True,
+    )
 
-    st.subheader("3段構えの考え方")
-    s1, s2, s3 = st.columns(3)
-    s1.info("**① 計算する**\n\n発芽率・収量・原価・在庫日数を数式で出す。")
-    s2.success("**② 可視化する**\n\nグラフで「いま何が起きているか」を共有する。")
-    s3.warning("**③ 自分の条件で判断する**\n\n噂や雰囲気ではなく、自分の数値で決める。")
+    today = date.today()
+    current = roadmap_with_status(today)
+    # 進行中の工程のうち、いちばん最近始めたものを「いまの工程」として表示
+    doing = current[current["状態"] == "進行中"].sort_values("開始", ascending=False)["工程"].tolist()
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("圃場面積", f"{FIELD_AREA_M2} ㎡")
+    c1.caption("ハウス・畑の2区画")
+    c2.metric("播種目標日", SOW_DAY.strftime("%m/%d"))
+    c2.caption(f"あと {(SOW_DAY - today).days} 日（発芽率の最適期）" if SOW_DAY >= today else "播種済み")
+    c3.metric("栽培品目", "パン用小麦")
+    c3.caption("ほかに柿・キウイ・栗")
+    c4.metric("進行中の工程", f"{len(doing)} 件")
+    c4.caption(f"最新：{doing[0]}" if doing else "—")
+
+    left, right = st.columns([3, 2])
+    with left:
+        st.subheader("3段構えで進めます")
+        s1, s2, s3 = st.columns(3)
+        s1.info("**① 計算する**\n\n発芽率・播種量・原価・在庫日数を数式で出す。\n\n→ 播種シミュレーター")
+        s2.success("**② 可視化する**\n\n「いま畑で何が起きているか」をグラフと写真で共有する。\n\n→ 圃場モニター・AI土壌診断")
+        s3.warning("**③ 自分の条件で判断する**\n\n自分の畑・自分の在庫・自分の資金で決める。\n\n→ 原料レジリエンス")
+    with right:
+        st.subheader("最近の畑")
+        recent = st.session_state.log.sort_values("日付", ascending=False).head(4)
+        for _, r in recent.iterrows():
+            st.markdown(f"**{r['日付']:%m/%d}**　`{r['カテゴリ']}`　{r['内容']}")
+        st.link_button("📘 Facebookで毎日の様子を見る", FACEBOOK_URL)
 
     st.subheader("ロードマップ")
-    roadmap = pd.DataFrame([
-        dict(工程="草刈り・片付け",           開始="2026-09-13", 終了="2026-09-30", 状態="進行中"),
-        dict(工程="土壌診断・堆肥投入",       開始="2026-09-25", 終了="2026-10-14", 状態="予定"),
-        dict(工程="耕起・畝立て",             開始="2026-10-10", 終了="2026-10-18", 状態="予定"),
-        dict(工程="播種（最適期 10/20頃）",   開始="2026-10-18", 終了="2026-10-31", 状態="予定"),
-        dict(工程="生育管理・センサー観測",   開始="2026-11-01", 終了="2027-05-31", 状態="予定"),
-        dict(工程="収穫・乾燥・製粉",         開始="2027-06-01", 終了="2027-07-15", 状態="予定"),
-        dict(工程="試作パン・探究学習の実施", 開始="2027-07-01", 終了="2027-09-30", 状態="予定"),
-    ])
-    fig = px.timeline(roadmap, x_start="開始", x_end="終了", y="工程", color="状態",
-                      color_discrete_map={"進行中": "#c98a2b", "予定": "#9bb884"})
-    fig.update_yaxes(autorange="reversed")
-    fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10))
+    fig = px.timeline(current, x_start="開始", x_end="終了", y="工程", color="状態",
+                      color_discrete_map={"完了": "#c9c2b4", "進行中": "#c98a2b", "予定": "#9bb884"},
+                      category_orders={"状態": ["完了", "進行中", "予定"]})
+    fig.update_yaxes(autorange="reversed", title=None)
+    fig.add_vline(x=pd.Timestamp(today), line_dash="dot", line_color="#555")
+    fig.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
     st.plotly_chart(fig, width="stretch")
+    st.caption("状態（完了／進行中／予定）は今日の日付から自動で判定しています。点線が今日です。")
 
 # ═════════════════════════════════════════════
 # 2. 小麦の播種シミュレーター
@@ -361,20 +429,11 @@ with tabs[4]:
 # ═════════════════════════════════════════════
 with tabs[5]:
     st.header("📝 活動ログ")
-    if "log" not in st.session_state:
-        st.session_state.log = pd.DataFrame([
-            dict(日付=date(2026, 9, 13), カテゴリ="圃場", 内容="草刈り後、小麦畑の整備を開始。"),
-            dict(日付=date(2026, 9, 17), カテゴリ="圃場", 内容="ハウス脇・母屋裏の2区画で草刈り。工具・ガラの片付けと土壌診断の準備へ。"),
-            dict(日付=date(2026, 9, 17), カテゴリ="獣害対策", 内容="イノシシ対策：物理的な柵と周囲の草刈り（隠れ場所・エサをなくす環境整備）を開始、継続中。"),
-            dict(日付=date(2026, 9, 23), カテゴリ="圃場", 内容="圃場に風車を設置。"),
-            dict(日付=date(2026, 9, 24), カテゴリ="発信", 内容="AI土壌診断（写真→生育ムラ→施肥設計、指標植物のベイズ推定）をダッシュボードに追加。"),
-            dict(日付=date(2026, 9, 23), カテゴリ="発信", 内容="「スマートパン屋農家を始める！」発信開始。"),
-        ])
 
     with st.expander("✏️ 記録を追加（このセッション内のみ保持）"):
         with st.form("add_log", clear_on_submit=True):
             d = st.date_input("日付", value=date.today())
-            cat = st.selectbox("カテゴリ", ["圃場", "栽培", "獣害対策", "パン", "探究学習", "発信"])
+            cat = st.selectbox("カテゴリ", ["圃場", "土づくり", "栽培", "獣害対策", "パン", "探究学習", "発信"])
             txt = st.text_area("内容")
             if st.form_submit_button("追加") and txt.strip():
                 st.session_state.log = pd.concat(
@@ -406,7 +465,10 @@ with tabs[6]:
         photos = sorted(folder.glob("*.jp*g")) + sorted(folder.glob("*.png"))
         cols = st.columns(4)
         for i, p in enumerate(photos):
-            cols[i % 4].image(str(p), width="stretch")
+            # ファイル名（例：米ぬか発酵肥料づくり開始-1.jpg）をそのままキャプションに使う
+            cap = re.sub(r"[_ ]?\d{8}$", "", p.stem.rsplit("-", 1)[0]).replace("_", " ")
+            cols[i % 4].image(str(p), width="stretch",
+                              caption=None if cap.startswith(("img", "IMG", "sns")) else cap)
 
 # ═════════════════════════════════════════════
 # 8. AI土壌診断（写真 → 生育ムラ → 施肥設計／指標植物）
