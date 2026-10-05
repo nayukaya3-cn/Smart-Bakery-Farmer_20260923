@@ -15,6 +15,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+import media_gallery as mg
 import soil_vision as sv
 
 # ─────────────────────────────────────────────
@@ -698,6 +699,9 @@ with tabs[8]:
             "- 印刷中は高温になります。換気をし、子どもの手が届かないようにします。"
         )
 
+    st.divider()
+    mg.media_section(ASSETS / "3d_printer", key="p3d", title="📂 3Dプリンターの記録・資料")
+
 # ═════════════════════════════════════════════
 # 10. AIロボット（記録 → シミュレーション → 実機）
 # ═════════════════════════════════════════════
@@ -777,6 +781,9 @@ with tabs[9]:
             "- 撮影した写真に人や近所の家が写り込まないよう、撮影範囲に気をつけます。\n"
             "- 通信でつながる機器なので、初期パスワードの変更など**基本的なセキュリティ対策**を行います。"
         )
+
+    st.divider()
+    mg.media_section(ASSETS / "robot", key="robot", title="📂 AIロボットの記録・資料")
 
 st.divider()
 st.caption("© スマートパン屋農家プロジェクト ｜ 数値モデルは説明用の仮定を含みます。")
