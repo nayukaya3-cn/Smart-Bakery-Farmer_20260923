@@ -24,6 +24,7 @@ import soil_vision as sv
 FACEBOOK_URL = "https://www.facebook.com/profile.php?id=100079624235158"
 COCRE_HUB_URL = "https://cocrehub.com/"
 FIELD_AREA_M2 = 96  # 圃場面積（㎡）
+JOHO1_NOTEBOOK = "notebooks/joho1_examples.ipynb"  # 情報Ⅰの例題ノートブック（Colabで開く）
 ASSETS = Path(__file__).parent / "assets"
 PHOTO_LOG = {  # フォルダ名(YYYYMMDD) → 写真キャプション
     "20260913": "草刈り後、小麦畑の整備を開始",
@@ -798,6 +799,21 @@ with tabs[10]:
     st.caption("※ 教材の試作段階です。データは説明用のサンプルで、実測データがたまり次第、差し替えていきます。"
                "問題はすべてオリジナルの模擬問題です。")
 
+    with st.container(border=True):
+        cb1, cb2 = st.columns([3, 2])
+        cb1.markdown(
+            "**▶ Google Colab で動かしてみよう**\n\n"
+            "下の例題1〜3のプログラムを、ブラウザだけで実行できるノートブックにまとめました。"
+            "インストール不要・Googleアカウントがあれば無料で使えます。"
+            "数値を書きかえたり、まちがいを直したりしながら、動作を確かめられます。"
+        )
+        cb2.link_button("▶ Google Colab で例題を開く", mg.colab_url(JOHO1_NOTEBOOK), width="stretch")
+        nb_path = Path(__file__).parent / JOHO1_NOTEBOOK
+        if nb_path.exists():
+            cb2.download_button("ノートブック（.ipynb）を保存", nb_path.read_bytes(),
+                                file_name=nb_path.name, width="stretch")
+        cb2.caption("開いたら、上から順にセルの ▶ を押します。自分のドライブに保存すると書きかえを残せます。")
+
     st.subheader("教科のつながり")
     link = pd.DataFrame([
         ("生物基礎", "植生調査（コドラート法）で雑草を数える", "文字列・辞書を使った頻度の集計", "例題1"),
@@ -954,7 +970,15 @@ r = sum_xy / math.sqrt(sum_xx * sum_yy)
                        "sprouts.csv", "text/csv")
     d2.download_button("例題3のデータ（CSV）", temp_df.to_csv(index=False).encode("utf-8-sig"),
                        "soil_temp_days.csv", "text/csv")
-    st.caption("Google Colab などに読み込んで、自分でプログラムを書いて確かめてみましょう。")
+    st.caption("Google Colab の左の 📁 にドラッグすると、ノートブックの最後のセルで読み込めます。")
+
+    st.divider()
+    mg.media_section(
+        ASSETS / "joho1", key="joho1", title="📂 教材テキストの追加",
+        accept="PDF・テキスト（md / txt）・ノートブック（ipynb）・Python（py）・CSV・画像",
+    )
+    st.caption("`assets/joho1/YYYYMMDD/` に置いたファイルが、ここに自動で並びます。"
+               ".ipynb には「Google Colab で開く」ボタンが付き、.py は Colab 用ノートブックに変換して保存できます。")
 
 st.divider()
 st.caption("© スマートパン屋農家プロジェクト ｜ 数値モデルは説明用の仮定を含みます。")

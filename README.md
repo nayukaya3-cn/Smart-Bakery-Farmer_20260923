@@ -30,6 +30,15 @@ GitHubにこのフォルダをpush → https://share.streamlit.io で `app.py` �
 - GitHub のファイル1つあたりの上限は 100MB です。長い動画は短く切るか YouTube に置いてリンクを貼ってください。
 - 各タブの「➕ ファイルを取り込んで確認する」は、そのセッション内だけの確認用です（公開ページには残りません）。
 
+## 「💻 情報Ⅰ」タブ：教材の追加と Google Colab
+- 例題1〜3のノートブック：`notebooks/joho1_examples.ipynb`（タブの「▶ Google Colab で例題を開く」から開く）
+- 教材を追加するときは `assets/joho1/YYYYMMDD/` に置く
+  - `.ipynb` →「▶ Google Colab で開く」ボタンが付く（GitHub に置いたものだけ）
+  - `.py` → 表示＋「Colab 用ノートブック（.ipynb）に変換して保存」（`# %%` の行でセルを区切れる）
+  - `.pdf` `.md` `.txt` `.csv` 画像 → そのまま表示
+- Colab のボタンは、リポジトリが **公開（Public）** で、ファイルが GitHub の `main` ブランチにあるときに動きます。
+  リポジトリ名を変えたら `media_gallery.py` の `GITHUB_REPO` を直してください。
+
 ## 生成AIで雑草候補を提案させる（任意）
 環境変数 `ANTHROPIC_API_KEY` を設定（Streamlit Cloud では Settings → Secrets に
 `ANTHROPIC_API_KEY = "sk-ant-..."`）。未設定でも手動選択で動きます。
@@ -37,8 +46,9 @@ GitHubにこのフォルダをpush → https://share.streamlit.io で `app.py` �
 ## 構成
 | ファイル | 役割 |
 |---|---|
-| app.py | 画面（10タブ） |
-| media_gallery.py | 画像・動画・PDF・テキストの表示部品（3Dプリンター／AIロボットタブ） |
+| app.py | 画面（11タブ） |
+| media_gallery.py | 画像・動画・PDF・テキスト・ノートブックの表示部品、Colab リンク |
+| notebooks/ | Google Colab 用ノートブック |
 | soil_vision.py | 画像解析（ExG・大津二値化・グリッド集計）、可変施肥、指標植物のベイズ更新、生成AI呼び出し |
 | assets/ | 圃場写真（日付フォルダ） |
 
