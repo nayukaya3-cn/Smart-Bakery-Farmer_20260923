@@ -112,7 +112,7 @@ if "log" not in st.session_state:
 tabs = st.tabs(
     ["🏠 ホーム", "🌱 小麦の播種シミュレーター", "📡 圃場モニター",
      "🍞 原料レジリエンス", "🎓 探究学習（構想）", "📝 活動ログ", "📷 圃場フォト", "🔬 AI土壌診断",
-     "🖨️ 3Dプリンター", "🤖 AIロボット"]
+     "🖨️ 3Dプリンター", "🤖 AIロボット", "💻 情報Ⅰ"]
 )
 
 # ═════════════════════════════════════════════
@@ -784,6 +784,177 @@ with tabs[9]:
 
     st.divider()
     mg.media_section(ASSETS / "robot", key="robot", title="📂 AIロボットの記録・資料")
+
+# ═════════════════════════════════════════════
+# 11. 情報Ⅰ（データの活用・プログラミング）からアプローチする
+# ═════════════════════════════════════════════
+with tabs[10]:
+    st.header("💻 「情報Ⅰ」の視点（データの活用・プログラミング）からアプローチする")
+    st.write(
+        "共通テストの「情報Ⅰ」では、数学・理科・社会の場面設定を題材にした問題がよく出ます。"
+        "ここでは題材を**この畑のデータ**に置きかえて、Pythonのプログラムを読む・動かす練習をします。"
+        "畑で起きていることが、そのままデータ分析とプログラミングの教材になります。"
+    )
+    st.caption("※ 教材の試作段階です。データは説明用のサンプルで、実測データがたまり次第、差し替えていきます。"
+               "問題はすべてオリジナルの模擬問題です。")
+
+    st.subheader("教科のつながり")
+    link = pd.DataFrame([
+        ("生物基礎", "植生調査（コドラート法）で雑草を数える", "文字列・辞書を使った頻度の集計", "例題1"),
+        ("数学Ⅰ・A（データの分析）", "区画ごとの発芽本数", "平均・分散・箱ひげ図、データの変換", "例題2"),
+        ("理科基礎（地温・季節）", "地温と、発芽までの日数", "散布図・相関係数を求めるループ", "例題3"),
+        ("物理基礎", "ロボットの巡回（距離・速さ・時間）", "ループと条件分岐でシミュレーション", "🤖 AIロボット"),
+        ("公共・政治経済", "原料価格の高騰と在庫・買いだめ", "モデル化とシミュレーション", "🍞 原料レジリエンス"),
+    ], columns=["教科・科目", "畑での題材", "情報Ⅰの視点", "このページ"])
+    st.dataframe(link, width="stretch", hide_index=True)
+
+    def quiz(key: str, question: str, options: list[str], answer: int, explain: str) -> None:
+        st.markdown(f"**❓ {question}**")
+        pick = st.radio("選択肢", options, index=None, key=key, label_visibility="collapsed")
+        if pick is not None:
+            if options.index(pick) == answer:
+                st.success("正解です。")
+            else:
+                st.error(f"ちがいます。正解は {options[answer]}")
+            st.info(explain)
+
+    # ── 例題1：生物基礎 × 辞書による集計 ──────────────────
+    st.divider()
+    st.subheader("例題1　生物基礎 × プログラミング：コドラート法で雑草を数える")
+    st.write(
+        "畑の5か所に1m四方の枠（コドラート）を置き、枠の中の雑草を記録しました。"
+        "1行が1つの枠です（雑草名をカンマで区切る）。自由に書きかえて、結果の変化を確かめられます。"
+    )
+    q_text = st.text_area(
+        "記録（1行＝1つの枠）",
+        "スギナ, スギナ, ハコベ, ナズナ\nスギナ, オオバコ\nハコベ, ハコベ, スギナ, シロザ\n"
+        "スギナ, スギナ, スギナ\nオオバコ, カラスノエンドウ, ハコベ",
+        height=130, key="quad_text",
+    )
+    quadrats = [[w.strip() for w in line.split(",") if w.strip()] for line in q_text.splitlines() if line.strip()]
+    code1 = """count = {}                  # 雑草名 → 個体数
+for q in quadrats:          # 枠ごとに
+    for name in q:          # 枠の中の雑草を1本ずつ
+        if name in count:
+            count[name] += 1
+        else:
+            count[name] = 1
+"""
+    e1, e2 = st.columns([1, 1])
+    e1.code(code1, language="python")
+    ind, freq = {}, {}
+    for qd in quadrats:
+        for name in qd:
+            ind[name] = ind.get(name, 0) + 1
+        for name in set(qd):
+            freq[name] = freq.get(name, 0) + 1
+    res1 = pd.DataFrame({"雑草": list(ind), "個体数": list(ind.values()),
+                         "出現した枠の数（頻度）": [freq[k] for k in ind]}).sort_values("個体数", ascending=False)
+    if len(res1):
+        fig = px.bar(res1, x="雑草", y="個体数", text="個体数", color_discrete_sequence=["#6a9a4a"])
+        fig.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10))
+        e2.plotly_chart(fig, width="stretch")
+        e2.caption(f"優占種（いちばん多い雑草）：**{res1.iloc[0]['雑草']}**　→ 🔬 AI土壌診断の「指標植物」につながります。")
+    st.dataframe(res1, width="stretch", hide_index=True)
+    quiz("q1", "各雑草が「いくつの枠に出てきたか（頻度）」を数えたい。プログラムの2行目 `for name in q:` の q を何に変えればよいか。",
+         ["① sorted(q)", "② set(q)", "③ len(q)", "④ quadrats"], 1,
+         "set(q) で同じ枠の中の重複を取り除くと、1つの枠につき1回だけ数えられます。"
+         "上の表の「出現した枠の数（頻度）」がその結果です。個体数と頻度のどちらで比べるかで、"
+         "「優占している」の意味が変わる点に注意しましょう。")
+
+    # ── 例題2：数学Ⅰ・A × データの分析 ──────────────────
+    st.divider()
+    st.subheader("例題2　数学Ⅰ・A × データの分析：発芽本数のばらつき")
+    st.write("小麦を条まきした畑で、20区画（各1m）の発芽本数を数えました。")
+    rng2 = np.random.default_rng(7)
+    sprouts = np.clip(np.round(rng2.normal(38, 6, 20)), 20, 55).astype(int).tolist()
+    sprouts[13] = 19  # 水がたまりやすい区画（外れ値）
+    code2 = f"""sprouts = {sprouts}
+n = len(sprouts)
+mean = sum(sprouts) / n
+var = sum([(x - mean) ** 2 for x in sprouts]) / n
+
+# 1mあたり → 1㎡あたりに換算（条間20cm → 1㎡に5列）
+per_m2 = [5 * x for x in sprouts]
+"""
+    st.code(code2, language="python")
+    mean2 = float(np.mean(sprouts))
+    var2 = float(np.var(sprouts))
+    per_m2 = [5 * x for x in sprouts]
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("平均（本/m）", f"{mean2:.1f}")
+    c2.metric("分散", f"{var2:.2f}")
+    c3.metric("換算後の平均（本/㎡）", f"{np.mean(per_m2):.1f}")
+    c4.metric("換算後の分散", f"{np.var(per_m2):.2f}")
+    fig = px.box(pd.DataFrame({"発芽本数（本/m）": sprouts}), x="発芽本数（本/m）", points="all",
+                 color_discrete_sequence=["#c98a2b"])
+    fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10))
+    st.plotly_chart(fig, width="stretch")
+    st.caption("箱ひげ図の左に離れた点（19本）は外れ値です。区画14は水がたまりやすく、発芽が悪かったという設定です。")
+    quiz("q2", f"元の分散が {var2:.2f} のとき、1㎡あたりに換算した（すべて5倍した）データの分散はいくつになるか。",
+         [f"① {var2:.2f}", f"② {var2 * 5:.2f}", f"③ {var2 * 25:.2f}", f"④ {var2 + 5:.2f}"], 2,
+         "データを y = ax + b と変換すると、分散は a² 倍になります（b は影響しない）。a = 5 なので 25 倍です。"
+         "上の「換算後の分散」の値と一致することを確かめましょう。")
+
+    # ── 例題3：理科基礎 × 相関係数 ──────────────────
+    st.divider()
+    st.subheader("例題3　理科基礎 × プログラミング：地温と、発芽までの日数")
+    st.write("播種した日の平均地温と、発芽がそろうまでの日数を記録しました（サンプル）。")
+    soil_t = [20.5, 19.0, 18.2, 17.5, 16.1, 15.0, 14.2, 13.0, 12.1, 11.0, 10.2, 9.0]
+    days_g = [5, 6, 6, 7, 7, 8, 9, 10, 11, 13, 14, 17]
+    code3 = """import math
+n = len(soil_temp)
+mean_x = sum(soil_temp) / n
+mean_y = sum(days) / n
+sum_xx = sum_yy = sum_xy = 0
+for i in range(n):
+    dx = soil_temp[i] - mean_x
+    dy = days[i] - mean_y
+    sum_xx += dx ** 2
+    sum_yy += dy ** 2
+    sum_xy += dx * dy
+r = sum_xy / math.sqrt(sum_xx * sum_yy)
+"""
+    g1, g2 = st.columns([1, 1])
+    g1.code(code3, language="python")
+    mx, my = np.mean(soil_t), np.mean(days_g)
+    sxx = sum((x - mx) ** 2 for x in soil_t)
+    syy = sum((y - my) ** 2 for y in days_g)
+    sxy = sum((x - mx) * (y - my) for x, y in zip(soil_t, days_g))
+    r3 = sxy / np.sqrt(sxx * syy)
+    fig = px.scatter(pd.DataFrame({"平均地温（℃）": soil_t, "発芽までの日数": days_g}),
+                     x="平均地温（℃）", y="発芽までの日数", trendline=None,
+                     color_discrete_sequence=["#6a9a4a"])
+    b = sxy / sxx
+    xs3 = np.array([min(soil_t), max(soil_t)])
+    fig.add_trace(go.Scatter(x=xs3, y=my + b * (xs3 - mx), mode="lines", name="回帰直線",
+                             line=dict(color="#c98a2b", dash="dot")))
+    fig.update_layout(height=300, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+    g2.plotly_chart(fig, width="stretch")
+    g2.metric("相関係数 r", f"{r3:.2f}")
+    g2.caption("−1 に近いほど強い負の相関（地温が高いほど、早く発芽する傾向）")
+    quiz("q3", "もし、すべての記録で「発芽までの日数」が同じ値だったら、このプログラムはどうなるか。",
+         ["① r = 0 と出力される", "② r = 1 と出力される",
+          "③ sum_yy が 0 になり、0で割るエラーで止まる", "④ r = −1 と出力される"], 2,
+         "日数がすべて同じだと偏差 dy がすべて 0 になり、sum_yy = 0 です。最後の行で 0 で割ることになり、"
+         "ZeroDivisionError で停止します。ばらつきのないデータでは、相関係数は定義できません。")
+    with st.expander("考えてみよう：相関があれば、地温が原因と言えるか？"):
+        st.markdown(
+            "地温が低い日は、たいてい**播種が遅い日（11月以降）**でもあります。日の長さや雨など、"
+            "ほかの要因も同時に変わっているかもしれません。相関だけでは原因は決められません。\n\n"
+            "原因を確かめるには、条件をそろえて**播種日だけを変える実験**が必要です。"
+            "→ 🌱 小麦の播種シミュレーター"
+        )
+
+    st.divider()
+    sample = pd.DataFrame({"区画": range(1, 21), "発芽本数_本per_m": sprouts})
+    temp_df = pd.DataFrame({"平均地温_C": soil_t, "発芽までの日数": days_g})
+    d1, d2 = st.columns(2)
+    d1.download_button("例題2のデータ（CSV）", sample.to_csv(index=False).encode("utf-8-sig"),
+                       "sprouts.csv", "text/csv")
+    d2.download_button("例題3のデータ（CSV）", temp_df.to_csv(index=False).encode("utf-8-sig"),
+                       "soil_temp_days.csv", "text/csv")
+    st.caption("Google Colab などに読み込んで、自分でプログラムを書いて確かめてみましょう。")
 
 st.divider()
 st.caption("© スマートパン屋農家プロジェクト ｜ 数値モデルは説明用の仮定を含みます。")
