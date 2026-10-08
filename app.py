@@ -32,6 +32,29 @@ PHOTO_LOG = {  # フォルダ名(YYYYMMDD) → 写真キャプション
     "20261003": "米ぬか発酵肥料・果樹の植栽・AI土壌診断・獣害対策",
 }
 SOW_DAY = date(2026, 10, 20)  # 播種目標日（実体験上の発芽率最適期）
+SCHOOL_PAGE = "pages/1_📋_学校向け_記録が残る探究.py"  # 学校向け：ルーブリック・活動ログ・記録ダッシュボード
+
+
+def safe_page_link(page: str, label: str, icon: str) -> None:
+    """ページが見つからない環境でもアプリ全体が止まらないようにする。"""
+    try:
+        st.page_link(page, label=label, icon=icon)
+    except Exception:  # noqa: BLE001
+        st.caption(f"{icon} {label}（左のメニューから開けます）")
+
+
+def school_banner() -> None:
+    """学校向けページへの入口（ホーム・探究学習・受け入れ体制で共用）。"""
+    with st.container(border=True):
+        b1, b2 = st.columns([3, 1])
+        b1.markdown(
+            "**📋 学校の先生方へ：記録が残る探究**　"
+            "生徒が「いつ・何時間・何をして・何を身につけたか」を、"
+            "**ルーブリック・活動ログ・記録ダッシュボード**の3点セットで残し、学校にお渡しします。"
+            "外部と連携した学習の「適正な教育」を、学校が説明できる形にします。"
+        )
+        with b2:
+            safe_page_link(SCHOOL_PAGE, "記録の仕組みを見る", "➡️")
 
 st.set_page_config(
     page_title="スマートパン屋農家を始める！",
@@ -67,6 +90,7 @@ with st.sidebar:
     st.header("🌾 スマートパン屋農家")
     st.write("麦を育て、数値で判断し、パンを焼く。")
     st.link_button("📘 Facebookで活動を見る", FACEBOOK_URL, width="stretch")
+    safe_page_link(SCHOOL_PAGE, "学校向け：記録が残る探究", "📋")
     st.divider()
     st.caption("拠点：広島県三原市西部（ハウス・畑区画）")
     st.caption(f"圃場面積：約 {FIELD_AREA_M2} ㎡")
@@ -134,6 +158,7 @@ with T["🏠 ホーム"]:
         """,
         unsafe_allow_html=True,
     )
+    school_banner()
 
     # この畑でつくる循環（米ぬか・残渣 → 発酵肥料 → 土 へ戻す）
     cycle = ["🌱 土づくり", "🌾 小麦を育てる", "⚙️ 収穫・製粉", "🍞 パンを焼く", "♻️ 米ぬか・残渣を発酵肥料に"]
@@ -430,6 +455,7 @@ with T["🎓 探究学習（構想）"]:
             "いずれも現時点では構想です。受け入れの体制が整ってから、改めてお知らせします。"
         )
     st.caption("受け入れの準備がどこまで進んでいるかは、となりの「🤝 受け入れ体制」タブで公開しています。")
+    school_banner()
 
     with st.expander("探究テーマの案（いま自分で試していること）"):
         prog = pd.DataFrame([
@@ -475,6 +501,7 @@ with T["🤝 受け入れ体制"]:
         "実績はまだありません。整った項目から順に更新していきます。"
     )
     st.caption(f"最終更新：{ACCEPT_UPDATED}　｜　このページの流れ：記録する → 見せる → 相手が判断できる")
+    school_banner()
 
     n_trial = 0
     c1, c2, c3 = st.columns(3)
