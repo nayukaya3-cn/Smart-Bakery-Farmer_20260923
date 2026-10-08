@@ -16,6 +16,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import media_gallery as mg
+import security_guard as sg
 import soil_vision as sv
 
 # ─────────────────────────────────────────────
@@ -289,10 +290,17 @@ with T["📡 圃場モニター"]:
         moist = np.clip(32 - np.cumsum(rng.normal(0.02, 0.05, len(t))) % 12, 15, 40)
         return pd.DataFrame({"timestamp": t, "air_temp": air, "soil_temp": soil, "soil_moisture": moist})
 
+    sdf = None
     if up is not None:
-        sdf = pd.read_csv(up, parse_dates=["timestamp"])
-        st.success(f"{len(sdf)} 行の実データを読み込みました。")
-    else:
+        sdf = sg.read_csv_safely(up, page="field_monitor", kind="sensor_csv", parse_dates=["timestamp"])
+        need = {"timestamp", "air_temp", "soil_temp", "soil_moisture"}
+        if sdf is not None and not need.issubset(sdf.columns):
+            sg.log_event("csv_schema_mismatch", "WARNING", page="field_monitor")
+            st.error("列名が違います。timestamp, air_temp, soil_temp, soil_moisture の4列が必要です。")
+            sdf = None
+        if sdf is not None:
+            st.success(f"{len(sdf)} 行の実データを読み込みました。")
+    if sdf is None:
         sdf = demo_sensor()
         st.caption("※ 現在はデモデータを表示中です。")
 
@@ -556,7 +564,7 @@ with T["📝 活動ログ"]:
         log = log[log["カテゴリ"].isin(cat_filter)]
     for _, r in log.iterrows():
         st.markdown(f"**{r['日付']:%Y/%m/%d}**　`{r['カテゴリ']}`　{r['内容']}")
-    st.download_button("CSVでダウンロード", log.to_csv(index=False).encode("utf-8-sig"),
+    st.download_button("CSVでダウンロード", sg.safe_csv(log),
                        "activity_log.csv", "text/csv")
 
 # ═════════════════════════════════════════════
@@ -603,6 +611,8 @@ with T["🔬 AI土壌診断"]:
     img_src = None
     if src_mode == "アップロード":
         img_src = st.file_uploader("畑の写真（できるだけ真上から）", type=["jpg", "jpeg", "png"], key="soil_up")
+        if img_src is not None and not sg.check_upload(img_src, sg.MAX_IMAGE_BYTES, "soil", "image"):
+            img_src = None
     elif all_photos:
         img_src = st.selectbox("写真を選択", all_photos,
                                format_func=lambda p: f"{p.parent.name} / {p.name}")
@@ -610,7 +620,12 @@ with T["🔬 AI土壌診断"]:
     if img_src is None:
         st.info("写真を選ぶかアップロードしてください。")
     else:
-        rgb = sv.load_image(img_src)
+        try:
+            rgb = sv.load_image(img_src)
+        except Exception as e:  # noqa: BLE001  解凍爆弾・壊れた画像・偽装ファイル
+            sg.log_event("image_rejected", "WARNING", page="soil", error=type(e).__name__)
+            st.error("この画像は読み込めませんでした（形式・大きさを確認してください）。")
+            st.stop()
         with st.expander("✂️ 解析範囲を畑の部分だけに絞る（壁・空・通路を除く）"):
             cr1, cr2 = st.columns(2)
             top, bottom = cr1.slider("上下の範囲 %", 0, 100, (0, 100), key="crop_v")
@@ -672,7 +687,7 @@ with T["🔬 AI土壌診断"]:
         t2.success("**本格的な土壌分析に回す区画**：" + "・".join(pts))
         t2.caption("裸地・最も緑が薄い区画・比較対照として最も濃い区画を選んでいます。"
                    "画像で当たりをつけ、その場所だけ土壌分析へ（ハイブリッド方式）。")
-        t2.download_button("処方箋をCSVで保存", rx.to_csv(index=False).encode("utf-8-sig"),
+        t2.download_button("処方箋をCSVで保存", sg.safe_csv(rx),
                            "prescription.csv", "text/csv")
 
         st.divider()
@@ -680,7 +695,7 @@ with T["🔬 AI土壌診断"]:
         w1, w2 = st.columns([2, 3])
         with w1:
             if sv.ai_available():
-                if st.button("🤖 生成AIに雑草の候補を提案させる"):
+                if st.button("🤖 生成AIに雑草の候補を提案させる") and sg.ai_quota_ok("soil"):
                     with st.spinner("解析中…"):
                         try:
                             res = sv.ai_suggest_weeds(rgb)
@@ -689,10 +704,11 @@ with T["🔬 AI土壌診断"]:
                                                       if c.get("name") in sv.INDICATORS
                                                       and c.get("confidence", 0) >= 0.5]
                         except Exception as e:  # noqa: BLE001
-                            st.error(f"AI解析に失敗しました：{e}")
+                            sg.log_event("ai_call_failed", "WARNING", page="soil", error=type(e).__name__)
+                            st.error("AI解析に失敗しました。時間をおいて試すか、手動で選んでください。")
                 if "ai_weeds" in st.session_state:
                     for c in st.session_state.ai_weeds.get("candidates", []):
-                        st.caption(f"・{c.get('name')}（確信度 {c.get('confidence', 0):.2f}）{c.get('reason', '')}")
+                        st.text(f"・{c.get('name')}（確信度 {c.get('confidence', 0):.2f}）{c.get('reason', '')}")
             else:
                 st.caption("※ `ANTHROPIC_API_KEY` を設定すると、生成AIが写真から雑草の候補を提案します"
                            "（最終判断は人が行う半自動方式）。未設定のため手動で選んでください。")

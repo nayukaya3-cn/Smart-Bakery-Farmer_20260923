@@ -1,0 +1,10 @@
+.venv/
+.venv-*/
+__pycache__/
+.DS_Store
+*.pdf
+
+# 秘密情報は絶対にコミットしない
+.streamlit/secrets.toml
+.env
+*.key

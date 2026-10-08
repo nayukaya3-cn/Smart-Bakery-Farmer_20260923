@@ -18,13 +18,24 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageOps
 
+# 解凍爆弾（極端に画素数の大きい画像でメモリを食いつぶす攻撃）を防ぐ上限：4000万画素
+Image.MAX_IMAGE_PIXELS = 40_000_000
+AI_MODEL = os.environ.get("SOIL_AI_MODEL", "claude-sonnet-5-5")
+
 
 # ─────────────────────────────────────────────
 # ① 計算：植生指数
 # ─────────────────────────────────────────────
 def load_image(src, max_side: int = 900) -> np.ndarray:
     """ファイルパス／アップロードファイルを読み込み、向きを補正して縮小した RGB 配列を返す。"""
-    im = ImageOps.exif_transpose(Image.open(src)).convert("RGB")
+    with Image.open(src) as im0:
+        if im0.format not in ("JPEG", "PNG", "MPO"):
+            raise ValueError(f"対応していない画像形式です: {im0.format}")
+        w, h = im0.size  # ヘッダだけを読んだ段階で画素数を確かめ、展開前に止める
+        if w * h > Image.MAX_IMAGE_PIXELS:
+            raise ValueError(f"画像が大きすぎます（{w}×{h}）")
+        im0.draft("RGB", (max_side * 2, max_side * 2))  # JPEG は読み込み時点で縮小（メモリ節約）
+        im = ImageOps.exif_transpose(im0).convert("RGB")
     im.thumbnail((max_side, max_side))
     return np.asarray(im).astype(np.float32)
 
@@ -140,7 +151,7 @@ def ai_available() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
-def ai_suggest_weeds(rgb: np.ndarray, model: str = "claude-sonnet-5") -> dict:
+def ai_suggest_weeds(rgb: np.ndarray, model: str = AI_MODEL) -> dict:
     """
     写真を Claude に送り、INDICATORS のうち写っていそうな雑草を JSON で返させる。
     返り値は「候補」であり、最終判断は人が行う（Human-in-the-Loop）。
@@ -167,4 +178,16 @@ def ai_suggest_weeds(rgb: np.ndarray, model: str = "claude-sonnet-5") -> dict:
     )
     text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     start, end = text.find("{"), text.rfind("}")
-    return json.loads(text[start:end + 1])
+    data = json.loads(text[start:end + 1])
+    # 写真に書かれた文字などで指示が混入しても（プロンプトインジェクション）、
+    # 決められた候補名・数値・短い文字列以外は捨てる
+    cands = []
+    for c in data.get("candidates", [])[:10]:
+        if not isinstance(c, dict) or c.get("name") not in INDICATORS:
+            continue
+        try:
+            conf = min(max(float(c.get("confidence", 0)), 0.0), 1.0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        cands.append({"name": c["name"], "confidence": conf, "reason": str(c.get("reason", ""))[:120]})
+    return {"candidates": cands, "note": str(data.get("note", ""))[:200]}

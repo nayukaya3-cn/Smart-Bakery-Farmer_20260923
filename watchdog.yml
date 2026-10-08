@@ -1,0 +1,96 @@
+# 見張り番：6時間ごとに ①アプリの死活 ②リポジトリへの不審な変更 を確認し、異常なら Issue でアラーム。
+name: watchdog
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  APP_URL: https://smart-bakery-farm.streamlit.app/
+  # 変更されたら必ず人が確認すべきファイル（改ざんされると防御が外れるもの）
+  WATCHED: ".github/ .streamlit/config.toml security_guard.py requirements.txt"
+  # 自動で入ってよい作成者（これ以外＋リポジトリ所有者以外のコミットは警告）
+  ALLOWED_BOTS: "dependabot[bot] github-actions[bot]"
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: 点検
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          : > findings.md
+          ts=$(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST')
+          echo "点検時刻: $ts" > watchdog.log
+
+          # ① 死活監視（Streamlit のスリープ画面も 200 を返すため、5xx・接続失敗のみ異常とする）
+          code=$(curl -s -o /dev/null -w '%{http_code}' -L --max-time 30 "$APP_URL" || echo 000)
+          echo "app_http_status=$code" >> watchdog.log
+          if [ "$code" = "000" ] || [ "$code" -ge 500 ]; then
+            echo "- 🔴 アプリに接続できません（HTTP $code）: $APP_URL" >> findings.md
+          fi
+
+          # ② 直近6時間のコミットを点検
+          since=$(date -u -d '-6 hours' +%Y-%m-%dT%H:%M:%SZ)
+          gh api "repos/${{ github.repository }}/commits?since=$since&per_page=100" \
+            --jq '.[] | [.sha[0:7], (.author.login // "unknown"), .commit.author.email, .commit.message | split("\n")[0]] | @tsv' > commits.tsv || true
+          echo "commits_since_$since=$(wc -l < commits.tsv)" >> watchdog.log
+          while IFS=$'\t' read -r sha login email msg; do
+            [ -z "$sha" ] && continue
+            echo "commit $sha by $login: $msg" >> watchdog.log
+            if [ "$login" != "$OWNER" ] && ! echo " $ALLOWED_BOTS " | grep -q " $login "; then
+              echo "- 🔴 所有者以外のコミット: \`$sha\` by **$login** ($email) — $msg" >> findings.md
+            fi
+            changed=$(git show --name-only --format= "$sha" 2>/dev/null || true)
+            for w in $WATCHED; do
+              if echo "$changed" | grep -q "^$w"; then
+                echo "- 🟠 防御設定の変更: \`$sha\` が \`$w\` を変更 — 自分の変更か確認してください" >> findings.md
+              fi
+            done
+          done < commits.tsv
+
+          cat watchdog.log >> "$GITHUB_STEP_SUMMARY"
+          if [ -s findings.md ]; then
+            sort -u findings.md -o findings.md
+            echo "alert=true" >> "$GITHUB_OUTPUT"
+            cat findings.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: ログを保存
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: watchdog-${{ github.run_id }}
+          path: |
+            watchdog.log
+            findings.md
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: アラーム（Issue作成）
+        if: steps.check.outputs.alert == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="[incident] 見張り番が異常を検知"
+          body="$(cat findings.md)
+
+          詳細ログ: $RUN_URL
+          対応手順は SECURITY.md の「インシデント対応手順」を参照してください。"
+          gh label create incident --color B60205 --force >/dev/null 2>&1 || true
+          num=$(gh issue list --label incident --state open --search "$title in:title" --json number -q '.[0].number')
+          if [ -n "$num" ]; then gh issue comment "$num" --body "$body"; else gh issue create --title "$title" --label incident --body "$body"; fi

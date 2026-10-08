@@ -21,6 +21,8 @@ from pathlib import Path
 
 import streamlit as st
 
+import security_guard as sg
+
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 VIDEO_EXT = {".mov", ".mp4", ".m4v", ".webm"}
 PDF_EXT = {".pdf"}
@@ -102,7 +104,7 @@ def show_file(name: str, data: bytes, key: str, repo_path: str | None = None) ->
     if ext in IMAGE_EXT:
         st.image(data, caption=cap, width="stretch")
     elif ext in VIDEO_EXT:
-        st.markdown(f"🎬 **{cap}**")
+        st.markdown("🎬 **" + re.sub(r"([\\`*_{}\[\]()#+\-.!<>|~])", r"\\\1", cap) + "**")
         st.video(io.BytesIO(data), format=VIDEO_MIME.get(ext, "video/mp4"))
         if ext == ".mov":
             st.caption("※ .mov が再生できないブラウザでは、下のボタンから保存して再生してください。")
@@ -197,6 +199,7 @@ def media_section(folder: Path, key: str, title: str = "📂 記録・資料",
             type=sorted(e.lstrip(".") for e in ALL_EXT),
             accept_multiple_files=True, key=f"{key}_up",
         )
+        ups = [u for u in (ups or []) if sg.check_upload(u, sg.MAX_IMAGE_BYTES * 4, "gallery", Path(u.name).suffix.lower())]
         if ups:
             _grid([(u.name, u.getvalue()) for u in ups], key=f"{key}_up")
             st.info("ここで取り込んだファイルは、ページを閉じると消えます。公開ページに残すには、"

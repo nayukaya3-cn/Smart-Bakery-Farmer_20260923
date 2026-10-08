@@ -1,7 +1,8 @@
-streamlit>=1.36
-pandas>=2.0
-numpy>=1.24
-plotly>=5.18
-pillow>=10
-pypdfium2>=4.0   # PDFをページ画像にして表示
-anthropic>=0.40  # 任意：生成AIで雑草候補を提案する場合
+# 下限＋メジャー上限で固定（予期しない大型更新を防ぎ、更新は Dependabot のPRで確認してから入れる）
+streamlit>=1.65,<2
+pandas>=3.0,<4
+numpy>=2.5,<3
+plotly>=7.1,<8
+pillow>=12.3,<13
+pypdfium2>=5.14,<6   # PDFをページ画像にして表示
+anthropic>=1.12,<2   # 任意：生成AIで雑草候補を提案する場合

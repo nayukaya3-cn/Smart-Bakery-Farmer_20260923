@@ -1,0 +1,18 @@
+# 依存ライブラリと GitHub Actions の更新を毎週PRで提案（セキュリティ修正を取り込む）
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Asia/Tokyo
