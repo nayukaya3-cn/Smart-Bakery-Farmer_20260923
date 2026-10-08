@@ -18,6 +18,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="学校向け：記録が残る探究", page_icon="📋", layout="wide")
 
@@ -187,42 +188,172 @@ with st.sidebar:
     st.link_button("📘 Facebookで相談する", FACEBOOK_URL, width="stretch")
 
 # ═════════════════════════════════════════════
-# ヒーロー：何を約束するのか
+# デジタルサイネージ（自動で切り替わるスライド）
+#   ※ 文言は SIGNAGE_SLIDES を書きかえるだけで変更できます
 # ═════════════════════════════════════════════
-st.markdown(
-    """
-    <div class="hero">
-      <p class="eyebrow">通信制高校・サポート校の先生方へ ・ 探究学習の外部フィールド</p>
-      <h1>記録が残る探究を、畑とパンのフィールドで。</h1>
-      <p class="lead">生徒が<b>いつ・何時間・何をして・何を身につけたか</b>を、
-      外部フィールドの側で記録し、学校にそのままお渡しします。<br>
-      外部と連携した学習について、学校が保護者・所轄庁に<b>説明できる形</b>で残すことを最優先にしています。</p>
-      <div class="tags">
-        <span>📏 ルーブリック（5観点×4段階）</span>
-        <span>📝 活動ログ（出席・時間・安全確認）</span>
-        <span>📊 記録ダッシュボード＋報告書</span>
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+HELD = int((INSTRUCTORS["区分"] == "保有").sum())
+SIGNAGE_SLIDES = [
+    dict(kicker="通信制高校・サポート校の先生方へ", big="記録が残る探究を、<br>畑とパンのフィールドで。",
+         sub="生徒が <b>いつ・何時間・何をして・何を身につけたか</b> を、外部フィールドの側で記録し、学校にお渡しします。",
+         chips=["📏 ルーブリック", "📝 活動ログ", "📊 記録ダッシュボード"]),
+    dict(kicker="なぜ今、記録なのか", big="<span class='num'>2026.7</span> 改正振興法 成立",
+         sub="通信制高校の設置者に、連携する施設での<b>「適正な教育の確保」</b>が責務として明記されました。"
+             "外部と連携した学習ほど、実際に何が行われたかを示す記録が学校の安心材料になります。",
+         chips=["文部科学省が基本指針を検討中"]),
+    dict(kicker="お渡しする記録の3点セット", big="3点セットで、<br>学校が説明できる形に。",
+         cards=[("📏", "ルーブリック", f"{len(AXES)}観点 × {len(LEVELS)}段階<br>初回 → 最終の伸び"),
+                ("📝", "活動ログ", "出席・時刻・滞在時間<br>安全説明・体調確認"),
+                ("📊", "ダッシュボード", "実施回数・延べ時間<br>実施報告書を自動作成")]),
+    dict(kicker="記録の流れ", big="実施前から報告まで、<br>毎回同じ手順で。",
+         steps=["安全説明<br>体調確認", "活動ログ<br>を記入", "ルーブリック<br>で評価", "月末に<br>集計", "学校へ<br>CSV＋報告書"]),
+    dict(kicker="指導者", big=f"<span class='num'>{HELD}</span> 種の資格・経験で伴走",
+         cards=[("🧪", "理科 教員免許", "高等学校教諭一種"),
+                ("🧫", "HACCP 20年以上", "記録を残し検証する管理"),
+                ("🏅", "ものづくりマイスター", "厚生労働省・パン製造")]),
+    dict(kicker="いまの状況（正直にお伝えします）", big="試行 <span class='num'>0</span> 回 → 2027年度に1〜2回",
+         sub="記録の仕組みは完成しています。受け入れ体制は整った項目から順に公開中です。"
+             "様式へのご意見・試行のご相談をお待ちしています。",
+         chips=["📘 Facebookから相談できます", "生徒は匿名IDで記録・氏名は扱いません"]),
+]
+TICKER = [
+    "📋 記録が残る探究 ─ ルーブリック・活動ログ・記録ダッシュボード",
+    "🌾 広島県三原市西部の圃場・ハウスがフィールド",
+    "🧮 ① 計算する → 📈 ② 可視化する → 🧭 ③ 自分の条件で判断する",
+    "♿ ハウスの周囲に車椅子でも通れる通路を整備中",
+    "🎓 総合的な探究の時間・総合型選抜の記録づくりに",
+]
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("記録の3点セット", "整備済み")
-c1.caption("このページでそのまま使えます")
-c2.metric("評価の観点", f"{len(AXES)} 観点 × {len(LEVELS)} 段階")
-c2.caption("計算する→可視化する→判断する")
-c3.metric("試行プログラムの実施", "0 回")
-c3.caption("2027年度に 1〜2 回予定")
-c4.metric("指導者の資格", f"{(INSTRUCTORS['区分'] == '保有').sum()} 種 保有")
-c4.caption("理科免許・HACCP・ものづくりマイスターほか")
 
-st.info(
-    "**なぜ今、記録なのか**　2026年7月に改正された高校の定時制・通信教育の振興法が成立し、"
-    "通信制高校の設置者には、連携する施設での**適正な教育の確保**が責務として明記されました。"
-    "文部科学省は現在、そのための基本指針を検討しています。"
-    "外部と連携した学習ほど、「実際に何が行われたか」を示す記録が学校の安心材料になります。"
-)
+def signage_html(height: int) -> str:
+    def slide(d: dict, i: int) -> str:
+        parts = [f"<div class='kicker'>{d['kicker']}</div>", f"<div class='big'>{d['big']}</div>"]
+        if d.get("sub"):
+            parts.append(f"<div class='sub'>{d['sub']}</div>")
+        if d.get("cards"):
+            parts.append("<div class='cards'>" + "".join(
+                f"<div class='card'><div class='ic'>{ic}</div><div class='ct'>{t}</div><div class='cd'>{x}</div></div>"
+                for ic, t, x in d["cards"]) + "</div>")
+        if d.get("steps"):
+            parts.append("<div class='steps'>" + "<div class='arw'>›</div>".join(
+                f"<div class='step'><span>{n + 1}</span>{t}</div>" for n, t in enumerate(d["steps"])) + "</div>")
+        if d.get("chips"):
+            parts.append("<div class='chips'>" + "".join(f"<span>{c}</span>" for c in d["chips"]) + "</div>")
+        dense = " dense" if (d.get("cards") or d.get("steps")) else ""
+        return f"<section class='slide{dense}{' on' if i == 0 else ''}'>{''.join(parts)}</section>"
+
+    slides = "".join(slide(d, i) for i, d in enumerate(SIGNAGE_SLIDES))
+    dots = "".join(f"<button class='dot{' on' if i == 0 else ''}' data-i='{i}' aria-label='スライド{i + 1}'></button>"
+                   for i in range(len(SIGNAGE_SLIDES)))
+    ticker = "　　◆　　".join(TICKER)
+    return f"""
+<style>
+  * {{box-sizing:border-box; margin:0; padding:0;}}
+  body {{font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif; background:transparent;}}
+  .sg {{position:relative; height:{height - 8}px; border-radius:18px; overflow:hidden; color:#f4f7fb;
+        background:radial-gradient(120% 140% at 0% 0%, #1f4e78 0%, #0f2438 55%, #0a1826 100%);
+        box-shadow:0 10px 30px rgba(10,24,38,.35);}}
+  .sg::after {{content:""; position:absolute; inset:0; pointer-events:none;
+        background:repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px);}}
+  .top {{position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center;
+         padding:14px 22px; font-size:13px; letter-spacing:.12em; color:#9fc3e6; z-index:3;}}
+  .live {{display:flex; align-items:center; gap:8px; font-weight:700;}}
+  .live i {{width:9px; height:9px; border-radius:50%; background:#7bdc7b; box-shadow:0 0 10px #7bdc7b;
+            animation:blink 1.6s infinite;}}
+  .clock {{font-variant-numeric:tabular-nums; font-size:15px; color:#dce9f5;}}
+  .slide {{position:absolute; inset:46px 34px 70px; display:flex; flex-direction:column; justify-content:center;
+           gap:14px; opacity:0; transform:translateY(14px); transition:opacity .7s ease, transform .7s ease;}}
+  .slide.on {{opacity:1; transform:none;}}
+  .kicker {{font-size:clamp(13px,1.6vw,18px); color:#f2c46d; font-weight:700; letter-spacing:.14em;}}
+  .big {{font-size:clamp(26px,4.6vw,56px); font-weight:800; line-height:1.25;}}
+  .dense .big {{font-size:clamp(20px,3.3vw,40px);}}
+  .dense {{gap:10px;}}
+  .num {{color:#f2c46d; font-size:1.15em; font-variant-numeric:tabular-nums;}}
+  .sub {{font-size:clamp(14px,1.7vw,20px); line-height:1.75; color:#d3e2f0; max-width:60em;}}
+  .sub b {{color:#fff;}}
+  .chips {{display:flex; flex-wrap:wrap; gap:10px;}}
+  .chips span {{padding:8px 16px; border-radius:999px; background:rgba(255,255,255,.12);
+                border:1px solid rgba(255,255,255,.25); font-size:clamp(13px,1.5vw,17px); font-weight:600;}}
+  .cards {{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}}
+  .card {{background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:14px; padding:14px 16px;}}
+  .ic {{font-size:clamp(26px,3.4vw,40px);}}
+  .ct {{font-size:clamp(15px,2vw,23px); font-weight:800; margin:4px 0;}}
+  .cd {{font-size:clamp(12px,1.4vw,16px); color:#c7d8e8; line-height:1.6;}}
+  .steps {{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}}
+  .step {{flex:1; min-width:96px; text-align:center; background:rgba(255,255,255,.1); border-radius:12px;
+          padding:12px 8px; font-size:clamp(12px,1.5vw,17px); font-weight:700; line-height:1.5;}}
+  .step span {{display:block; margin:0 auto 6px; width:30px; height:30px; line-height:30px; border-radius:50%;
+               background:#f2c46d; color:#0f2438; font-weight:900;}}
+  .arw {{font-size:28px; color:#f2c46d;}}
+  .bar {{position:absolute; left:0; right:0; bottom:40px; height:3px; background:rgba(255,255,255,.12); z-index:3;}}
+  .bar i {{display:block; height:100%; width:0; background:#f2c46d;}}
+  .dots {{position:absolute; right:20px; bottom:52px; display:flex; gap:8px; z-index:4;}}
+  .dot {{width:10px; height:10px; border-radius:50%; border:none; background:rgba(255,255,255,.35); cursor:pointer;}}
+  .dot.on {{background:#f2c46d; width:26px; border-radius:6px;}}
+  .tick {{position:absolute; left:0; right:0; bottom:0; height:40px; background:#f2c46d; color:#0f2438;
+          overflow:hidden; display:flex; align-items:center; z-index:3;}}
+  .tick b {{flex:none; height:100%; display:flex; align-items:center; padding:0 14px; background:#0f2438; color:#f2c46d;
+            font-size:13px; letter-spacing:.12em;}}
+  .tick .run {{white-space:nowrap; font-weight:700; font-size:15px; padding-left:100%; animation:run 38s linear infinite;}}
+  @keyframes run {{to {{transform:translateX(-100%);}}}}
+  @keyframes blink {{50% {{opacity:.3;}}}}
+  @media (max-width:640px) {{
+    .brand {{display:none;}}
+    .slide {{inset:40px 16px 62px; gap:8px;}}
+    .big {{font-size:clamp(20px,6.4vw,30px);}}
+    .dense .big {{font-size:clamp(17px,5.2vw,24px);}}
+    .sub {{font-size:13px; line-height:1.6;}}
+    .chips span {{padding:5px 10px; font-size:12px;}}
+    .cards {{grid-template-columns:1fr; gap:6px;}}
+    .card {{display:flex; align-items:center; gap:10px; padding:7px 12px;}}
+    .ic {{font-size:22px;}} .ct {{font-size:15px; margin:0;}} .cd {{display:none;}}
+    .steps {{flex-wrap:nowrap; gap:4px;}} .arw {{display:none;}}
+    .step {{min-width:0; padding:8px 2px; font-size:10.5px;}}
+    .step span {{width:22px; height:22px; line-height:22px; margin-bottom:4px;}}
+    .dots {{bottom:48px;}}
+  }}
+  @media (prefers-reduced-motion:reduce) {{ .slide {{transition:none;}} .tick .run {{animation:none; padding-left:14px;}} }}
+</style>
+<div class="sg" id="sg">
+  <div class="top"><div class="live"><i></i><span class="brand">記録が残る探究 ／ スマートパン屋農家</span></div><div class="clock" id="clk"></div></div>
+  {slides}
+  <div class="dots">{dots}</div>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="tick"><b>INFO</b><div class="run">{ticker}</div></div>
+</div>
+<script>
+(() => {{
+  const S = [...document.querySelectorAll('.slide')], D = [...document.querySelectorAll('.dot')];
+  const bar = document.getElementById('bar'), sg = document.getElementById('sg');
+  const DUR = 7000; let i = 0, t0 = performance.now(), paused = false, pt = 0;
+  const show = n => {{ S[i].classList.remove('on'); D[i].classList.remove('on');
+    i = (n + S.length) % S.length; S[i].classList.add('on'); D[i].classList.add('on'); t0 = performance.now(); }};
+  D.forEach(d => d.onclick = () => show(+d.dataset.i));
+  sg.onmouseenter = () => {{ paused = true; pt = performance.now(); }};
+  sg.onmouseleave = () => {{ paused = false; t0 += performance.now() - pt; }};
+  const clk = document.getElementById('clk');
+  const tick = now => {{
+    if (!paused) {{ const p = (now - t0) / DUR; if (p >= 1) show(i + 1); else bar.style.width = (p * 100) + '%'; }}
+    clk.textContent = new Date().toLocaleString('ja-JP', {{timeZone:'Asia/Tokyo', month:'numeric', day:'numeric',
+      weekday:'short', hour:'2-digit', minute:'2-digit'}});
+    requestAnimationFrame(tick);
+  }};
+  requestAnimationFrame(tick);
+}})();
+</script>
+"""
+
+
+signage_mode = st.toggle("📺 サイネージだけを大きく表示する（説明会・展示用）", value=False)
+if signage_mode:
+    st.markdown("<style>[data-testid='stSidebar'],[data-testid='stHeader']{display:none;}"
+                ".block-container{padding-top:1rem; max-width:100%;}</style>", unsafe_allow_html=True)
+    components.html(signage_html(640), height=640)
+    st.caption("スライドは7秒ごとに切り替わります。点をクリックすると選べ、マウスを重ねると止まります。"
+               "ブラウザを全画面（F11）にすると、モニター掲示に使えます。")
+    st.stop()
+
+components.html(signage_html(440), height=440)
+
 st.markdown(
     '<p class="note">※ 本ページは、学校が説明責任を果たすための記録を外部フィールド側で用意するものです。'
     "法令上の手続きや施設の位置づけは、各学校・所轄庁の判断に従います。"
