@@ -122,8 +122,24 @@ def roadmap_with_status(today: date) -> pd.DataFrame:
     return df
 
 
-if "log" not in st.session_state:
-    st.session_state.log = pd.DataFrame([
+LOG_CSV = Path(__file__).parent / "data" / "activity_log.csv"  # 活動ログの保存先（ここを更新すれば消えない）
+
+
+def load_activity_log() -> pd.DataFrame:
+    """data/activity_log.csv を読む。無い・壊れているときは、下の初期データで表示を続ける。"""
+    try:
+        df = pd.read_csv(LOG_CSV, encoding="utf-8-sig", dtype=str).fillna("")
+        df = df[["日付", "カテゴリ", "内容"]]
+        # CSV保存時に付けた数式よけの「'」を外す
+        df = df.apply(lambda c: c.str.replace(r"^'(?=[=+\-@])", "", regex=True).str.strip())
+        df["日付"] = pd.to_datetime(df["日付"], errors="coerce").dt.date
+        df = df.dropna(subset=["日付"])
+        df = df[df["内容"] != ""]
+        if not df.empty:
+            return df.reset_index(drop=True)
+    except Exception:  # noqa: BLE001  ファイルが無い・列が違う
+        pass
+    return pd.DataFrame([
         dict(日付=date(2026, 9, 13), カテゴリ="圃場", 内容="草刈り後、小麦畑の整備を開始。"),
         dict(日付=date(2026, 9, 17), カテゴリ="圃場", 内容="ハウス脇・母屋裏の2区画で草刈り。工具・ガラの片付けと土壌診断の準備へ。"),
         dict(日付=date(2026, 9, 17), カテゴリ="獣害対策", 内容="イノシシ対策：物理的な柵と周囲の草刈り（隠れ場所・エサをなくす環境整備）を開始、継続中。焼き畑の煙は数日で効果が切れるため主対策にしない。"),
@@ -134,6 +150,10 @@ if "log" not in st.session_state:
         dict(日付=date(2026, 10, 3), カテゴリ="栽培", 内容="果樹（柿・キウイ・栗）を植栽。"),
         dict(日付=date(2026, 10, 4), カテゴリ="圃場", 内容="ハウスの周囲に通路づくりを開始。車椅子でも一周できる幅で整備中。"),
     ])
+
+
+if "log" not in st.session_state:
+    st.session_state.log = load_activity_log()
 
 # 表に出すのは、学校の先生が3分で判断するのに必要な4つだけ。
 # ほかは「🔎 詳しく見る」の中にまとめる（中身のコードは変えずに、置き場所だけ変える）。
@@ -588,7 +608,12 @@ with T["🤝 受け入れ体制"]:
 with T["📝 活動ログ"]:
     st.header("📝 活動ログ")
 
-    with st.expander("✏️ 記録を追加（このセッション内のみ保持）"):
+    with st.expander("✏️ 記録を追加する・ずっと残す方法"):
+        st.caption(
+            "ここで追加した記録は、ページを閉じると消えます。ずっと残すには、追加したあと"
+            "下の「CSVでダウンロード」を押し、GitHub の `data/activity_log.csv` をそのファイルで置きかえてください。"
+            "数分でこのページに反映されます。"
+        )
         with st.form("add_log", clear_on_submit=True):
             d = st.date_input("日付", value=date.today())
             cat = st.selectbox("カテゴリ", ["圃場", "土づくり", "栽培", "獣害対策", "パン", "探究学習", "発信"])
@@ -604,7 +629,9 @@ with T["📝 活動ログ"]:
         log = log[log["カテゴリ"].isin(cat_filter)]
     for _, r in log.iterrows():
         st.markdown(f"**{r['日付']:%Y/%m/%d}**　`{r['カテゴリ']}`　{r['内容']}")
-    st.download_button("CSVでダウンロード", sg.safe_csv(log),
+    # 絞り込みに関係なく、全件を保存する（一部だけ保存して記録が欠けるのを防ぐ）
+    full = st.session_state.log.sort_values("日付", ascending=False)
+    st.download_button("CSVでダウンロード（全件）", sg.safe_csv(full),
                        "activity_log.csv", "text/csv")
 
 # ═════════════════════════════════════════════
