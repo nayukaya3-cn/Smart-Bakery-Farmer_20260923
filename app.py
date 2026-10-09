@@ -18,6 +18,7 @@ import streamlit as st
 import media_gallery as mg
 import security_guard as sg
 import soil_vision as sv
+import strategy as stg
 
 # ─────────────────────────────────────────────
 # 基本設定
@@ -155,9 +156,9 @@ def load_activity_log() -> pd.DataFrame:
 if "log" not in st.session_state:
     st.session_state.log = load_activity_log()
 
-# 表に出すのは、学校の先生が3分で判断するのに必要な4つだけ。
+# 表に出すのは、学校の先生が3分で判断するのに必要なものと、10年の見通し（🧭）だけ。
 # ほかは「🔎 詳しく見る」の中にまとめる（中身のコードは変えずに、置き場所だけ変える）。
-MAIN_TABS = ["🏠 ホーム", "🎓 探究学習（構想）", "🤝 受け入れ体制", "📝 活動ログ"]
+MAIN_TABS = ["🏠 ホーム", "🧭 10年戦略", "🎓 探究学習（構想）", "🤝 受け入れ体制", "📝 活動ログ"]
 MORE_TAB = "🔎 詳しく見る"
 DETAIL_TABS = [
     "🌱 小麦の播種シミュレーター", "📡 圃場モニター", "🍞 原料レジリエンス",
@@ -195,8 +196,8 @@ def three_minute_course() -> None:
     with c.container(border=True):
         st.markdown(
             "**③ 1分：次の一歩**\n\n"
-            "いまは畑の土台づくりの段階で、**受け入れ実績はまだありません**。"
-            "本格的な受け入れは2029年ごろを目安にしています。\n\n"
+            "いまは**フェーズ0（実証・記録）**で、**受け入れ実績はまだありません**。"
+            "有償の試行は2028〜2029年（フェーズ1）を目安にしています。\n\n"
             "それまでの間も、ご意見や情報交換は歓迎です。"
         )
         st.link_button("📘 Facebookで声をかける", FACEBOOK_URL, width="stretch")
@@ -242,8 +243,9 @@ with T["🏠 ホーム"]:
     c2.caption(f"あと {(SOW_DAY - today).days} 日（発芽率の最適期）" if SOW_DAY >= today else "播種済み")
     c3.metric("栽培品目", "パン用小麦")
     c3.caption("ほかに柿・キウイ・栗")
-    c4.metric("進行中の工程", f"{len(doing)} 件")
-    c4.caption(f"最新：{doing[0]}" if doing else "—")
+    phase = stg.current_phase(today)
+    c4.metric("10年戦略", f"フェーズ{phase.no}")
+    c4.caption(f"{phase.name}｜進行中の工程 {len(doing)} 件")
 
     left, right = st.columns([3, 2])
     with left:
@@ -259,7 +261,7 @@ with T["🏠 ホーム"]:
             st.markdown(f"**{r['日付']:%m/%d}**　`{r['カテゴリ']}`　{r['内容']}")
         st.link_button("📘 Facebookで毎日の様子を見る", FACEBOOK_URL)
 
-    st.subheader("ロードマップ")
+    st.subheader(f"ロードマップ（フェーズ{phase.no}：{phase.name}）")
     fig = px.timeline(current, x_start="開始", x_end="終了", y="工程", color="状態",
                       color_discrete_map={"完了": "#c9c2b4", "進行中": "#c98a2b", "予定": "#9bb884"},
                       category_orders={"状態": ["完了", "進行中", "予定"]})
@@ -268,6 +270,12 @@ with T["🏠 ホーム"]:
     fig.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
     st.plotly_chart(fig, width="stretch")
     st.caption("状態（完了／進行中／予定）は今日の日付から自動で判定しています。点線が今日です。")
+
+# ═════════════════════════════════════════════
+# 1-2. 10年戦略（計算する → 可視化する → 判断ゲート）
+# ═════════════════════════════════════════════
+with T["🧭 10年戦略"]:
+    stg.render(st.session_state.log, ASSETS)
 
 # ═════════════════════════════════════════════
 # 2. 小麦の播種シミュレーター
@@ -502,17 +510,15 @@ with T["🎓 探究学習（構想）"]:
     st.write(
         "畑はまだ整備を始めたばかりです。まずは自分で小麦を育て、パンを焼き、"
         "記録とデータを積み重ねるところから始めます。"
-        "その経験をもとに、**3年後（2029年ごろ）を目安に**、「探究学習」の外部フィールドとして"
-        "畑を開くことを目指しています。"
+        "その記録をもとに、**2028〜2029年（フェーズ1）に有償の試行**を始め、"
+        "「探究学習」の外部フィールドとして畑を開くことを目指しています。"
     )
 
-    st.subheader("ステップ")
-    phases = pd.DataFrame([
-        ("1年目", "2026〜2027", "畑とパンの土台づくり", "小麦からパンまで一通り試し、データと写真を記録する"),
-        ("2年目", "2027〜2028", "教材づくり・小さく試す", "記録を教材にまとめる。知人や少人数での見学・体験を試しに行う"),
-        ("3年目〜", "2029ごろ〜", "外部フィールドとして開く", "学校・支援機関と相談しながら、受け入れの形を整える"),
-    ], columns=["段階", "時期", "目標", "内容"])
+    st.subheader("ステップ（10年戦略のフェーズ）")
+    phases = pd.DataFrame([(f"フェーズ{p.no}", f"{p.start:%Y}〜{p.end:%Y}", p.name, p.gate)
+                           for p in stg.PHASES], columns=["段階", "時期", "目標", "次へ進む条件（判断ゲート）"])
     st.dataframe(phases, width="stretch", hide_index=True)
+    st.caption("各フェーズの中身と、ゲートの判定は「🧭 10年戦略」タブにあります。")
 
     with st.expander("将来、こんな場とつながれたらと考えています"):
         st.markdown(
@@ -546,7 +552,7 @@ with T["🎓 探究学習（構想）"]:
 ACCEPT_UPDATED = "2026-10-07"
 ACCEPT_STATUS = [  # (項目, 現状, 今後の予定)
     ("車椅子が通れる通路",           "整備中",       "2026年10月4日に着工。ハウスの周囲を一周できる幅で整備"),
-    ("試行プログラム",               "実施 0 回",    "2027年度に 1〜2 回、少人数で試す予定"),
+    ("試行プログラム",               "実施 0 回",    "2027年度に無償で 1〜2 回、少人数で試す → 2028年から有償の試行（フェーズ1）"),
     ("保険",                         "未加入",       "試行までに、受け入れに合った保険を選んで加入"),
     ("緊急時の対応",                 "準備中",       "連絡体制・最寄りの医療機関・応急手当の手順を文書にまとめる"),
     ("トイレ・休憩場所",             "確認中",       "使える場所と、車椅子での利用可否を確認して記載"),
