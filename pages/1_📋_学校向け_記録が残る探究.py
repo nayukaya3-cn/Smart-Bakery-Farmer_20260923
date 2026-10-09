@@ -23,7 +23,9 @@ import security_guard as sg
 
 st.set_page_config(page_title="学校向け：記録が残る探究", page_icon="📋", layout="wide")
 
-FACEBOOK_URL = "https://www.facebook.com/profile.php?id=100079624235158"
+import social as sn  # noqa: E402  SNSのURLは social.py で一括管理
+
+FACEBOOK_URL = sn.FACEBOOK_URL
 UPDATED = "2026-10-09"
 
 st.markdown(
@@ -190,7 +192,7 @@ with st.sidebar:
         st.session_state.edu_scores = pd.DataFrame(columns=SCORE_COLS)
         st.session_state.edu_is_sample = False
     st.divider()
-    st.link_button("📘 Facebookで相談する", FACEBOOK_URL, width="stretch")
+    sn.buttons("で相談する", stacked=True)
 
 # ═════════════════════════════════════════════
 # デジタルサイネージ（自動で切り替わるスライド）
@@ -218,7 +220,7 @@ SIGNAGE_SLIDES = [
     dict(kicker="いまの状況（正直にお伝えします）", big="試行 <span class='num'>0</span> 回 → 2027年度に1〜2回",
          sub="記録の仕組みは完成しています。受け入れ体制は整った項目から順に公開中です。"
              "様式へのご意見・試行のご相談をお待ちしています。",
-         chips=["📘 Facebookから相談できます", "生徒は匿名IDで記録・氏名は扱いません"]),
+         chips=["📘 Facebook・💼 LinkedInから相談できます", "生徒は匿名IDで記録・氏名は扱いません"]),
 ]
 TICKER = [
     "📋 記録が残る探究 ─ ルーブリック・活動ログ・記録ダッシュボード",
@@ -632,8 +634,8 @@ with tab_pkg:
     ], columns=["教科・場面", "この畑での内容"]), width="stretch", hide_index=True)
 
     st.info("受け入れ体制は準備中で、試行プログラムの実施はまだありません（2027年度に1〜2回予定）。"
-            "記録の様式へのご意見や、試行へのご相談はFacebookからお寄せください。")
-    st.link_button("📘 Facebookで相談する", FACEBOOK_URL)
+            f"記録の様式へのご意見や、試行へのご相談は{sn.NAMES}からお寄せください。")
+    sn.buttons("で相談する")
     try:
         st.page_link("app.py", label="受け入れ準備の状況は、ホームの「🤝 受け入れ体制」タブで公開しています", icon="🏠")
     except Exception:  # noqa: BLE001  単独起動時などリンク先が無い場合

@@ -18,12 +18,13 @@ import streamlit as st
 import media_gallery as mg
 import security_guard as sg
 import soil_vision as sv
+import social as sn
 import strategy as stg
 
 # ─────────────────────────────────────────────
 # 基本設定
 # ─────────────────────────────────────────────
-FACEBOOK_URL = "https://www.facebook.com/profile.php?id=100079624235158"
+FACEBOOK_URL = sn.FACEBOOK_URL  # SNSのURLは social.py で一括管理
 COCRE_HUB_URL = "https://cocrehub.com/"
 FIELD_AREA_M2 = 96  # 圃場面積（㎡）
 JOHO1_NOTEBOOK = "notebooks/joho1_examples.ipynb"  # 情報Ⅰの例題ノートブック（Colabで開く）
@@ -91,7 +92,7 @@ st.markdown(
 with st.sidebar:
     st.header("🌾 スマートパン屋農家")
     st.write("麦を育て、数値で判断し、パンを焼く。")
-    st.link_button("📘 Facebookで活動を見る", FACEBOOK_URL, width="stretch")
+    sn.buttons("で活動内容を見る", stacked=True)
     safe_page_link(SCHOOL_PAGE, "学校向け：記録が残る探究", "📋")
     st.divider()
     st.caption("拠点：広島県三原市西部（ハウス・畑区画）")
@@ -200,7 +201,7 @@ def three_minute_course() -> None:
             "有償の試行は2028〜2029年（フェーズ1）を目安にしています。\n\n"
             "それまでの間も、ご意見や情報交換は歓迎です。"
         )
-        st.link_button("📘 Facebookで声をかける", FACEBOOK_URL, width="stretch")
+        sn.buttons("で声をかける", stacked=True)
     st.divider()
 
 # ═════════════════════════════════════════════
@@ -259,7 +260,7 @@ with T["🏠 ホーム"]:
         recent = st.session_state.log.sort_values("日付", ascending=False).head(4)
         for _, r in recent.iterrows():
             st.markdown(f"**{r['日付']:%m/%d}**　`{r['カテゴリ']}`　{r['内容']}")
-        st.link_button("📘 Facebookで毎日の様子を見る", FACEBOOK_URL)
+        sn.buttons("で活動内容を見る")
 
     st.subheader(f"ロードマップ（フェーズ{phase.no}：{phase.name}）")
     fig = px.timeline(current, x_start="開始", x_end="終了", y="工程", color="状態",
@@ -541,9 +542,9 @@ with T["🎓 探究学習（構想）"]:
         ], columns=["テーマ", "時期", "内容", "つながる教科"])
         st.dataframe(prog, width="stretch", hide_index=True)
 
-    st.info("この構想に関心をお持ちの方、ご意見をいただける方は、Facebookから気軽に声をかけてください。"
+    st.info(f"この構想に関心をお持ちの方、ご意見をいただける方は、{sn.NAMES}から気軽に声をかけてください。"
             "畑の様子も随時発信しています。")
-    st.link_button("📘 Facebookで活動を見る", FACEBOOK_URL)
+    sn.buttons("で活動内容を見る")
 
 # ═════════════════════════════════════════════
 # 5-2. 受け入れ体制（記録する → 見せる → 相手が判断できる）
@@ -605,8 +606,8 @@ with T["🤝 受け入れ体制"]:
     st.caption("※ 試行前の案です。参加する方の目的や体調に合わせて、時間と内容は調整します。")
 
     st.info("受け入れ体制は準備中です。「こういう準備があると安心」というご意見があれば、"
-            "Facebookからお寄せください。今後の整備の参考にさせていただきます。")
-    st.link_button("📘 Facebookで声をかける", FACEBOOK_URL)
+            f"{sn.NAMES}からお寄せください。今後の整備の参考にさせていただきます。")
+    sn.buttons("で声をかける")
 
 # ═════════════════════════════════════════════
 # 6. 活動ログ

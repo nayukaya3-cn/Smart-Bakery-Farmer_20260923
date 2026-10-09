@@ -11,7 +11,7 @@ streamlit run app.py
 
 ## 公開（無料）
 GitHubにこのフォルダをpush → https://share.streamlit.io で `app.py` を指定してDeploy。
-発行されたURLをFacebook投稿に貼れば、誰でも閲覧できます。
+発行されたURLをFacebook・LinkedInの投稿に貼れば、誰でも閲覧できます。
 
 ### 表紙ページ（GitHub Pages）
 無料版の Streamlit は、しばらくアクセスがないとスリープし、最初の人に「起動中」の画面が出ます。
@@ -21,7 +21,11 @@ GitHubにこのフォルダをpush → https://share.streamlit.io で `app.py` �
 2. Source を **Deploy from a branch**、Branch を **main / docs** にして Save
 3. 数分後に `https://nayukaya3-cn.github.io/Smart-Bakery-Farmer_20260923/` で公開されます
 
-Facebook や名刺には、この表紙のURLを載せてください（表紙からアプリへ誘導します）。
+Facebook・LinkedIn や名刺には、この表紙のURLを載せてください（表紙からアプリへ誘導します）。
+
+### SNSリンク（Facebook・LinkedIn）
+URLは `social.py` の `FACEBOOK_URL`・`LINKEDIN_URL` で一括管理しています（アプリ全ページに反映）。表紙 `docs/index.html` のリンクは別に2か所あるので、URLを変えたらそちらも直します。
+LinkedIn は `https://www.linkedin.com/in/（あなたのID）/` の形にしてください。`/feed/` は開いた人自身のフィードが出るため、活動内容は見えません。
 受け入れ準備の状況や資格を更新したときは、`app.py` の `ACCEPT_*` と `docs/index.html` の表を両方直します。
 
 ### ⚠️ ファイルの置き場所（ブラウザからアップロードするとき）
@@ -103,6 +107,7 @@ CSVは Excel やメモ帳で直接書き足しても構いません（列は `�
 | ファイル | 役割 |
 |---|---|
 | app.py | 画面（表のタブ5つ＋「🔎 詳しく見る」の中に8つ。ホーム冒頭に学校の先生向け3分コース） |
+| social.py | Facebook・LinkedIn のURLとボタン（全ページ共通） |
 | strategy.py | 🧭 10年戦略：フェーズ・判断ゲート・準備チェックリスト |
 | pages/ | 学校向け：記録が残る探究／自給家計簿／セキュリティログ（管理者専用） |
 | docs/ | 表紙ページ（GitHub Pages） |
