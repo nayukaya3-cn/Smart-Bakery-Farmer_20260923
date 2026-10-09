@@ -12,13 +12,14 @@
   生徒の氏名は扱わず、学校が付けた匿名ID（例：S01）で記録します。
 """
 import datetime as dt
-import io
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-import streamlit.components.v1 as components
+
+
+import security_guard as sg
 
 st.set_page_config(page_title="学校向け：記録が残る探究", page_icon="📋", layout="wide")
 
@@ -169,11 +170,15 @@ with st.sidebar:
     st.caption("終わったら必ずCSVで保存してください（公開ページには残りません）。")
     up_log = st.file_uploader("活動ログのCSVを読み込む", type="csv", key="up_edu_log")
     if up_log is not None:
-        st.session_state.edu_log = normalize_log(pd.read_csv(io.BytesIO(up_log.getvalue())))
+        _df = sg.read_csv_safely(up_log, page="school", kind="activity_log")
+        if _df is not None:
+            st.session_state.edu_log = normalize_log(_df)
         st.session_state.edu_is_sample = False
     up_sc = st.file_uploader("ルーブリック評価のCSVを読み込む", type="csv", key="up_edu_sc")
     if up_sc is not None:
-        st.session_state.edu_scores = normalize_scores(pd.read_csv(io.BytesIO(up_sc.getvalue())))
+        _df = sg.read_csv_safely(up_sc, page="school", kind="rubric_scores")
+        if _df is not None:
+            st.session_state.edu_scores = normalize_scores(_df)
         st.session_state.edu_is_sample = False
     st.divider()
     if st.button("記入例（架空）に戻す"):
@@ -347,12 +352,12 @@ signage_mode = st.toggle("📺 サイネージだけを大きく表示する（�
 if signage_mode:
     st.markdown("<style>[data-testid='stSidebar'],[data-testid='stHeader']{display:none;}"
                 ".block-container{padding-top:1rem; max-width:100%;}</style>", unsafe_allow_html=True)
-    components.html(signage_html(640), height=640)
+    st.iframe(signage_html(640), height=640)  # 自前の固定HTMLのみ（利用者の入力は入れない）
     st.caption("スライドは7秒ごとに切り替わります。点をクリックすると選べ、マウスを重ねると止まります。"
                "ブラウザを全画面（F11）にすると、モニター掲示に使えます。")
     st.stop()
 
-components.html(signage_html(440), height=440)
+st.iframe(signage_html(440), height=440)  # 自前の固定HTMLのみ（利用者の入力は入れない）
 
 st.markdown(
     '<p class="note">※ 本ページは、学校が説明責任を果たすための記録を外部フィールド側で用意するものです。'
@@ -406,7 +411,7 @@ with tab_rub:
     rub_df = pd.DataFrame(RUBRIC, index=[f"レベル{n}" for n in LEVELS]).T
     rub_df.index.name = "観点"
     st.dataframe(rub_df, width="stretch")
-    st.download_button("ルーブリック表をCSVで保存", rub_df.to_csv().encode("utf-8-sig"),
+    st.download_button("ルーブリック表をCSVで保存", sg.safe_csv(rub_df, index=True),
                        "探究ルーブリック.csv", "text/csv")
 
     st.subheader("評価を入力する")
@@ -422,7 +427,7 @@ with tab_rub:
         },
         key="ed_scores",
     )
-    st.download_button("ルーブリック評価をCSVで保存", scores.to_csv(index=False).encode("utf-8-sig"),
+    st.download_button("ルーブリック評価をCSVで保存", sg.safe_csv(scores),
                        "ルーブリック評価.csv", "text/csv")
 
 # ═════════════════════════════════════════════
@@ -447,7 +452,7 @@ with tab_log:
         },
         key="ed_log",
     )
-    st.download_button("活動ログをCSVで保存", log.to_csv(index=False).encode("utf-8-sig"),
+    st.download_button("活動ログをCSVで保存", sg.safe_csv(log),
                        "活動ログ.csv", "text/csv")
 
 # ─────────────────────────────────────────────

@@ -13,6 +13,30 @@ streamlit run app.py
 GitHubにこのフォルダをpush → https://share.streamlit.io で `app.py` を指定してDeploy。
 発行されたURLをFacebook投稿に貼れば、誰でも閲覧できます。
 
+### 表紙ページ（GitHub Pages）
+無料版の Streamlit は、しばらくアクセスがないとスリープし、最初の人に「起動中」の画面が出ます。
+そこで、すぐ表示される表紙を `docs/index.html` に用意しています（写真は `docs/cover.jpg`・`docs/path.jpg`）。
+
+1. GitHub のリポジトリ → **Settings → Pages**
+2. Source を **Deploy from a branch**、Branch を **main / docs** にして Save
+3. 数分後に `https://nayukaya3-cn.github.io/Smart-Bakery-Farmer_20260923/` で公開されます
+
+Facebook や名刺には、この表紙のURLを載せてください（表紙からアプリへ誘導します）。
+受け入れ準備の状況や資格を更新したときは、`app.py` の `ACCEPT_*` と `docs/index.html` の表を両方直します。
+
+### ⚠️ ファイルの置き場所（ブラウザからアップロードするとき）
+GitHub の「Add files via upload」でファイルを1つずつ選ぶと、フォルダが無視されてリポジトリ直下に置かれ、
+日本語のファイル名が文字化けすることがあります。次の置き場所は動作に関わるので、必ずこの場所に置いてください。
+
+| ファイル | 置き場所 | ここにないと |
+|---|---|---|
+| ページ（学校向け・自給家計簿・セキュリティログ） | `pages/` | 左メニューに出ない |
+| `config.toml` | `.streamlit/` | アップロード上限・エラー非表示などの設定が効かない |
+| `dependabot.yml` | `.github/` | 依存ライブラリの更新提案が来ない |
+| `security-scan.yml`・`watchdog.yml` | `.github/workflows/` | 脆弱性スキャン・見張り番が動かない |
+
+確実なのは、手元のフォルダから `git push` するか、GitHub Desktop を使う方法です。
+
 ## 写真の追加
 `assets/YYYYMMDD/` フォルダに写真（.jpg/.png）を置き、`app.py` の `PHOTO_LOG` にキャプションを1行追加。
 追加した写真は「📷 圃場フォト」と「🔬 AI土壌診断」の両方で自動的に選べるようになります。
@@ -46,7 +70,9 @@ GitHubにこのフォルダをpush → https://share.streamlit.io で `app.py` �
 ## 構成
 | ファイル | 役割 |
 |---|---|
-| app.py | 画面（11タブ） |
+| app.py | 画面（表のタブ4つ＋「🔎 詳しく見る」の中に8つ。ホーム冒頭に学校の先生向け3分コース） |
+| pages/ | 学校向け：記録が残る探究／自給家計簿／セキュリティログ（管理者専用） |
+| docs/ | 表紙ページ（GitHub Pages） |
 | media_gallery.py | 画像・動画・PDF・テキスト・ノートブックの表示部品、Colab リンク |
 | notebooks/ | Google Colab 用ノートブック |
 | soil_vision.py | 画像解析（ExG・大津二値化・グリッド集計）、可変施肥、指標植物のベイズ更新、生成AI呼び出し |

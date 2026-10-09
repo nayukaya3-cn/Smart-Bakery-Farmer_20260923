@@ -1,0 +1,10 @@
+【GitHub上で削除するファイル（リポジトリ直下）】
+・1_搭_蟄ｦ譬｡蜷代￠_險倬鹸縺九ｙ谿九ｋ謗｢遨ｶ.py
+・4_閾ｪ邨ｦ螳ｶ險育ｰｿ.py
+・9_白_繧ｻ繧ｭ繝･繝ｪ繝・ぅ繝ｭ繧ｰ.py
+・config.toml / dependabot.yml / security-scan.yml / watchdog.yml（正しい場所に入れ直すため）
+・download
+・security-hardening.patch（適用済み）
+・❼葉っぱ_３Dプリンティング.MOV（assets/3d_printer/20261006/ に同じものがあります）
+【pages/ の中】
+・古い「1_📋_学校向け_記録が残る探究.py」は、このzipの同名ファイルで上書きしてください

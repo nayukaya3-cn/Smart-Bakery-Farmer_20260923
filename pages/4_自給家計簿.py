@@ -6,11 +6,12 @@
   Streamlit Community Cloud ではサーバー上のファイルが再起動で消えるため、
   記録は「CSVをダウンロード」で手元に保存し、次回「CSVを読み込む」で復元します。
 """
-import io
 import datetime as dt
 
 import pandas as pd
 import streamlit as st
+
+import security_guard as sg
 
 st.set_page_config(page_title="自給家計簿", page_icon="🌾", layout="wide")
 
@@ -49,14 +50,16 @@ with st.sidebar:
     st.caption("終わったら必ずダウンロードしてください。")
 
     for key, label in [("harvest", "収穫"), ("cost", "支出"), ("work", "作業")]:
-        csv = st.session_state[key].to_csv(index=False).encode("utf-8-sig")
+        csv = sg.safe_csv(st.session_state[key])
         st.download_button(f"{label}記録をCSVで保存", csv, f"自給家計簿_{label}.csv", "text/csv")
 
     st.divider()
     for key, label in [("harvest", "収穫"), ("cost", "支出"), ("work", "作業")]:
         up = st.file_uploader(f"{label}記録のCSVを読み込む", type="csv", key=f"up_{key}")
         if up is not None:
-            st.session_state[key] = to_date(pd.read_csv(io.BytesIO(up.getvalue())))
+            _df = sg.read_csv_safely(up, page="kakeibo", kind=key)
+            if _df is not None:
+                st.session_state[key] = to_date(_df)
 
     st.divider()
     year = st.number_input("集計する年", 2026, 2040, dt.date.today().year)
