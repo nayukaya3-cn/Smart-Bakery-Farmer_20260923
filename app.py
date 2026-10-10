@@ -36,7 +36,7 @@ PHOTO_LOG = {  # フォルダ名(YYYYMMDD) → 写真キャプション
 }
 SOW_DAY = date(2026, 10, 20)  # 播種目標日（実体験上の発芽率最適期）
 SCHOOL_PAGE = "pages/1_📋_学校向け_記録が残る探究.py"  # 学校向け：ルーブリック・活動ログ・記録ダッシュボード
-AYAME_PAGE = "pages/2_🌾_あやめの郷_農作業.py"  # あやめの郷での農作業（有給の実証期間）
+AYAME_PAGE = "pages/2_🌾_地元の農業法人_農作業.py"  # あやめの郷での農作業（有給の実証期間）
 
 
 def safe_page_link(page: str, label: str, icon: str) -> None:
