@@ -36,6 +36,7 @@ PHOTO_LOG = {  # フォルダ名(YYYYMMDD) → 写真キャプション
 }
 SOW_DAY = date(2026, 10, 20)  # 播種目標日（実体験上の発芽率最適期）
 SCHOOL_PAGE = "pages/1_📋_学校向け_記録が残る探究.py"  # 学校向け：ルーブリック・活動ログ・記録ダッシュボード
+AYAME_PAGE = "pages/2_🌾_あやめの郷_農作業.py"  # あやめの郷での農作業（有給の実証期間）
 
 
 def safe_page_link(page: str, label: str, icon: str) -> None:
@@ -94,6 +95,7 @@ with st.sidebar:
     st.write("麦を育て、数値で判断し、パンを焼く。")
     sn.buttons("で活動内容を見る", stacked=True)
     safe_page_link(SCHOOL_PAGE, "学校向け：記録が残る探究", "📋")
+    safe_page_link(AYAME_PAGE, "あやめの郷での農作業（実証ログ）", "🌾")
     st.divider()
     st.caption("拠点：広島県三原市西部（ハウス・畑区画）")
     st.caption(f"圃場面積：約 {FIELD_AREA_M2} ㎡")
