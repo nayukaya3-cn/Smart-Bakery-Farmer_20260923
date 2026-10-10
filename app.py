@@ -95,7 +95,7 @@ with st.sidebar:
     st.write("麦を育て、数値で判断し、パンを焼く。")
     sn.buttons("で活動内容を見る", stacked=True)
     safe_page_link(SCHOOL_PAGE, "学校向け：記録が残る探究", "📋")
-    safe_page_link(AYAME_PAGE, "地元の農業法人での農作業（実証ログ）", "🌾")
+    safe_page_link(AYAME_PAGE, "あやめの郷での農作業（実証ログ）", "🌾")
     st.divider()
     st.caption("拠点：広島県三原市西部（ハウス・畑区画）")
     st.caption(f"圃場面積：約 {FIELD_AREA_M2} ㎡")
