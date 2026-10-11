@@ -1,0 +1,391 @@
+"""
+障害者雇用ビジネス（農園型）— 「🌿 農園で働く方へ」タブの中身
+
+メインの読み手：農園型の障害者雇用ビジネスの農園で働いている障害のある方。
+骨格はほかのタブと同じ：① 計算する → ② 可視化する → ③ 自分の条件で判断する
+
+方針
+  - 文は短く、やさしい言葉で書く（専門用語は（）で言いかえる）。
+  - チェックや作業記録の入力は、この画面の中だけで使い、保存しない。
+  - 数値モデル（暑さ指数など）は目安。法律や制度の判断は、必ず相談窓口で確認してもらう。
+
+更新のしかた（ここだけ書きかえれば画面に反映されます）
+  - INDUSTRY        … 業界の数字（調査が新しくなったら差しかえる）
+  - MIN_WAGE        … 広島県の最低賃金（毎年10月ごろ改定）
+  - LEGAL_RATE      … 民間企業の法定雇用率
+  - CONSULT         … 相談先
+"""
+from __future__ import annotations
+
+from datetime import date
+
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
+
+UPDATED = "2026-10-11"
+
+# ─────────────────────────────────────────────
+# データ（出典はページ下の「出典」に記載）
+# ─────────────────────────────────────────────
+# 厚生労働省が2026年4〜5月に業界団体を通じて行ったアンケート（回答22社）の報道より
+INDUSTRY = {
+    "農園型": {"companies": 5, "workers": 8638},
+    "サテライトオフィス型など": {"companies": 22 - 5, "workers": 11612 - 8638},
+}
+# 広島県最低賃金（時間額）：(発効日, 金額)
+MIN_WAGE = [(date(2025, 11, 1), 1085), (date(2026, 10, 11), 1141)]
+LEGAL_RATE = 0.027  # 民間企業の法定雇用率（2026年7月〜）
+
+DISABILITY_TYPES = [
+    "身体障害（重度ではない）", "身体障害（重度）",
+    "知的障害（重度ではない）", "知的障害（重度）",
+    "精神障害",
+]
+
+CHECKLIST = [
+    # (質問, いいえのときの相談先キー, ひとこと)
+    ("雇用契約書（または労働条件通知書）を、自分の手元に持っている", "labor",
+     "働く条件は、書面でもらうのがルールです。まずは会社に「もう一度ください」と言ってみましょう。"),
+    ("契約の期間と、更新されるかどうかの条件を知っている", "labor",
+     "「いつまで働けるか」は大切です。途中で打ち切られた例もあります。"),
+    ("自分を雇っている会社（雇用企業）の担当者の名前と連絡先を知っている", "labor",
+     "農園の運営会社と、あなたを雇っている会社はちがうことがあります。困ったとき、雇用企業に直接言えるようにしておきましょう。"),
+    ("いまの仕事の内容は、契約に書かれた仕事と同じだ", "labor",
+     "書かれた仕事と実際の仕事がちがうときは、相談してよい場面です。"),
+    ("時給（または月給）が、最低賃金以上になっている（上の①で計算できます）", "labor",
+     "最低賃金より低いときは、労働局の特別な許可があるかどうかを確認しましょう。"),
+    ("作業の前に、安全のしかた（道具・暑さ・ほこり）について説明を受けた", "safety",
+     "危ないと感じる作業は、説明を受けるまでやらなくて大丈夫です。"),
+    ("ほこりが出る作業（堆肥・乾いた土・もみがら）のとき、マスクなどの保護具がある", "safety",
+     "堆肥づくりのほこりで肺の病気になり、労災（仕事が原因のけが・病気）と認められた例があります。"),
+    ("暑い日に、休む場所・水分・休けい時間がある", "safety",
+     "2025年6月から、会社には熱中症の対策が義務になりました。"),
+    ("この半年で、新しくできるようになった仕事がある", "life",
+     "会社には、障害のある人の能力をのばす責任があります（2023年4月から法律に明記）。"),
+    ("困ったときに相談できる人が、職場の外にもいる", "life",
+     "家族・支援機関・学校の先生など、職場の外の相談相手がいると安心です。"),
+]
+
+CONSULT = {
+    "labor": ("給料・契約・やめさせられそうなとき",
+              "総合労働相談コーナー（各労働局・労働基準監督署の中）／労働基準監督署",
+              "無料・予約なしで相談できます。会社に知られずに相談できるか、最初にたずねてもかまいません。"),
+    "safety": ("けが・病気が仕事のせいかもしれないとき",
+               "労働基準監督署（労災保険の窓口）",
+               "労災の申請は、会社でなく本人や家族もできます。体の不調はメモに残しておきましょう。"),
+    "life": ("仕事と生活の両方を相談したいとき",
+             "障害者就業・生活支援センター（通称「なかぽつ」）",
+             "仕事のこと・暮らしのことを一緒に相談できます。"),
+    "coach": ("職場になじむための支援がほしいとき",
+              "地域障害者職業センター（広島障害者職業センターなど）",
+              "ジョブコーチ（職場適応援助者）が職場に来て、本人と会社の両方を支えます。"),
+    "job": ("ほかの仕事も考えたいとき",
+            "ハローワーク（障害のある人の専門窓口）",
+            "いまの職場を続けながら、相談だけすることもできます。"),
+}
+
+
+# ─────────────────────────────────────────────
+# 計算のための関数
+# ─────────────────────────────────────────────
+def min_wage_on(d: date) -> tuple[int, date]:
+    """その日に有効な広島県最低賃金（時間額）と発効日。"""
+    wage, since = MIN_WAGE[0][1], MIN_WAGE[0][0]
+    for start, w in MIN_WAGE:
+        if d >= start:
+            wage, since = w, start
+    return wage, since
+
+
+def employment_count(kind: str, hours: float) -> float:
+    """法定雇用率で「何人分」と数えるか（障害者雇用促進法の算定方法・2024年4月〜）。"""
+    severe = "重度" in kind and "重度ではない" not in kind
+    mental = kind == "精神障害"
+    if hours >= 30:
+        return 2.0 if severe else 1.0
+    if hours >= 20:
+        return 1.0 if (severe or mental) else 0.5  # 精神の短時間は当分の間1人分
+    if hours >= 10:
+        return 0.5 if (severe or mental) else 0.0
+    return 0.0
+
+
+def wbgt(temp: float, rh: float, solar: float, wind: float) -> float:
+    """暑さ指数（WBGT）の推定式（小野・登内 2014、環境省の推計で使われる式）。
+    temp: 気温℃ / rh: 湿度% / solar: 日射 kW/㎡ / wind: 風速 m/s"""
+    return (0.735 * temp + 0.0374 * rh + 0.00292 * temp * rh
+            + 7.619 * solar - 4.557 * solar ** 2 - 0.0572 * wind - 4.064)
+
+
+def wbgt_level(v: float) -> tuple[str, str]:
+    if v >= 31:
+        return "危険", "運動・作業は原則やめる。すずしい場所へ。"
+    if v >= 28:
+        return "厳重警戒", "会社に熱中症対策の義務がかかる目安（連続1時間以上／1日4時間をこえる作業）。"
+    if v >= 25:
+        return "警戒", "こまめに休けいと水分を。"
+    if v >= 21:
+        return "注意", "水分をわすれずに。"
+    return "ほぼ安全", "ふつうに作業できる目安。"
+
+
+# ─────────────────────────────────────────────
+# 画面
+# ─────────────────────────────────────────────
+def _section_calc(today: date) -> None:
+    st.subheader("① 計算する：自分の数字を出してみる")
+    tab_pay, tab_count, tab_heat = st.tabs(["💴 給料", "🧮 会社の『何人分』", "🌡️ ハウスの暑さ"])
+
+    with tab_pay:
+        wage_now, since = min_wage_on(today)
+        a, b = st.columns([1, 2])
+        with a:
+            hourly = st.number_input("あなたの時給（円）", 0, 5000, wage_now, 1, key="sk_hourly")
+            hours = st.number_input("1週間に働く時間（時間）", 0.0, 40.0, 30.0, 0.5, key="sk_hours")
+        monthly = hourly * hours * 52 / 12
+        diff = hourly - wage_now
+        with b:
+            m1, m2, m3 = st.columns(3)
+            m1.metric("1か月の給料（めやす）", f"{monthly:,.0f} 円")
+            m2.metric("広島県の最低賃金", f"{wage_now:,} 円", help=f"{since:%Y年%m月%d日}から")
+            m3.metric("最低賃金との差", f"{diff:+,} 円/時")
+            if diff < 0:
+                st.error(
+                    "時給が最低賃金より低くなっています。"
+                    "労働局の「減額の特例」の許可がないときは、法律に合いません。"
+                    "下の③の相談先（総合労働相談コーナー）にたずねてみましょう。"
+                )
+            else:
+                st.success("時給は最低賃金以上です。給料明細と、契約書の金額が同じかも見てみましょう。")
+        st.caption(
+            "1か月＝週の時間×52週÷12か月で計算。税金・保険料を引く前の金額です。"
+            "広島県の最低賃金は2026年10月11日から1,141円（それまでは1,085円）。ほかの県で働く人は、その県の金額で比べてください。"
+        )
+
+    with tab_count:
+        st.markdown(
+            "会社には、働く人の **2.7%**（2026年7月から）以上、障害のある人を雇う義務があります（法定雇用率）。"
+            "あなたは会社の中で **「何人分」** として数えられているかを計算できます。"
+        )
+        a, b = st.columns(2)
+        with a:
+            kind = st.selectbox("障害の種類", DISABILITY_TYPES, key="sk_kind")
+            h = st.slider("1週間に働く時間", 0, 40, 30, key="sk_count_h")
+            cnt = employment_count(kind, h)
+            st.metric("あなたは会社で", f"{cnt:g} 人分")
+        with b:
+            staff = st.number_input("雇用企業の従業員数（わかれば）", 40, 100000, 300, 10, key="sk_staff")
+            need = int(staff * LEGAL_RATE)  # 1人未満の端数は切り捨て
+            st.metric("その会社が雇う必要がある人数", f"{need} 人分")
+            st.caption(f"{staff:,}人 × 2.7% ＝ {staff * LEGAL_RATE:.1f} → 端数切り捨て")
+        st.info(
+            "**数字の意味**：会社は、あなたを雇うことで法律の義務を果たしています。"
+            "つまり、あなたは会社にとって**必要な人**です。"
+            "だからこそ会社には、あなたの安全・仕事の内容・能力をのばすことに責任があります。"
+        )
+        st.caption(
+            "数え方（2024年4月〜）：週30時間以上＝1人分（重度は2人分）／週20〜30時間＝0.5人分（重度・精神障害は1人分）／"
+            "週10〜20時間＝重度・精神障害のみ0.5人分。くわしい判定はハローワークで確認できます。"
+        )
+
+    with tab_heat:
+        st.markdown("ビニールハウスの中は、外より暑くなります。気温と湿度から **暑さ指数（WBGT）** のめやすを出します。")
+        a, b = st.columns([1, 2])
+        with a:
+            t = st.slider("気温（℃）", 15, 45, 33, key="sk_t")
+            rh = st.slider("湿度（%）", 20, 100, 65, key="sk_rh")
+            place = st.radio("場所", ["日かげ・屋内", "ハウスの中（日が入る）", "外・晴れ"], index=1, key="sk_place")
+            wind = st.slider("風（m/秒）", 0.0, 5.0, 0.5, 0.5, key="sk_wind")
+        solar = {"日かげ・屋内": 0.0, "ハウスの中（日が入る）": 0.4, "外・晴れ": 0.8}[place]
+        v = wbgt(t, rh, solar, wind)
+        level, advice = wbgt_level(v)
+        with b:
+            st.metric("暑さ指数（WBGT）めやす", f"{v:.1f} ℃", level)
+            st.write(advice)
+            legal = v >= 28 or t >= 31
+            if legal:
+                st.warning(
+                    "この条件で **1時間以上つづけて、または1日4時間をこえて** 作業するときは、"
+                    "会社に熱中症対策（具合が悪い人を見つけたときの連絡先・手順を決めて伝えること）の義務があります（2025年6月〜）。"
+                )
+            temps = list(range(25, 41))
+            fig = go.Figure(go.Scatter(x=temps, y=[wbgt(x, rh, solar, wind) for x in temps], mode="lines",
+                                       line=dict(color="#c98a2b")))
+            for y, name in [(25, "警戒"), (28, "厳重警戒"), (31, "危険")]:
+                fig.add_hline(y=y, line_dash="dot", line_color="#999", annotation_text=name)
+            fig.add_vline(x=t, line_dash="dot", line_color="#555")
+            fig.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10),
+                              xaxis_title="気温（℃）", yaxis_title="WBGT（℃）")
+            st.plotly_chart(fig, width="stretch")
+        st.caption("推定式は目安です。職場に暑さ指数計があれば、そちらの値を使ってください。体調が悪いときは、数字に関係なく休みましょう。")
+
+
+def _section_visualize() -> None:
+    st.subheader("② 可視化する：数字を見て気づく")
+    left, right = st.columns(2)
+
+    with left:
+        st.markdown("**業界の中で「農園型」はどのくらい？**")
+        df = pd.DataFrame([
+            dict(区分=k, 指標="事業者の数", 割合=v["companies"] / 22 * 100, 数=f"{v['companies']}社")
+            for k, v in INDUSTRY.items()
+        ] + [
+            dict(区分=k, 指標="働く障害者の数", 割合=v["workers"] / 11612 * 100, 数=f"{v['workers']:,}人")
+            for k, v in INDUSTRY.items()
+        ])
+        fig = px.bar(df, x="割合", y="指標", color="区分", orientation="h", text="数",
+                     color_discrete_map={"農園型": "#7fa36a", "サテライトオフィス型など": "#c9c2b4"})
+        fig.update_traces(textangle=0, textposition="inside", insidetextanchor="middle")
+        fig.update_layout(height=250, margin=dict(l=10, r=10, t=10, b=10), barmode="stack",
+                          xaxis_title="割合（%）", yaxis_title=None, legend_title_text="",
+                          legend=dict(orientation="h", yanchor="bottom", y=-0.6, x=0))
+        st.plotly_chart(fig, width="stretch")
+        farm = INDUSTRY["農園型"]
+        other = INDUSTRY["サテライトオフィス型など"]
+        c1, c2 = st.columns(2)
+        c1.metric("農園型 1社あたりの人数", f"{farm['workers'] / farm['companies']:,.0f} 人")
+        c2.metric("それ以外 1社あたり", f"{other['workers'] / other['companies']:,.0f} 人")
+        st.caption(
+            "事業者は22社のうち5社（約23%）なのに、働く人は8,638人で全体の74%。"
+            "少ない会社に、たくさんの人が集まっています。1つの会社のやり方が、多くの人の働き方を決めるということです。"
+        )
+
+    with right:
+        st.markdown("**わたしの1週間：同じ作業ばかりになっていない？**")
+        st.caption("表を書きかえると、グラフが変わります（保存はされません）。")
+        default = pd.DataFrame([
+            dict(作業="野菜の収穫", 時間=10.0, 新しく覚えた=False),
+            dict(作業="草とり", 時間=8.0, 新しく覚えた=False),
+            dict(作業="水やり", 時間=6.0, 新しく覚えた=False),
+            dict(作業="袋づめ・計量", 時間=4.0, 新しく覚えた=True),
+            dict(作業="ふり返り・研修", 時間=2.0, 新しく覚えた=False),
+        ])
+        log = st.data_editor(default, num_rows="dynamic", width="stretch", key="sk_week",
+                             column_config={"時間": st.column_config.NumberColumn(min_value=0.0, max_value=40.0, step=0.5)})
+        log = log.dropna(subset=["作業"])
+        log = log[log["時間"].fillna(0) > 0]
+        if not log.empty:
+            total = log["時間"].sum()
+            top_share = log["時間"].max() / total * 100
+            fig2 = px.pie(log, names="作業", values="時間", hole=.5,
+                          color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig2.update_layout(height=230, margin=dict(l=10, r=10, t=10, b=10), showlegend=True)
+            st.plotly_chart(fig2, width="stretch")
+            m1, m2 = st.columns(2)
+            m1.metric("いちばん多い作業の割合", f"{top_share:.0f} %")
+            m2.metric("新しく覚えた作業", f"{int(log['新しく覚えた'].fillna(False).sum())} 個")
+            if top_share >= 60:
+                st.warning("1つの作業が6割をこえています。ほかの仕事も覚えたいときは、担当者に伝えてみましょう。")
+
+
+def _section_decide() -> None:
+    st.subheader("③ 自分の条件で判断する：わたしの働き方チェック")
+    st.caption("あてはまるものに✓をつけてください。答えはこの画面の中だけで使い、どこにも送られず、保存もされません。")
+    answers = [st.checkbox(q, key=f"sk_chk_{i}") for i, (q, _, _) in enumerate(CHECKLIST)]
+    yes = sum(answers)
+    st.progress(yes / len(CHECKLIST), text=f"✓ {yes} / {len(CHECKLIST)}")
+
+    missing = [(q, key, note) for (q, key, note), ok in zip(CHECKLIST, answers) if not ok]
+    if not missing:
+        st.success("すべてに✓がつきました。いまの働き方を、記録に残しておくと安心です。")
+    else:
+        st.markdown("**✓がつかなかった項目と、相談できるところ**")
+        for q, key, note in missing:
+            topic, where, _ = CONSULT[key]
+            st.markdown(f"- {q}\n  - {note}\n  - 相談先 → **{where}**")
+        st.info("✓がつかないことは、あなたのせいではありません。ひとりで決めずに、相談してから考えましょう。")
+
+    st.markdown("#### 相談先の一覧")
+    st.dataframe(pd.DataFrame([dict(こんなとき=t, 相談先=w, ひとこと=n) for t, w, n in CONSULT.values()]),
+                 hide_index=True, width="stretch")
+
+    st.markdown("#### 実際に起きたことから学ぶ")
+    a, b = st.columns(2)
+    with a.container(border=True):
+        st.markdown(
+            "**1年半の予定が、9か月で終わった**\n\n"
+            "調剤大手の子会社で、農園で働いていた障害者50人の雇用が、予定の1年半より早い9か月で打ち切られました。"
+            "雇用した会社が、働く人の管理を業者にまかせきりにしていたことが原因ではないか、と報道されています。\n\n"
+            "→ **学べること**：契約の期間と更新の条件を書面で確認する。雇っている会社の担当者を知っておく。"
+        )
+    with b.container(border=True):
+        st.markdown(
+            "**「病院職員」のはずが、毎日の堆肥づくり**\n\n"
+            "病院職員として雇われた障害者が、実際には農作業をしていて、堆肥づくりを続けるうちに肺の病気になり、"
+            "労災（仕事が原因の病気）と認められました。\n\n"
+            "→ **学べること**：契約の仕事と実際の仕事がちがったら相談する。ほこりの出る作業は保護具を使う。"
+            "体の不調は日付と一緒にメモする。"
+        )
+    st.caption("出典：読売新聞の報道（見出し：「障害者50人が『9か月』で雇用打ち切り…」「『病院職員』として雇用された障害者、実際の仕事は『農作業』…」）。")
+
+
+def _section_for_employers() -> None:
+    with st.expander("🏢 雇用企業・農園を運営する方へ（この畑ができること／まだできないこと）"):
+        st.markdown(
+            "この畑は、障害者雇用ビジネスの農園を **運営していません**。受け入れの実績もまだありません（フェーズ0：実証・記録）。"
+            "そのうえで、農園で働く人の安全と成長のために、次のことを試しています。"
+        )
+        st.dataframe(pd.DataFrame([
+            dict(できること="車椅子で一周できるハウス周囲の通路", 状況="整備中（2026年10月〜）"),
+            dict(できること="作業手順を写真・図にする（文字が苦手でもわかる手順書）", 状況="3Dプリンターの自助具と合わせて試作中"),
+            dict(できること="暑さ指数・作業時間の記録（このタブの①）", 状況="モデルのみ。センサー連携は未実施"),
+            dict(できること="食品衛生（HACCP）の考え方での作業の見える化", 状況="製パン・HACCPの実務経験をもとに設計中"),
+            dict(できること="作業の記録で「できるようになったこと」を残す（このタブの②）", 状況="記入例のみ"),
+        ]), hide_index=True, width="stretch")
+        st.caption(
+            "2023年4月の改正障害者雇用促進法で、事業主には障害のある人の「職業能力の開発・向上」に努める責任が明記されました。"
+            "雇用率の数字だけでなく、働く人の成長を記録で示せる形をめざします。"
+        )
+
+
+def render(today: date | None = None) -> None:
+    today = today or date.today()
+    st.header("🌿 農園で働く方へ（障害者雇用ビジネス・農園型）")
+    st.markdown(
+        """
+        <div class="hero" style="padding:1.2rem 1.6rem;">
+          <p class="eyebrow">障害者雇用ビジネス ＝ 農園やサテライトオフィスなど、障害のある人が働く場所を、雇用する会社に用意する事業</p>
+          <p class="lead" style="margin:0;">農園で働くあなたが、<b>自分の給料・安全・成長を、自分の数字で確かめる</b>ためのページです。<br>
+          ① 計算する → ② 可視化する → ③ 自分の条件で判断する、の順に使えます。</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.toggle("文字を大きくする", key="sk_big"):
+        st.markdown("<style>.stMarkdown p, .stMarkdown li, .stCheckbox label p {font-size:1.2rem !important;}</style>",
+                    unsafe_allow_html=True)
+
+    k1, k2, k3 = st.columns(3)
+    k1.metric("農園型で働く障害者", "8,638 人")
+    k1.caption("全体（11,612人）の74%")
+    k2.metric("農園型の事業者", "5 社")
+    k2.caption("回答22社のうち")
+    k3.metric("法定雇用率（民間企業）", "2.7 %")
+    k3.caption("2026年7月から")
+
+    _section_calc(today)
+    st.divider()
+    _section_visualize()
+    st.divider()
+    _section_decide()
+    st.divider()
+    _section_for_employers()
+
+    st.caption(
+        f"更新日：{UPDATED}｜このページの計算は説明用のめやすです。給料・契約・労災などの判断は、必ず相談窓口で確認してください。"
+    )
+    with st.expander("出典"):
+        st.markdown(
+            "- 業界の数字：厚生労働省が2026年4〜5月に業界団体を通じて行ったアンケート（回答22社）の報道。"
+            "参考：2023年4月公表の厚労省実態調査では、事業者23法人・就業障害者6,568人・農園91か所"
+            "（[弁護士ドットコムニュース 2023年10月12日](https://www.bengo4.com/c_5/n_16619/)）\n"
+            "- 広島県最低賃金：[広島労働局 報道発表（令和8年10月11日から1,141円）]"
+            "(https://jsite.mhlw.go.jp/hiroshima-roudoukyoku/content/contents/002815206.pdf)／"
+            "[広島県（令和7年11月1日から1,085円）](https://www.pref.hiroshima.lg.jp/site/work2/wn500616.html)\n"
+            "- 法定雇用率・算定方法：障害者雇用促進法（2024年4月 2.5%、2026年7月 2.7%。週10〜20時間の算定は2024年4月〜）\n"
+            "- 熱中症対策の義務化：労働安全衛生規則の改正（2025年6月1日施行）\n"
+            "- 暑さ指数の推定式：小野雅司・登内道彦（2014）「通常観測気象要素を用いたWBGT（湿球黒球温度）の推定」日本生気象学会雑誌\n"
+            "- 事例：読売新聞の報道（ページ内に見出しを記載）"
+        )
