@@ -29,6 +29,8 @@ SAMPLE_NAMES = ["山田", "佐藤"]            # 架空データ用の匿名化�
 SAMPLE_PARTNERS = ["みどり青果", "ひかり製パン"]
 REQUIRED = ["ID", "日付", "作業", "本文"]
 LABELS = ["未判定", "困りごと", "否定", "保留"]
+# 入力用の Google フォーム（回答は法人のスプレッドシートに入り、ここには来ない）
+FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSenOoiE1iYKvD_dQeR9VUhPt-8q955rsvA4G_Gl7nY0FuXIuQ/viewform"
 
 # 仮置きの対応づけ（③で使う）。困りごとの種類 → AIエージェント候補・必要なデータ
 CANDIDATES = {
@@ -53,6 +55,27 @@ with st.container(border=True):
     )
 
 # ------------------------------------------------------------
+# 入力：Google フォーム → スプレッドシート → 匿名化CSV → このページ
+# ------------------------------------------------------------
+st.header("📝 日誌を入力する（Googleフォーム）")
+f1, f2 = st.columns([1, 2])
+with f1:
+    st.link_button("作業日誌フォームを開く", FORM_URL, type="primary", width="stretch")
+    st.caption("スマホからも入力できます。1日1件、困りごとがない日も「特に問題なし」と書きます（分母になります）。")
+with f2:
+    st.markdown(
+        "| 段 | どこで | すること |\n|---|---|---|\n"
+        "| 1 入力 | Googleフォーム | 日付・記入者（仮名）・作業・本文・止まった時間・影響 |\n"
+        "| 2 集計 | 法人のスプレッドシート | 「日誌」シートに D001… で自動追記、「集計」シートが自動更新 |\n"
+        "| 3 匿名化 | 同じスプレッドシート | メニュー「作業日誌 → 解析用CSVを作る」で氏名・取引先名を伏せたCSVを保存 |\n"
+        "| 4 分析 | このページ | 左のサイドバーで「自分の日誌CSVを読み込む」→ そのCSVを選ぶ |"
+    )
+with st.expander("フォームをこの画面の中で開く"):
+    st.iframe(FORM_URL + "?embedded=true", height=900)
+st.caption("フォームの回答はこのページには届かず、このページから回答を読みに行くこともしません。"
+           "分析に使うのは、手順3で匿名化したCSVだけです。")
+
+# ------------------------------------------------------------
 # サイドバー：データの選択
 # ------------------------------------------------------------
 with st.sidebar:
@@ -60,11 +83,13 @@ with st.sidebar:
     source = st.radio("使うデータ", ["架空の記入例（36件）", "自分の日誌CSVを読み込む"])
     up = None
     if source.startswith("自分"):
-        st.caption("列：`ID,日付,作業,本文`（`記入者` は任意）。日付は 2026-10-12 の形。")
+        st.caption("フォームのスプレッドシートで「作業日誌 → 解析用CSVを作る」を実行して保存したCSVを選びます。"
+                   "列：`ID,日付,作業,本文`（`記入者`・`止まった時間(分)`・`影響`・`備考` は任意）。")
         up = st.file_uploader("日誌CSV", type="csv", key="diary_up")
         st.caption("読み込んだ日誌はこのセッションの中だけで使い、サーバーには残りません。"
                    "このページは外部の生成AIを呼び出しません。")
     st.divider()
+    st.link_button("📝 作業日誌フォーム", FORM_URL, width="stretch")
     st.caption("同じ手順を Google Colab で：`notebooks/text_analysis_work_diary.ipynb`")
 
 if source.startswith("自分"):

@@ -119,6 +119,7 @@ CSVは Excel やメモ帳で直接書き足しても構いません（列は `�
 | ② 可視化する | 原文で確かめた困りごとを**作業×月**のヒートマップに。作業ごとの日数で割った値も並べる |
 | ③ 判断する | 損失時間とデータの準備度を自分で入れ、AIエージェントを**最初に入れる作業**を決める |
 
+- 入力：[作業日誌フォーム（Googleフォーム）](https://docs.google.com/forms/d/e/1FAIpQLSenOoiE1iYKvD_dQeR9VUhPt-8q955rsvA4G_Gl7nY0FuXIuQ/viewform)。回答は法人のスプレッドシートに入り、メニュー「作業日誌 → 解析用CSVを作る」で匿名化CSVを作ります（スクリプトは `docs/work_diary_form.gs`）。URLを変えたらページ冒頭の `FORM_URL` を直します。
 - 画面：`pages/5_🔤_作業日誌テキスト分析.py`（左メニュー）。自分の日誌CSV（列 `ID,日付,作業,本文`）を読み込めます。セッション内だけで使い、保存しません。
 - Colab：`notebooks/text_analysis_work_diary.ipynb`。上から実行すると自己チェック（`assert`）で記録と出力の一致を確かめます。
 - 共通部品：`diary_text.py`。検索語・否定の言い方・言い換えはファイル冒頭の `KEYWORDS`・`NEG_PATTERNS`・`SYNONYMS` で変えます。
