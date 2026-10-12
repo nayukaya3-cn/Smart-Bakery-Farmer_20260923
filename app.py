@@ -40,6 +40,7 @@ SOW_DAY = date(2026, 10, 20)  # 播種目標日（実体験上の発芽率最適
 SCHOOL_PAGE = "pages/1_📋_学校向け_記録が残る探究.py"  # 学校向け：ルーブリック・活動ログ・記録ダッシュボード
 AYAME_PAGE = "pages/2_🌾_地元の農業法人_農作業.py"  # あやめの郷での農作業（有給の実証期間）
 DIARY_PAGE = "pages/5_🔤_作業日誌テキスト分析.py"  # 作業日誌の困りごとを数え、原文で確かめる（研究メモ）
+COMPARE_PAGE = "pages/3_⚖️_比べて確かめる探究.py"  # 寒締めほうれん草：くじで分けて測る・比べる・グラフ・判断
 
 
 def safe_page_link(page: str, label: str, icon: str) -> None:
@@ -100,6 +101,7 @@ with st.sidebar:
     safe_page_link(SCHOOL_PAGE, "学校向け：記録が残る探究", "📋")
     safe_page_link(AYAME_PAGE, "地元の農業法人での農作業（実証ログ）", "🌾")
     safe_page_link(DIARY_PAGE, "作業日誌テキスト分析（研究メモ）", "🔤")
+    safe_page_link(COMPARE_PAGE, "比べて確かめる探究（寒締めほうれん草）", "⚖️")
     st.divider()
     st.caption("拠点：広島県三原市西部（ハウス・畑区画）")
     st.caption(f"圃場面積：約 {FIELD_AREA_M2} ㎡")
@@ -187,9 +189,11 @@ def three_minute_course() -> None:
         st.markdown(
             "**① 1分：どんな場所か**\n\n"
             f"三原市西部の約{FIELD_AREA_M2}㎡の畑。小麦を育ててパンを焼くまでを、"
-            "**計算する → 可視化する → 自分の条件で判断する** の3段構えで探究します。\n\n"
+            "**測る → 比べる → グラフにする → 自分の条件で判断する** の4段で探究します。"
+            "「比べる」では、くじで分けた2区で条件をそろえ、「本当に効いたのか」を確かめます。\n\n"
             "想定する連携先：通信制高校・サポート校の探究、総合型選抜に向けた探究、特別支援学校の現場実習。"
         )
+        safe_page_link(COMPARE_PAGE, "90分モデル授業を体験する", "⚖️")
         st.caption("詳しくは「🎓 探究学習（構想）」タブ")
     with b.container(border=True):
         st.markdown(
