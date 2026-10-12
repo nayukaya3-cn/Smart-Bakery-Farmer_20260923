@@ -1,0 +1,316 @@
+From c77e8174ffd2b102331cd933338f1626a0080f11 Mon Sep 17 00:00:00 2001
+From: Kusukaya <nayukaya9@gmail.com>
+Date: Mon, 12 Oct 2026 13:28:51 +0900
+Subject: [PATCH 2/2] =?UTF-8?q?AI=E3=83=AD=E3=83=9C=E3=83=83=E3=83=88?=
+ =?UTF-8?q?=E3=82=BF=E3=83=96=E3=81=AB=E5=AE=89=E5=85=A8=E8=A8=AD=E8=A8=88?=
+ =?UTF-8?q?=EF=BC=88=E7=94=A3=E6=A5=AD=E7=94=A8=E3=83=AD=E3=83=9C=E3=83=83?=
+ =?UTF-8?q?=E3=83=88=E7=89=B9=E5=88=A5=E6=95=99=E8=82=B2=E3=83=BB=E6=95=99?=
+ =?UTF-8?q?=E7=A4=BA=E7=AD=89=EF=BC=89=E3=82=92=E8=BF=BD=E5=8A=A0?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- robot_safety.py: 停止距離・安全距離・減速/停止ゾーン・リスクアセスメント・運転前チェック
+- app.py: 安全メモを置きかえ、ステップに「⓪ 安全の考え方」を追加、資格表記を更新
+- 学校向けページの資格表記を更新、README追記
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016PL6tyKNuqkHutomqmKGNu
+---
+ README.md                                     |   1 +
+ app.py                                        |  13 +-
+ ...13\343\202\213\346\216\242\347\251\266.py" |   2 +-
+ robot_safety.py                               | 211 ++++++++++++++++++
+ 4 files changed, 218 insertions(+), 9 deletions(-)
+ create mode 100644 robot_safety.py
+
+diff --git a/README.md b/README.md
+index 2c8e2b1..b3088f6 100644
+--- a/README.md
++++ b/README.md
+@@ -113,6 +113,7 @@ CSVは Excel やメモ帳で直接書き足しても構いません（列は `
+ | ファイル | 役割 |
+ |---|---|
+ | app.py | 画面（表のタブ6つ＋「🔎 詳しく見る」の中に9つ。ホーム冒頭に学校の先生向け3分コース） |
++| robot_safety.py | 🤖 AIロボット：産業用ロボット特別教育（教示等）の考え方による安全設計（停止距離・安全距離・ゾーン・リスクアセスメント・運転前チェック） |
+ | sowing_calendar.py | 🗓️ 今まく作物：秋の播種カレンダー（適期・残り日数・カウントダウン・保存目安・作業日の割り当て） |
+ | social.py | Facebook・LinkedIn のURLとボタン（全ページ共通） |
+ | strategy.py | 🧭 10年戦略：フェーズ・判断ゲート・準備チェックリスト |
+diff --git a/app.py b/app.py
+index 673e95f..6084196 100644
+--- a/app.py
++++ b/app.py
+@@ -19,6 +19,7 @@ import media_gallery as mg
+ import security_guard as sg
+ import shogai_koyo as sk
+ import soil_vision as sv
++import robot_safety as rs
+ import social as sn
+ import sowing_calendar as sc
+ import strategy as stg
+@@ -581,7 +582,7 @@ ACCEPT_QUALS = [  # (資格・経験, 区分)
+     ("高等学校教諭一種免許状（理科）", "保有"),
+     ("職業訓練指導員（パン・菓子製造）", "保有"),
+     ("危険物取扱者（乙種第4類）", "保有"),
+-    ("産業用ロボット特別教育 修了（インストラクターコースは2026年12月修了予定）", "保有"),
++    ("産業用ロボットの教示等の特別教育 修了（2026年6月）。インストラクターコースは2026年12月受講予定", "保有"),
+     ("高等学校教諭免許状（情報）", "取得予定（2027年9月）"),
+     ("特別支援学校 高等部での作業学習（農業・食品加工など）の実習助手", "経験 5年4か月"),
+ ]
+@@ -916,6 +917,7 @@ with T["🤖 AIロボット"]:
+ 
+     st.subheader("ステップ")
+     steps_rb = pd.DataFrame([
++        ("⓪ 安全の考え方をそろえる", "産業用ロボット特別教育（教示等）の考え方で、停止距離・ゾーン・運転前チェックを決める", "下の「ロボットの安全設計」", "修了済み"),
+         ("① 人が記録する", "スマホで同じ位置から定点撮影し、写真とメモを残す", "スマホ・活動ログ", "いまここ"),
+         ("② シミュレーションで試す", "ROS 2 とシミュレーターで、約96㎡の畑を巡回する経路を作る", "ROS 2・Gazebo", "次"),
+         ("③ 小型ロボットで巡回", "カメラ付きの小型ローバーで、決めた経路を走って撮影する", "小型ローバー", "予定"),
+@@ -974,13 +976,8 @@ with T["🤖 AIロボット"]:
+     ], columns=["作業", "担い手", "理由"])
+     st.dataframe(cmp_, width="stretch", hide_index=True)
+ 
+-    with st.expander("⚠️ 安全について"):
+-        st.markdown(
+-            "- ロボットを動かすのは、**人が近くで見守れるとき**だけにします。非常停止の手段を必ず用意します。\n"
+-            "- 実機の前に、必ずシミュレーションで経路と動きを確かめます。\n"
+-            "- 撮影した写真に人や近所の家が写り込まないよう、撮影範囲に気をつけます。\n"
+-            "- 通信でつながる機器なので、初期パスワードの変更など**基本的なセキュリティ対策**を行います。"
+-        )
++    st.divider()
++    rs.render(speed)
+ 
+     st.divider()
+     mg.media_section(ASSETS / "robot", key="robot", title="📂 AIロボットの記録・資料")
+diff --git "a/pages/1_\360\237\223\213_\345\255\246\346\240\241\345\220\221\343\201\221_\350\250\230\351\214\262\343\201\213\343\202\231\346\256\213\343\202\213\346\216\242\347\251\266.py" "b/pages/1_\360\237\223\213_\345\255\246\346\240\241\345\220\221\343\201\221_\350\250\230\351\214\262\343\201\213\343\202\231\346\256\213\343\202\213\346\216\242\347\251\266.py"
+index f5ee4be..0fedc00 100644
+--- "a/pages/1_\360\237\223\213_\345\255\246\346\240\241\345\220\221\343\201\221_\350\250\230\351\214\262\343\201\213\343\202\231\346\256\213\343\202\213\346\216\242\347\251\266.py"
++++ "b/pages/1_\360\237\223\213_\345\255\246\346\240\241\345\220\221\343\201\221_\350\250\230\351\214\262\343\201\213\343\202\231\346\256\213\343\202\213\346\216\242\347\251\266.py"
+@@ -89,7 +89,7 @@ INSTRUCTORS = pd.DataFrame([
+     ("楠香谷 隆規", "高等学校教諭一種免許状（理科）", "保有"),
+     ("楠香谷 隆規", "職業訓練指導員（パン・菓子製造）", "保有"),
+     ("楠香谷 隆規", "ものづくりマイスター（厚生労働省）／HACCP実務20年以上", "保有"),
+-    ("楠香谷 隆規", "産業用ロボット特別教育 修了（インストラクターコース 2026年12月修了予定）", "保有"),
++    ("楠香谷 隆規", "産業用ロボットの教示等の特別教育 修了（2026年6月）。インストラクターコース 2026年12月受講予定", "保有"),
+     ("楠香谷 隆規", "危険物取扱者（乙種第4類）", "保有"),
+     ("楠香谷 隆規", "高等学校教諭免許状（情報）", "取得予定（2027年9月）"),
+     ("楠香谷 隆規", "特別支援学校 高等部 作業学習の実習助手", "経験 5年4か月"),
+diff --git a/robot_safety.py b/robot_safety.py
+new file mode 100644
+index 0000000..5527df8
+--- /dev/null
++++ b/robot_safety.py
+@@ -0,0 +1,211 @@
++"""
++ロボットの安全設計 — 産業用ロボット特別教育（教示等）の考え方を、畑の巡回ロボットに当てはめる
++
++app.py の「🤖 AIロボット」タブから rs.render(speed) で呼び出します。
++  ① 計算する  : 止まるまでの距離と、人との安全距離
++  ② 可視化する: 減速ゾーン・停止ゾーンと、人の位置
++  ③ 判断する  : リスクアセスメント（加算法）と、運転前チェック → 動かしてよいかの判定
++
++数値はすべて説明用の簡易モデルです。実機の安全設計は、メーカーの仕様と法令・規格に従います。
++"""
++from __future__ import annotations
++
++import numpy as np
++import pandas as pd
++import plotly.graph_objects as go
++import streamlit as st
++
++# 修了証の画像そのもの（生年月日・証番号が載っている）は公開せず、文字情報だけを載せる。
++CERT = {
++    "名称": "産業用ロボットの教示等の業務に係る特別教育 修了",
++    "根拠": "労働安全衛生規則 第36条第31号",
++    "修了": "2026年6月",
++    "次の段階": "産業用ロボット特別教育 インストラクターコース（2026年12月 受講予定）",
++}
++
++# 特別教育で学ぶ考え方 → 畑の巡回ロボットでどう生かすか
++TRANSLATE = [
++    ("可動範囲（ロボットが届く範囲）を知る", "巡回ルートの両側に、ロボットが入りうる幅を決めて地面に目印をつける"),
++    ("教示中は、非常停止をすぐ押せる状態で作業する", "動かすときは、非常停止（ボタン・リモコン）を人が手に持って見守る"),
++    ("教示は低速で行う", "初めての経路・人がいる時間帯は、速度の上限を下げて走らせる"),
++    ("作業中であることを周りに表示する", "「ロボット運転中」の札を通路の入口に出す。見学者に先に説明する"),
++    ("作業開始前に点検する", "電池・ブレーキ・非常停止・カメラ・通信を、運転前チェックで毎回確かめる"),
++    ("異常時は止めてから近づく", "引っかかった・倒れたときは、必ず停止を確認してから手を出す"),
++]
++
++# リスクアセスメント（加算法）の点数表。中央労働災害防止協会などで広く使われる方式の一例。
++SEVERITY = {"致命傷": 10, "重傷（休業あり）": 6, "軽傷（休業なし）": 3, "かすり傷": 1}
++FREQUENCY = {"頻繁に近づく": 4, "ときどき近づく": 2, "ほとんど近づかない": 1}
++LIKELIHOOD = {"確実に起こる": 6, "起こる可能性が高い": 4, "起こる可能性がある": 2, "ほとんど起こらない": 1}
++
++DEFAULT_RISKS = pd.DataFrame([
++    ("見学の生徒がルートに入り、ぶつかる", "軽傷（休業なし）", "ときどき近づく", "起こる可能性がある",
++     "速度上限を下げる・停止ゾーンでの自動停止", "ルートの目印・運転中の札・事前説明"),
++    ("車椅子の通路とルートが交わる", "軽傷（休業なし）", "ときどき近づく", "起こる可能性がある",
++     "ルートを通路と交わらない形にする", "交わる場所では一時停止して人を待つ"),
++    ("段差・ぬかるみで転倒し、人の足に当たる", "かすり傷", "ほとんど近づかない", "起こる可能性がある",
++     "段差のない区画だけを走らせる", "雨のあとは運転しない"),
++    ("通信を乗っ取られ、勝手に動く", "軽傷（休業なし）", "ほとんど近づかない", "起こる可能性がある",
++     "初期パスワードの変更・通信の暗号化", "手元の非常停止は通信と別系統にする"),
++    ("カメラに人や近所の家が写り込む", "かすり傷", "ときどき近づく", "起こる可能性が高い",
++     "カメラの向きを地面に固定する", "写り込んだ写真は公開前に消す"),
++], columns=["危険のシナリオ", "重篤度", "頻度", "可能性", "対策①：設計で減らす", "対策②：守り方・知らせ方"])
++
++CHECKS = [
++    "非常停止（本体のボタン・手元のリモコン）が効くことを確かめた",
++    "電池の残りと、ブレーキの効きを確かめた",
++    "ルートの目印・「ロボット運転中」の札を出した",
++    "見学者に、近づいてよい距離と止め方を説明した",
++    "見守る人が1人、ロボットから目を離さない体制にした",
++    "通信機器のパスワードを初期値から変えてある",
++]
++
++
++def stop_distance(v: float, t_react: float, decel: float) -> float:
++    """止まるまでの距離 d = v·t + v² / (2a)  [m]"""
++    return v * t_react + v ** 2 / (2 * decel)
++
++
++def safety_distance(k_person: float, t_total: float, margin: float) -> float:
++    """人が近づく速さを考えた安全距離 S = K·T + C  [m]
++    （考え方は ISO 13855 の安全距離の式。K：人が近づく速さ、T：検知から停止までの時間、C：余裕）"""
++    return k_person * t_total + margin
++
++
++def risk_level(points: int) -> str:
++    if points >= 12:
++        return "Ⅳ すぐに対策"
++    if points >= 9:
++        return "Ⅲ 優先して対策"
++    if points >= 6:
++        return "Ⅱ 計画的に対策"
++    return "Ⅰ 必要に応じて対策"
++
++
++def render(robot_speed: float = 0.2) -> None:
++    st.subheader("🛡️ ロボットの安全設計：産業用ロボット特別教育を、畑に当てはめる")
++
++    c_cert, c_note = st.columns([3, 2])
++    with c_cert:
++        st.markdown(
++            f"**{CERT['名称']}**（{CERT['修了']}）\n\n"
++            f"根拠：{CERT['根拠']}\n\n"
++            f"次の段階：{CERT['次の段階']}"
++        )
++    with c_note:
++        st.info("教示（ロボットに動きを教える作業）のときの安全の考え方を、"
++                "畑を巡回する小型ロボットと、見学に来る生徒の安全に置きかえています。")
++
++    st.markdown("**特別教育で学ぶ考え方 → 畑でどう生かすか**")
++    st.dataframe(pd.DataFrame(TRANSLATE, columns=["特別教育で学ぶ考え方", "畑の巡回ロボットでは"]),
++                 width="stretch", hide_index=True)
++    st.caption("巡回用の小型ローバーは、モーターの定格出力が80W以下なら、法令上の「産業用ロボット」に当たらないことが多いです。"
++               "それでも、同じ考え方で安全をつくります。")
++
++    # ── ① 計算する ──────────────────────────
++    st.markdown("#### ① 計算する：止まるまでの距離と、安全距離")
++    a, b = st.columns([1, 2])
++    with a:
++        v = st.slider("ロボットの速さ m/秒", 0.05, 1.0, float(robot_speed), 0.05, key="rs_v",
++                      help="上の巡回ルート設計と同じ値から始まります")
++        t_detect = st.slider("人を見つけてから止め始めるまでの時間 秒", 0.1, 2.0, 0.5, 0.1)
++        decel = st.slider("ブレーキの強さ（減速度）m/秒²", 0.1, 2.0, 0.5, 0.1)
++        k_person = st.select_slider("人が近づく速さ", options=[0.5, 1.0, 1.6, 2.0], value=1.6,
++                                    format_func=lambda x: {0.5: "0.5 m/秒（車椅子・ゆっくり）", 1.0: "1.0 m/秒（ふつうに歩く）",
++                                                           1.6: "1.6 m/秒（規格の標準値）", 2.0: "2.0 m/秒（小走り）"}[x])
++        margin = st.slider("余裕（センサーのばらつき等）m", 0.0, 1.0, 0.3, 0.05)
++
++    d_stop = stop_distance(v, t_detect, decel)
++    t_stop = t_detect + v / decel
++    s_safe = safety_distance(k_person, t_stop, margin) + d_stop
++    slow_r = s_safe * 2  # 減速ゾーン：停止ゾーンの2倍を目安
++
++    with b:
++        m1, m2, m3 = st.columns(3)
++        m1.metric("止まるまでの距離", f"{d_stop:.2f} m")
++        m2.metric("止まるまでの時間", f"{t_stop:.1f} 秒")
++        m3.metric("停止ゾーンの半径", f"{s_safe:.2f} m")
++        st.latex(r"d = v\,t + \frac{v^2}{2a},\qquad S = K\,T + C + d")
++        st.caption("d：ロボットが止まるまでに進む距離、S：人がこれより近づいたら止める距離。"
++                   "人もロボットも動いているので、両方が近づく分を足しています（簡易モデル）。")
++
++    # ── ② 可視化する ─────────────────────────
++    st.markdown("#### ② 可視化する：減速ゾーンと停止ゾーン")
++    a2, b2 = st.columns([1, 2])
++    with a2:
++        dist = st.slider("人とロボットの距離 m", 0.0, 6.0, 2.5, 0.1)
++        if dist <= s_safe:
++            state, color = "停止", "#c0392b"
++            st.error(f"停止ゾーンの中です（{s_safe:.2f} m 以内）。ロボットは止まります。")
++        elif dist <= slow_r:
++            state, color = "減速", "#c98a2b"
++            st.warning(f"減速ゾーンです（{slow_r:.2f} m 以内）。速度を落として走ります。")
++        else:
++            state, color = "通常", "#6a9a4a"
++            st.success("ゾーンの外です。通常の速さで巡回します。")
++    with b2:
++        th = np.linspace(0, 2 * np.pi, 120)
++        fig = go.Figure()
++        for r, name, fill in [(slow_r, "減速ゾーン", "rgba(201,138,43,.18)"),
++                              (s_safe, "停止ゾーン", "rgba(192,57,43,.25)")]:
++            fig.add_trace(go.Scatter(x=r * np.cos(th), y=r * np.sin(th), fill="toself", fillcolor=fill,
++                                     line=dict(color=fill.replace(".18", "1").replace(".25", "1"), width=1),
++                                     name=f"{name}（半径 {r:.2f} m）", hoverinfo="name"))
++        fig.add_trace(go.Scatter(x=[0], y=[0], mode="markers+text", text=["ロボット"], textposition="bottom center",
++                                 marker=dict(size=16, symbol="square", color="#3b2f1e"), showlegend=False))
++        fig.add_trace(go.Scatter(x=[dist], y=[0], mode="markers+text", text=[f"人（{state}）"],
++                                 textposition="top center", marker=dict(size=14, color=color), showlegend=False))
++        lim = max(slow_r, dist) + 0.5
++        fig.update_xaxes(range=[-lim, lim], title="m", zeroline=False)
++        fig.update_yaxes(range=[-lim, lim], scaleanchor="x", scaleratio=1, zeroline=False)
++        fig.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", y=1.08))
++        st.plotly_chart(fig, width="stretch")
++
++    st.markdown("**速さを変えると、停止ゾーンはどう広がるか**")
++    vs = np.linspace(0.05, 1.0, 40)
++    zone = [safety_distance(k_person, t_detect + x / decel, margin) + stop_distance(x, t_detect, decel) for x in vs]
++    fig2 = go.Figure(go.Scatter(x=vs, y=zone, line=dict(color="#8a4b12", width=3), name="停止ゾーンの半径"))
++    fig2.add_vline(x=v, line_dash="dot", line_color="#555", annotation_text="いまの設定")
++    fig2.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10),
++                       xaxis_title="ロボットの速さ m/秒", yaxis_title="停止ゾーンの半径 m")
++    st.plotly_chart(fig2, width="stretch")
++    st.caption("速さを半分にすると、ブレーキで進む距離は4分の1になります（速さの2乗に比例）。"
++               "人がいる時間帯に速度の上限を下げるのは、このためです。")
++
++    # ── ③ 自分の条件で判断する ─────────────────
++    st.markdown("#### ③ 自分の条件で判断する：リスクアセスメント → 動かしてよいか")
++    st.write("危険のシナリオごとに「どれくらいひどいけがか」「どれくらい近づくか」「起こりやすさ」を選ぶと、"
++             "点数を足してリスクの大きさを出します（加算法）。対策は**設計で減らす → 守り方・知らせ方**の順に考えます。")
++
++    if "rs_risks" not in st.session_state:
++        st.session_state.rs_risks = DEFAULT_RISKS.copy()
++    edited = st.data_editor(
++        st.session_state.rs_risks, num_rows="dynamic", hide_index=True, width="stretch", key="rs_editor",
++        column_config={
++            "重篤度": st.column_config.SelectboxColumn(options=list(SEVERITY), required=True),
++            "頻度": st.column_config.SelectboxColumn(options=list(FREQUENCY), required=True),
++            "可能性": st.column_config.SelectboxColumn(options=list(LIKELIHOOD), required=True),
++        },
++    )
++    scored = edited.dropna(subset=["危険のシナリオ"]).copy()
++    scored["点数"] = (scored["重篤度"].map(SEVERITY).fillna(0) + scored["頻度"].map(FREQUENCY).fillna(0)
++                    + scored["可能性"].map(LIKELIHOOD).fillna(0)).astype(int)
++    scored["リスク"] = scored["点数"].map(risk_level)
++    st.dataframe(scored[["危険のシナリオ", "点数", "リスク"]].sort_values("点数", ascending=False),
++                 hide_index=True, width="stretch")
++    worst = int(scored["点数"].max()) if not scored.empty else 0
++
++    st.markdown("**運転前チェック**（毎回）")
++    cols = st.columns(2)
++    ok = [cols[i % 2].checkbox(c, key=f"rs_chk_{i}") for i, c in enumerate(CHECKS)]
++
++    if not all(ok):
++        st.error(f"まだ動かしません：運転前チェックが {sum(ok)} / {len(CHECKS)} です。")
++    elif worst >= 9:
++        st.error(f"まだ動かしません：リスクⅢ以上（最大 {worst} 点）のシナリオがあります。先に対策を入れて点数を下げてください。")
++    elif worst >= 6:
++        st.warning(f"見守りつきで動かせます：リスクⅡ（最大 {worst} 点）が残っています。人がいる時間帯は速度の上限を下げてください。")
++    else:
++        st.success("動かしてよい状態です。記録を活動ログに残してください。")
++    st.caption("※ 点数表は、職場のリスクアセスメントで広く使われる加算法の一例です。数値は説明用で、"
++               "実機の安全設計はメーカーの仕様と法令・規格に従ってください。")
+-- 
+2.43.0
+
