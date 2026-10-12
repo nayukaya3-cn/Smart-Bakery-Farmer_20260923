@@ -1,0 +1,1022 @@
+From fc1d1bad1ef3cdd6293854206a6ab25382613185 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 9 Oct 2026 07:26:03 +0900
+Subject: [PATCH] =?UTF-8?q?=E3=82=BB=E3=82=AD=E3=83=A5=E3=83=AA=E3=83=86?=
+ =?UTF-8?q?=E3=82=A3=E5=BC=B7=E5=8C=96=EF=BC=9A=E5=85=A5=E5=8A=9B=E6=A4=9C?=
+ =?UTF-8?q?=E6=9F=BB=E3=83=BBAI=E5=88=A9=E7=94=A8=E4=B8=8A=E9=99=90?=
+ =?UTF-8?q?=E3=83=BBCSV=E7=84=A1=E5=AE=B3=E5=8C=96=E3=83=BB=E3=83=AD?=
+ =?UTF-8?q?=E3=82=B0=E3=81=A8=E3=82=A2=E3=83=A9=E3=83=BC=E3=83=A0=E3=83=BB?=
+ =?UTF-8?q?=E5=AE=9A=E6=9C=9F=E3=82=B9=E3=82=AD=E3=83=A3=E3=83=B3?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- security_guard.py: JSONセキュリティログ、バースト検知、Webhook通知、アップロード検査、safe_csv、AI呼び出し上限
+- soil_vision.py: 解凍爆弾と偽装画像の拒否、AI出力の検証、モデル名を環境変数化
+- app.py / pages: CSV読込・書出しを安全化、エラー詳細を非表示、AI結果をプレーン表示
+- pages/9: 管理者専用セキュリティログ（ADMIN_TOKEN、5回失敗でロック）
+- .streamlit/config.toml: アップロード上限60MB、showErrorDetails=none、XSRF有効
+- .github: 脆弱性スキャン（pip-audit/bandit/gitleaks）、6時間ごとの見張り番、Dependabot
+- SECURITY.md: 初回設定とインシデント対応手順
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ni4jjAM74k8YoUtfbcDqSV
+---
+ .github/dependabot.yml                        |  18 ++
+ .github/workflows/security-scan.yml           |  87 ++++++
+ .github/workflows/watchdog.yml                |  96 +++++++
+ .gitignore                                    |   5 +
+ .streamlit/config.toml                        |  12 +
+ README.md                                     |   5 +
+ SECURITY.md                                   |  67 +++++
+ app.py                                        |  34 ++-
+ media_gallery.py                              |   5 +-
+ ...13\343\202\213\346\216\242\347\251\266.py" |  17 +-
+ ...46\345\256\266\350\250\210\347\260\277.py" |   9 +-
+ ...06\343\202\243\343\203\255\343\202\260.py" |  63 +++++
+ requirements.txt                              |  15 +-
+ security_guard.py                             | 252 ++++++++++++++++++
+ soil_vision.py                                |  29 +-
+ 15 files changed, 685 insertions(+), 29 deletions(-)
+ create mode 100644 .github/dependabot.yml
+ create mode 100644 .github/workflows/security-scan.yml
+ create mode 100644 .github/workflows/watchdog.yml
+ create mode 100644 .streamlit/config.toml
+ create mode 100644 SECURITY.md
+ create mode 100644 "pages/9_\360\237\224\222_\343\202\273\343\202\255\343\203\245\343\203\252\343\203\206\343\202\243\343\203\255\343\202\260.py"
+ create mode 100644 security_guard.py
+
+diff --git a/.github/dependabot.yml b/.github/dependabot.yml
+new file mode 100644
+index 0000000..c4dfa03
+--- /dev/null
++++ b/.github/dependabot.yml
+@@ -0,0 +1,18 @@
++# 依存ライブラリと GitHub Actions の更新を毎週PRで提案（セキュリティ修正を取り込む）
++version: 2
++updates:
++  - package-ecosystem: pip
++    directory: "/"
++    schedule:
++      interval: weekly
++      day: monday
++      time: "08:00"
++      timezone: Asia/Tokyo
++    open-pull-requests-limit: 5
++  - package-ecosystem: github-actions
++    directory: "/"
++    schedule:
++      interval: weekly
++      day: monday
++      time: "08:00"
++      timezone: Asia/Tokyo
+diff --git a/.github/workflows/security-scan.yml b/.github/workflows/security-scan.yml
+new file mode 100644
+index 0000000..6232d8f
+--- /dev/null
++++ b/.github/workflows/security-scan.yml
+@@ -0,0 +1,87 @@
++# 脆弱性スキャン：push・PRのたび＋毎週月曜（日本時間 8:52）
++# 失敗したら Issue を自動で作成（GitHub からメール通知が届く）。レポートは90日間保存。
++name: security-scan
++
++on:
++  push:
++    branches: [main, master]
++  pull_request:
++  schedule:
++    - cron: "52 23 * * 0"
++  workflow_dispatch:
++
++permissions:
++  contents: read
++  issues: write
++
++jobs:
++  scan:
++    runs-on: ubuntu-latest
++    timeout-minutes: 20
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          fetch-depth: 0          # 過去のコミットも秘密情報スキャンの対象にする
++
++      - uses: actions/setup-python@v5
++        with:
++          python-version: "3.12"
++
++      - name: 依存ライブラリの既知の脆弱性（pip-audit）
++        id: audit
++        continue-on-error: true
++        run: |
++          pip install -q pip-audit
++          pip-audit -r requirements.txt --desc -f markdown -o pip-audit.md
++          cat pip-audit.md >> "$GITHUB_STEP_SUMMARY"
++
++      - name: コードの危険なパターン（bandit）
++        id: bandit
++        continue-on-error: true
++        run: |
++          pip install -q bandit
++          bandit -r . -x ./.git,./.venv -ll -f txt -o bandit.txt
++          tail -20 bandit.txt >> "$GITHUB_STEP_SUMMARY"
++
++      - name: 秘密情報の混入（gitleaks・全履歴）
++        id: gitleaks
++        continue-on-error: true
++        run: |
++          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar xz gitleaks
++          ./gitleaks git --redact -v --report-format json --report-path gitleaks.json .
++
++      - name: レポートを保存（ログ記録）
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: security-report-${{ github.run_id }}
++          path: |
++            pip-audit.md
++            bandit.txt
++            gitleaks.json
++          retention-days: 90
++          if-no-files-found: ignore
++
++      - name: 結果の判定とアラーム（Issue作成）
++        if: always()
++        env:
++          GH_TOKEN: ${{ github.token }}
++          AUDIT: ${{ steps.audit.outcome }}
++          BANDIT: ${{ steps.bandit.outcome }}
++          LEAKS: ${{ steps.gitleaks.outcome }}
++          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
++        run: |
++          problems=""
++          [ "$AUDIT"  = "failure" ] && problems="$problems- 依存ライブラリに既知の脆弱性（pip-audit）\n"
++          [ "$BANDIT" = "failure" ] && problems="$problems- コードに中〜高リスクのパターン（bandit）\n"
++          [ "$LEAKS"  = "failure" ] && problems="$problems- **秘密情報（APIキー等）の混入の疑い（gitleaks）→ すぐにキーを無効化**\n"
++          if [ -z "$problems" ]; then echo "✅ 問題なし" >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
++          echo -e "## ⚠️ 検出\n$problems" >> "$GITHUB_STEP_SUMMARY"
++          if [ "${{ github.event_name }}" != "pull_request" ]; then
++            title="[security] 脆弱性スキャンで問題を検出"
++            body=$(printf "%b\n詳細: %s\n\n対応手順は SECURITY.md の「インシデント対応手順」を参照。" "$problems" "$RUN_URL")
++            gh label create security --color D93F0B --force >/dev/null 2>&1 || true
++            num=$(gh issue list --label security --state open --search "$title in:title" --json number -q '.[0].number')
++            if [ -n "$num" ]; then gh issue comment "$num" --body "$body"; else gh issue create --title "$title" --label security --body "$body"; fi
++          fi
++          exit 1
+diff --git a/.github/workflows/watchdog.yml b/.github/workflows/watchdog.yml
+new file mode 100644
+index 0000000..148b41c
+--- /dev/null
++++ b/.github/workflows/watchdog.yml
+@@ -0,0 +1,96 @@
++# 見張り番：6時間ごとに ①アプリの死活 ②リポジトリへの不審な変更 を確認し、異常なら Issue でアラーム。
++name: watchdog
++
++on:
++  schedule:
++    - cron: "17 */6 * * *"
++  workflow_dispatch:
++
++permissions:
++  contents: read
++  issues: write
++
++env:
++  APP_URL: https://smart-bakery-farm.streamlit.app/
++  # 変更されたら必ず人が確認すべきファイル（改ざんされると防御が外れるもの）
++  WATCHED: ".github/ .streamlit/config.toml security_guard.py requirements.txt"
++  # 自動で入ってよい作成者（これ以外＋リポジトリ所有者以外のコミットは警告）
++  ALLOWED_BOTS: "dependabot[bot] github-actions[bot]"
++
++jobs:
++  watch:
++    runs-on: ubuntu-latest
++    timeout-minutes: 10
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          fetch-depth: 50
++
++      - name: 点検
++        id: check
++        env:
++          GH_TOKEN: ${{ github.token }}
++          OWNER: ${{ github.repository_owner }}
++        run: |
++          : > findings.md
++          ts=$(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST')
++          echo "点検時刻: $ts" > watchdog.log
++
++          # ① 死活監視（Streamlit のスリープ画面も 200 を返すため、5xx・接続失敗のみ異常とする）
++          code=$(curl -s -o /dev/null -w '%{http_code}' -L --max-time 30 "$APP_URL" || echo 000)
++          echo "app_http_status=$code" >> watchdog.log
++          if [ "$code" = "000" ] || [ "$code" -ge 500 ]; then
++            echo "- 🔴 アプリに接続できません（HTTP $code）: $APP_URL" >> findings.md
++          fi
++
++          # ② 直近6時間のコミットを点検
++          since=$(date -u -d '-6 hours' +%Y-%m-%dT%H:%M:%SZ)
++          gh api "repos/${{ github.repository }}/commits?since=$since&per_page=100" \
++            --jq '.[] | [.sha[0:7], (.author.login // "unknown"), .commit.author.email, .commit.message | split("\n")[0]] | @tsv' > commits.tsv || true
++          echo "commits_since_$since=$(wc -l < commits.tsv)" >> watchdog.log
++          while IFS=$'\t' read -r sha login email msg; do
++            [ -z "$sha" ] && continue
++            echo "commit $sha by $login: $msg" >> watchdog.log
++            if [ "$login" != "$OWNER" ] && ! echo " $ALLOWED_BOTS " | grep -q " $login "; then
++              echo "- 🔴 所有者以外のコミット: \`$sha\` by **$login** ($email) — $msg" >> findings.md
++            fi
++            changed=$(git show --name-only --format= "$sha" 2>/dev/null || true)
++            for w in $WATCHED; do
++              if echo "$changed" | grep -q "^$w"; then
++                echo "- 🟠 防御設定の変更: \`$sha\` が \`$w\` を変更 — 自分の変更か確認してください" >> findings.md
++              fi
++            done
++          done < commits.tsv
++
++          cat watchdog.log >> "$GITHUB_STEP_SUMMARY"
++          if [ -s findings.md ]; then
++            sort -u findings.md -o findings.md
++            echo "alert=true" >> "$GITHUB_OUTPUT"
++            cat findings.md >> "$GITHUB_STEP_SUMMARY"
++          fi
++
++      - name: ログを保存
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: watchdog-${{ github.run_id }}
++          path: |
++            watchdog.log
++            findings.md
++          retention-days: 90
++          if-no-files-found: ignore
++
++      - name: アラーム（Issue作成）
++        if: steps.check.outputs.alert == 'true'
++        env:
++          GH_TOKEN: ${{ github.token }}
++          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
++        run: |
++          title="[incident] 見張り番が異常を検知"
++          body="$(cat findings.md)
++
++          詳細ログ: $RUN_URL
++          対応手順は SECURITY.md の「インシデント対応手順」を参照してください。"
++          gh label create incident --color B60205 --force >/dev/null 2>&1 || true
++          num=$(gh issue list --label incident --state open --search "$title in:title" --json number -q '.[0].number')
++          if [ -n "$num" ]; then gh issue comment "$num" --body "$body"; else gh issue create --title "$title" --label incident --body "$body"; fi
+diff --git a/.gitignore b/.gitignore
+index 963c0bd..363ba03 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -3,3 +3,8 @@
+ __pycache__/
+ .DS_Store
+ *.pdf
++
++# 秘密情報は絶対にコミットしない
++.streamlit/secrets.toml
++.env
++*.key
+diff --git a/.streamlit/config.toml b/.streamlit/config.toml
+new file mode 100644
+index 0000000..abe64c5
+--- /dev/null
++++ b/.streamlit/config.toml
+@@ -0,0 +1,12 @@
++# セキュリティ設定（公開アプリ用）
++[server]
++maxUploadSize = 60            # MB。既定の200MBから縮小（大容量ファイルでのサーバー圧迫を防ぐ）
++enableXsrfProtection = true   # クロスサイトリクエストフォージェリ対策（既定値を明示）
++enableCORS = true
++
++[client]
++showErrorDetails = "none"     # 画面にはエラーの詳細を出さない（内部情報の漏えい防止）。詳細はログへ
++toolbarMode = "viewer"        # 閲覧者に開発者メニューを見せない
++
++[browser]
++gatherUsageStats = false
+diff --git a/README.md b/README.md
+index 85782c7..75144b7 100644
+--- a/README.md
++++ b/README.md
+@@ -66,3 +66,8 @@ conda create が "Solving environment" のまま長時間止まる場合は、An
+ - 初期表示は**架空の記入例**です（実施実績ではありません）。サイドバーの「空の記録から始める」で切り替え。
+ - 記録はサーバーに残りません。CSVで保存し、次回CSVを読み込んで復元します。
+ - 指導者の資格は `INSTRUCTORS`、更新日は `UPDATED` を書きかえて更新します。
++
++## セキュリティ
++アップロード検査・生成AIの利用上限・CSVの数式インジェクション対策・セキュリティログ（🔒ページ）・
++脆弱性スキャンと見張り番（GitHub Actions → Issue で通知）を入れています。
++初回設定とインシデント対応手順は [SECURITY.md](SECURITY.md) を参照してください。
+diff --git a/SECURITY.md b/SECURITY.md
+new file mode 100644
+index 0000000..b96130f
+--- /dev/null
++++ b/SECURITY.md
+@@ -0,0 +1,67 @@
++# セキュリティ方針とインシデント対応手順
++
++このアプリ（https://smart-bakery-farm.streamlit.app/）は、**① 記録する → ② 検知して知らせる → ③ 人が判断して対応する** の3段構えで守ります。
++
++## 1. 守りのしくみ
++
++| 層 | しくみ | 場所 | 記録（ログ） | アラーム |
++|---|---|---|---|---|
++| アプリ内 | アップロードの大きさ・行数・画像形式の検査、解凍爆弾の防止 | `security_guard.py` / `soil_vision.py` | JSON 1行ログ（Manage app → Logs） | 警告以上を Webhook |
++| アプリ内 | 生成AIの呼び出し上限（1訪問3回・1日40回） | `security_guard.py` | `ai_call` / `ai_rate_limited` / `ai_daily_cap_reached` | 上限到達は CRITICAL |
++| アプリ内 | CSVの数式インジェクション対策（`=` `+` `-` `@` で始まるセルを無害化） | `security_guard.safe_csv` | ― | ― |
++| アプリ内 | 警告が10分に10件以上 → 攻撃の疑い | `security_guard.log_event` | `burst_detected` | CRITICAL を Webhook |
++| アプリ設定 | アップロード上限60MB、エラー詳細を画面に出さない、XSRF対策 | `.streamlit/config.toml` | ― | ― |
++| リポジトリ | 依存の脆弱性・危険なコード・秘密情報の混入を検査 | `.github/workflows/security-scan.yml` | Actions のレポート（90日保存） | Issue `[security]` → メール |
++| リポジトリ | 6時間ごとに死活監視と、所有者以外のコミット・防御設定の変更を検知 | `.github/workflows/watchdog.yml` | Actions のログ（90日保存） | Issue `[incident]` → メール |
++| リポジトリ | 依存ライブラリの更新を毎週PRで提案 | `.github/dependabot.yml` | PR履歴 | ― |
++
++ログには **IPアドレス・氏名・ファイルの中身を残しません**。セッションは匿名IDで区別します。
++
++## 2. 初回設定（所有者が1回だけ行う）
++
++1. **GitHub アカウントの二段階認証（2FA）を有効にする**（Settings → Password and authentication）。乗っ取りが最大のリスクです。
++2. リポジトリの Settings → Code security で、次を有効にする。
++   - Dependabot alerts / Dependabot security updates
++   - Secret scanning / Push protection（APIキーを誤ってpushしようとすると止めてくれる）
++3. Settings → Branches で `main` にルールを追加（force push と削除を禁止）。
++4. Streamlit Community Cloud の アプリ → Settings → Secrets に登録（任意）。
++
++```toml
++ANTHROPIC_API_KEY = "sk-ant-..."          # 生成AIを使う場合のみ
++SECURITY_WEBHOOK_URL = "https://hooks.slack.com/services/..."  # Slack / Discord の Webhook（任意）
++ADMIN_TOKEN = "16文字以上のランダムな文字列"  # 🔒セキュリティログページ用
++```
++
++   `ADMIN_TOKEN` は `python -c "import secrets; print(secrets.token_urlsafe(24))"` で作れます。
++5. Anthropic Console で、APIキーに**月額の利用上限**を設定する（アプリ側の上限と二重の守り）。
++
++## 3. ログの見方
++
++| event | 重大度 | 意味 |
++|---|---|---|
++| `upload_accepted` | INFO | ファイルを受け付けた |
++| `upload_rejected` | WARNING | 大きすぎる・行数が多すぎる |
++| `image_rejected` | WARNING | 壊れた画像、偽装ファイル、解凍爆弾の疑い |
++| `csv_parse_failed` / `csv_schema_mismatch` | WARNING | CSVの形式が違う |
++| `ai_call` | INFO | 生成AIを呼んだ（その日の累計つき） |
++| `ai_rate_limited` | WARNING | 1訪問の上限に達した |
++| `ai_daily_cap_reached` | CRITICAL | 1日の上限に達した（不正利用の疑い） |
++| `ai_call_failed` | WARNING | AI呼び出しの失敗 |
++| `admin_login_failed` | WARNING | 管理者トークンの誤り |
++| `burst_detected` | CRITICAL | 警告が短時間に集中（攻撃の疑い） |
++
++## 4. インシデント対応手順
++
++| 状況 | すぐにやること（〜1時間） | その後 |
++|---|---|---|
++| **APIキー漏えいの疑い**（gitleaks 検出、`ai_daily_cap_reached` の連続） | ① Anthropic Console でキーを無効化 ② Streamlit Secrets から削除 | 新しいキーを発行。履歴にキーが残っていれば履歴を書き換えるより**無効化を優先** |
++| **所有者以外のコミット／防御設定の変更**（`[incident]`） | ① GitHub のパスワード変更・2FA確認・セッション全ログアウト ② 該当コミットを確認し、不正なら revert | Settings → Security log で不審な操作を確認。Deploy keys・Personal access tokens を見直す |
++| **アプリに接続できない** | Streamlit Cloud の Manage app → Logs でエラーを確認 | 依存更新が原因なら直前の Dependabot PR を revert |
++| **依存の脆弱性**（`[security]`） | 修正版が出ていれば Dependabot PR をマージ | 修正版がなければ、その機能を一時的に止める |
++| **`burst_detected`** | 🔒セキュリティログで内容を確認。必要ならアプリを一時停止（Manage app → Reboot/Delete） | 上限値（`security_guard.py` 冒頭）を厳しくする |
++
++対応したら、Issue に「何が起きたか／何をしたか／再発防止」を3行で書いて閉じます（これが記録になります）。
++
++## 5. 脆弱性の報告
++
++このアプリの脆弱性に気づいた方は、公開の Issue ではなく、Facebook のメッセージで知らせてください。
+diff --git a/app.py b/app.py
+index 0d7a305..cd7ec85 100644
+--- a/app.py
++++ b/app.py
+@@ -16,6 +16,7 @@ import plotly.graph_objects as go
+ import streamlit as st
+ 
+ import media_gallery as mg
++import security_guard as sg
+ import soil_vision as sv
+ 
+ # ─────────────────────────────────────────────
+@@ -289,10 +290,17 @@ with T["📡 圃場モニター"]:
+         moist = np.clip(32 - np.cumsum(rng.normal(0.02, 0.05, len(t))) % 12, 15, 40)
+         return pd.DataFrame({"timestamp": t, "air_temp": air, "soil_temp": soil, "soil_moisture": moist})
+ 
++    sdf = None
+     if up is not None:
+-        sdf = pd.read_csv(up, parse_dates=["timestamp"])
+-        st.success(f"{len(sdf)} 行の実データを読み込みました。")
+-    else:
++        sdf = sg.read_csv_safely(up, page="field_monitor", kind="sensor_csv", parse_dates=["timestamp"])
++        need = {"timestamp", "air_temp", "soil_temp", "soil_moisture"}
++        if sdf is not None and not need.issubset(sdf.columns):
++            sg.log_event("csv_schema_mismatch", "WARNING", page="field_monitor")
++            st.error("列名が違います。timestamp, air_temp, soil_temp, soil_moisture の4列が必要です。")
++            sdf = None
++        if sdf is not None:
++            st.success(f"{len(sdf)} 行の実データを読み込みました。")
++    if sdf is None:
+         sdf = demo_sensor()
+         st.caption("※ 現在はデモデータを表示中です。")
+ 
+@@ -556,7 +564,7 @@ with T["📝 活動ログ"]:
+         log = log[log["カテゴリ"].isin(cat_filter)]
+     for _, r in log.iterrows():
+         st.markdown(f"**{r['日付']:%Y/%m/%d}**　`{r['カテゴリ']}`　{r['内容']}")
+-    st.download_button("CSVでダウンロード", log.to_csv(index=False).encode("utf-8-sig"),
++    st.download_button("CSVでダウンロード", sg.safe_csv(log),
+                        "activity_log.csv", "text/csv")
+ 
+ # ═════════════════════════════════════════════
+@@ -603,6 +611,8 @@ with T["🔬 AI土壌診断"]:
+     img_src = None
+     if src_mode == "アップロード":
+         img_src = st.file_uploader("畑の写真（できるだけ真上から）", type=["jpg", "jpeg", "png"], key="soil_up")
++        if img_src is not None and not sg.check_upload(img_src, sg.MAX_IMAGE_BYTES, "soil", "image"):
++            img_src = None
+     elif all_photos:
+         img_src = st.selectbox("写真を選択", all_photos,
+                                format_func=lambda p: f"{p.parent.name} / {p.name}")
+@@ -610,7 +620,12 @@ with T["🔬 AI土壌診断"]:
+     if img_src is None:
+         st.info("写真を選ぶかアップロードしてください。")
+     else:
+-        rgb = sv.load_image(img_src)
++        try:
++            rgb = sv.load_image(img_src)
++        except Exception as e:  # noqa: BLE001  解凍爆弾・壊れた画像・偽装ファイル
++            sg.log_event("image_rejected", "WARNING", page="soil", error=type(e).__name__)
++            st.error("この画像は読み込めませんでした（形式・大きさを確認してください）。")
++            st.stop()
+         with st.expander("✂️ 解析範囲を畑の部分だけに絞る（壁・空・通路を除く）"):
+             cr1, cr2 = st.columns(2)
+             top, bottom = cr1.slider("上下の範囲 %", 0, 100, (0, 100), key="crop_v")
+@@ -672,7 +687,7 @@ with T["🔬 AI土壌診断"]:
+         t2.success("**本格的な土壌分析に回す区画**：" + "・".join(pts))
+         t2.caption("裸地・最も緑が薄い区画・比較対照として最も濃い区画を選んでいます。"
+                    "画像で当たりをつけ、その場所だけ土壌分析へ（ハイブリッド方式）。")
+-        t2.download_button("処方箋をCSVで保存", rx.to_csv(index=False).encode("utf-8-sig"),
++        t2.download_button("処方箋をCSVで保存", sg.safe_csv(rx),
+                            "prescription.csv", "text/csv")
+ 
+         st.divider()
+@@ -680,7 +695,7 @@ with T["🔬 AI土壌診断"]:
+         w1, w2 = st.columns([2, 3])
+         with w1:
+             if sv.ai_available():
+-                if st.button("🤖 生成AIに雑草の候補を提案させる"):
++                if st.button("🤖 生成AIに雑草の候補を提案させる") and sg.ai_quota_ok("soil"):
+                     with st.spinner("解析中…"):
+                         try:
+                             res = sv.ai_suggest_weeds(rgb)
+@@ -689,10 +704,11 @@ with T["🔬 AI土壌診断"]:
+                                                       if c.get("name") in sv.INDICATORS
+                                                       and c.get("confidence", 0) >= 0.5]
+                         except Exception as e:  # noqa: BLE001
+-                            st.error(f"AI解析に失敗しました：{e}")
++                            sg.log_event("ai_call_failed", "WARNING", page="soil", error=type(e).__name__)
++                            st.error("AI解析に失敗しました。時間をおいて試すか、手動で選んでください。")
+                 if "ai_weeds" in st.session_state:
+                     for c in st.session_state.ai_weeds.get("candidates", []):
+-                        st.caption(f"・{c.get('name')}（確信度 {c.get('confidence', 0):.2f}）{c.get('reason', '')}")
++                        st.text(f"・{c.get('name')}（確信度 {c.get('confidence', 0):.2f}）{c.get('reason', '')}")
+             else:
+                 st.caption("※ `ANTHROPIC_API_KEY` を設定すると、生成AIが写真から雑草の候補を提案します"
+                            "（最終判断は人が行う半自動方式）。未設定のため手動で選んでください。")
+diff --git a/media_gallery.py b/media_gallery.py
+index cc048db..efdf678 100644
+--- a/media_gallery.py
++++ b/media_gallery.py
+@@ -21,6 +21,8 @@ from pathlib import Path
+ 
+ import streamlit as st
+ 
++import security_guard as sg
++
+ IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+ VIDEO_EXT = {".mov", ".mp4", ".m4v", ".webm"}
+ PDF_EXT = {".pdf"}
+@@ -102,7 +104,7 @@ def show_file(name: str, data: bytes, key: str, repo_path: str | None = None) ->
+     if ext in IMAGE_EXT:
+         st.image(data, caption=cap, width="stretch")
+     elif ext in VIDEO_EXT:
+-        st.markdown(f"🎬 **{cap}**")
++        st.markdown("🎬 **" + re.sub(r"([\\`*_{}\[\]()#+\-.!<>|~])", r"\\\1", cap) + "**")
+         st.video(io.BytesIO(data), format=VIDEO_MIME.get(ext, "video/mp4"))
+         if ext == ".mov":
+             st.caption("※ .mov が再生できないブラウザでは、下のボタンから保存して再生してください。")
+@@ -197,6 +199,7 @@ def media_section(folder: Path, key: str, title: str = "📂 記録・資料",
+             type=sorted(e.lstrip(".") for e in ALL_EXT),
+             accept_multiple_files=True, key=f"{key}_up",
+         )
++        ups = [u for u in (ups or []) if sg.check_upload(u, sg.MAX_IMAGE_BYTES * 4, "gallery", Path(u.name).suffix.lower())]
+         if ups:
+             _grid([(u.name, u.getvalue()) for u in ups], key=f"{key}_up")
+             st.info("ここで取り込んだファイルは、ページを閉じると消えます。公開ページに残すには、"
+diff --git "a/pages/1_\360\237\223\213_\345\255\246\346\240\241\345\220\221\343\201\221_\350\250\230\351\214\262\343\201\213\343\202\231\346\256\213\343\202\213\346\216\242\347\251\266.py" "b/pages/1_\360\237\223\213_\345\255\246\346\240\241\345\220\221\343\201\221_\350\250\230\351\214\262\343\201\213\343\202\231\346\256\213\343\202\213\346\216\242\347\251\266.py"
+index 27d9471..dfe8966 100644
+--- "a/pages/1_\360\237\223\213_\345\255\246\346\240\241\345\220\221\343\201\221_\350\250\230\351\214\262\343\201\213\343\202\231\346\256\213\343\202\213\346\216\242\347\251\266.py"
++++ "b/pages/1_\360\237\223\213_\345\255\246\346\240\241\345\220\221\343\201\221_\350\250\230\351\214\262\343\201\213\343\202\231\346\256\213\343\202\213\346\216\242\347\251\266.py"
+@@ -12,7 +12,6 @@
+   生徒の氏名は扱わず、学校が付けた匿名ID（例：S01）で記録します。
+ """
+ import datetime as dt
+-import io
+ 
+ import pandas as pd
+ import plotly.express as px
+@@ -20,6 +19,8 @@ import plotly.graph_objects as go
+ import streamlit as st
+ import streamlit.components.v1 as components
+ 
++import security_guard as sg
++
+ st.set_page_config(page_title="学校向け：記録が残る探究", page_icon="📋", layout="wide")
+ 
+ FACEBOOK_URL = "https://www.facebook.com/profile.php?id=100079624235158"
+@@ -169,11 +170,15 @@ with st.sidebar:
+     st.caption("終わったら必ずCSVで保存してください（公開ページには残りません）。")
+     up_log = st.file_uploader("活動ログのCSVを読み込む", type="csv", key="up_edu_log")
+     if up_log is not None:
+-        st.session_state.edu_log = normalize_log(pd.read_csv(io.BytesIO(up_log.getvalue())))
++        _df = sg.read_csv_safely(up_log, page="school", kind="activity_log")
++        if _df is not None:
++            st.session_state.edu_log = normalize_log(_df)
+         st.session_state.edu_is_sample = False
+     up_sc = st.file_uploader("ルーブリック評価のCSVを読み込む", type="csv", key="up_edu_sc")
+     if up_sc is not None:
+-        st.session_state.edu_scores = normalize_scores(pd.read_csv(io.BytesIO(up_sc.getvalue())))
++        _df = sg.read_csv_safely(up_sc, page="school", kind="rubric_scores")
++        if _df is not None:
++            st.session_state.edu_scores = normalize_scores(_df)
+         st.session_state.edu_is_sample = False
+     st.divider()
+     if st.button("記入例（架空）に戻す"):
+@@ -406,7 +411,7 @@ with tab_rub:
+     rub_df = pd.DataFrame(RUBRIC, index=[f"レベル{n}" for n in LEVELS]).T
+     rub_df.index.name = "観点"
+     st.dataframe(rub_df, width="stretch")
+-    st.download_button("ルーブリック表をCSVで保存", rub_df.to_csv().encode("utf-8-sig"),
++    st.download_button("ルーブリック表をCSVで保存", sg.safe_csv(rub_df, index=True),
+                        "探究ルーブリック.csv", "text/csv")
+ 
+     st.subheader("評価を入力する")
+@@ -422,7 +427,7 @@ with tab_rub:
+         },
+         key="ed_scores",
+     )
+-    st.download_button("ルーブリック評価をCSVで保存", scores.to_csv(index=False).encode("utf-8-sig"),
++    st.download_button("ルーブリック評価をCSVで保存", sg.safe_csv(scores),
+                        "ルーブリック評価.csv", "text/csv")
+ 
+ # ═════════════════════════════════════════════
+@@ -447,7 +452,7 @@ with tab_log:
+         },
+         key="ed_log",
+     )
+-    st.download_button("活動ログをCSVで保存", log.to_csv(index=False).encode("utf-8-sig"),
++    st.download_button("活動ログをCSVで保存", sg.safe_csv(log),
+                        "活動ログ.csv", "text/csv")
+ 
+ # ─────────────────────────────────────────────
+diff --git "a/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py" "b/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py"
+index 7169bb2..f776f20 100644
+--- "a/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py"
++++ "b/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py"
+@@ -6,12 +6,13 @@
+   Streamlit Community Cloud ではサーバー上のファイルが再起動で消えるため、
+   記録は「CSVをダウンロード」で手元に保存し、次回「CSVを読み込む」で復元します。
+ """
+-import io
+ import datetime as dt
+ 
+ import pandas as pd
+ import streamlit as st
+ 
++import security_guard as sg
++
+ st.set_page_config(page_title="自給家計簿", page_icon="🌾", layout="wide")
+ 
+ # ------------------------------------------------------------
+@@ -49,14 +50,16 @@ with st.sidebar:
+     st.caption("終わったら必ずダウンロードしてください。")
+ 
+     for key, label in [("harvest", "収穫"), ("cost", "支出"), ("work", "作業")]:
+-        csv = st.session_state[key].to_csv(index=False).encode("utf-8-sig")
++        csv = sg.safe_csv(st.session_state[key])
+         st.download_button(f"{label}記録をCSVで保存", csv, f"自給家計簿_{label}.csv", "text/csv")
+ 
+     st.divider()
+     for key, label in [("harvest", "収穫"), ("cost", "支出"), ("work", "作業")]:
+         up = st.file_uploader(f"{label}記録のCSVを読み込む", type="csv", key=f"up_{key}")
+         if up is not None:
+-            st.session_state[key] = to_date(pd.read_csv(io.BytesIO(up.getvalue())))
++            _df = sg.read_csv_safely(up, page="kakeibo", kind=key)
++            if _df is not None:
++                st.session_state[key] = to_date(_df)
+ 
+     st.divider()
+     year = st.number_input("集計する年", 2026, 2040, dt.date.today().year)
+diff --git "a/pages/9_\360\237\224\222_\343\202\273\343\202\255\343\203\245\343\203\252\343\203\206\343\202\243\343\203\255\343\202\260.py" "b/pages/9_\360\237\224\222_\343\202\273\343\202\255\343\203\245\343\203\252\343\203\206\343\202\243\343\203\255\343\202\260.py"
+new file mode 100644
+index 0000000..ac76402
+--- /dev/null
++++ "b/pages/9_\360\237\224\222_\343\202\273\343\202\255\343\203\245\343\203\252\343\203\206\343\202\243\343\203\255\343\202\260.py"
+@@ -0,0 +1,63 @@
++"""
++セキュリティログ（管理者専用）─ 記録する → 見せる → 判断する
++
++Streamlit Community Cloud の「Settings → Secrets」に ADMIN_TOKEN（16文字以上のランダムな文字列）を
++登録したときだけ使えます。未登録なら誰も開けません。
++"""
++import pandas as pd
++import plotly.express as px
++import streamlit as st
++
++import security_guard as sg
++
++st.set_page_config(page_title="セキュリティログ", page_icon="🔒", layout="wide")
++st.title("🔒 セキュリティログ（管理者専用）")
++
++fails = st.session_state.get("_admin_fails", 0)
++if fails >= 5:
++    st.error("認証の失敗が続いたため、このセッションではロックしました。ページを開き直してください。")
++    st.stop()
++
++if not st.session_state.get("_admin_ok"):
++    token = st.text_input("管理者トークン", type="password")
++    if not token:
++        st.caption("ADMIN_TOKEN が Secrets に未登録の場合、このページは使えません。")
++        st.stop()
++    if sg.admin_ok(token):
++        st.session_state._admin_ok = True
++        sg.log_event("admin_login", "INFO", page="security_log")
++        st.rerun()
++    st.session_state._admin_fails = fails + 1
++    st.error("トークンが違います。")
++    st.stop()
++
++df = sg.recent_events()
++st.caption("サーバーのメモリにある直近500件です（アプリの再起動で消えます）。"
++           "残したい記録は下のボタンでCSV保存してください。全件は Manage app → Logs でも見られます。")
++if df.empty:
++    st.info("まだ記録はありません。")
++    st.stop()
++
++# ① 計算する
++k = st.columns(4)
++k[0].metric("記録件数", f"{len(df)} 件")
++k[1].metric("警告（WARNING）", f"{(df['severity'] == 'WARNING').sum()} 件")
++k[2].metric("重大（CRITICAL）", f"{(df['severity'] == 'CRITICAL').sum()} 件")
++k[3].metric("AI呼び出し", f"{(df['event'] == 'ai_call').sum()} 回")
++
++# ② 可視化する
++df["時刻"] = pd.to_datetime(df["ts"])
++fig = px.histogram(df, x="時刻", color="severity", nbins=48,
++                   color_discrete_map={"INFO": "#8aa6c1", "WARNING": "#e6a23c", "CRITICAL": "#d9534f"})
++fig.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10))
++st.plotly_chart(fig, width="stretch")
++
++# ③ 判断する
++crit = df[df["severity"] == "CRITICAL"]
++if len(crit):
++    st.error("重大なイベントがあります。SECURITY.md の「インシデント対応手順」に沿って確認してください。")
++    st.dataframe(crit.drop(columns=["時刻"]), width="stretch", hide_index=True)
++
++sev = st.multiselect("表示する重大度", ["INFO", "WARNING", "CRITICAL"], ["WARNING", "CRITICAL"])
++st.dataframe(df[df["severity"].isin(sev)].drop(columns=["時刻"]).iloc[::-1], width="stretch", hide_index=True)
++st.download_button("ログをCSVで保存", sg.safe_csv(df.drop(columns=["時刻"])), "security_log.csv", "text/csv")
+diff --git a/requirements.txt b/requirements.txt
+index 5a5c181..70f6e33 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,7 +1,8 @@
+-streamlit>=1.36
+-pandas>=2.0
+-numpy>=1.24
+-plotly>=5.18
+-pillow>=10
+-pypdfium2>=4.0   # PDFをページ画像にして表示
+-anthropic>=0.40  # 任意：生成AIで雑草候補を提案する場合
++# 下限＋メジャー上限で固定（予期しない大型更新を防ぎ、更新は Dependabot のPRで確認してから入れる）
++streamlit>=1.65,<2
++pandas>=3.0,<4
++numpy>=2.5,<3
++plotly>=7.1,<8
++pillow>=12.3,<13
++pypdfium2>=5.14,<6   # PDFをページ画像にして表示
++anthropic>=1.12,<2   # 任意：生成AIで雑草候補を提案する場合
+diff --git a/security_guard.py b/security_guard.py
+new file mode 100644
+index 0000000..62cde9a
+--- /dev/null
++++ b/security_guard.py
+@@ -0,0 +1,252 @@
++"""
++security_guard.py ─ 公開アプリのセキュリティ対策・ログ記録・アラーム
++
++① 記録する : セキュリティに関わる出来事（アップロード拒否・AI呼び出し・上限到達・例外）を
++              JSON 1行ログとして標準出力へ。Streamlit Community Cloud の「Manage app → Logs」で見られる。
++              直近 500 件はサーバーのメモリにも保持し、管理者ページで表示・CSV保存できる。
++② 検知する : 警告が短時間に集中したら「バースト」として重大度を上げる。
++③ 知らせる : st.secrets / 環境変数 SECURITY_WEBHOOK_URL があれば、警告以上を Webhook
++              （Slack / Discord 互換）へ送る。同じ種類の通知は 10 分に 1 回まで。
++
++方針：
++- 個人情報（IPアドレス・氏名・ファイル内容）はログに残さない。セッションは匿名IDで区別する。
++- サーバーのメモリ上のログは再起動で消える。長く残したい記録は Webhook 先か CSV で保存する。
++"""
++from __future__ import annotations
++
++import collections
++import datetime as dt
++import hmac
++import io
++import json
++import logging
++import os
++import threading
++import time
++import urllib.request
++import uuid
++
++import pandas as pd
++import streamlit as st
++
++JST = dt.timezone(dt.timedelta(hours=9))
++
++# ── しきい値（ここを書きかえれば運用を調整できる） ──
++MAX_CSV_BYTES = 5 * 1024 * 1024       # CSV は 5MB まで
++MAX_CSV_ROWS = 50_000                 # CSV は 5万行まで
++MAX_IMAGE_BYTES = 15 * 1024 * 1024    # 画像は 15MB まで
++AI_CALLS_PER_SESSION = 3              # 生成AI：1セッションあたり
++AI_CALLS_PER_DAY = 40                 # 生成AI：アプリ全体で1日あたり（APIキーの不正利用・課金爆発を防ぐ）
++BURST_WINDOW_SEC = 600                # 10分間に
++BURST_THRESHOLD = 10                  # 警告が10件以上 → バースト（攻撃の疑い）
++ALERT_COOLDOWN_SEC = 600              # 同じ種類の通知は10分に1回
++
++SEVERITY = {"INFO": 20, "WARNING": 30, "CRITICAL": 50}
++
++_logger = logging.getLogger("security")
++if not _logger.handlers:
++    _h = logging.StreamHandler()
++    _h.setFormatter(logging.Formatter("%(message)s"))
++    _logger.addHandler(_h)
++    _logger.setLevel(logging.INFO)
++    _logger.propagate = False
++
++
++# ─────────────────────────────────────────────
++# 共有状態（全セッション共通・プロセス内）
++# ─────────────────────────────────────────────
++@st.cache_resource
++def _shared() -> dict:
++    return {
++        "lock": threading.Lock(),
++        "events": collections.deque(maxlen=500),
++        "warn_times": collections.deque(maxlen=1000),
++        "ai_day": "",
++        "ai_count": 0,
++        "last_alert": {},
++        "last_burst": 0.0,
++    }
++
++
++def _secret(name: str) -> str:
++    try:
++        v = st.secrets.get(name, "")
++    except Exception:  # noqa: BLE001  secrets.toml が無い環境
++        v = ""
++    return str(v or os.environ.get(name, ""))
++
++
++def session_id() -> str:
++    if "_sec_sid" not in st.session_state:
++        st.session_state._sec_sid = uuid.uuid4().hex[:10]
++    return st.session_state._sec_sid
++
++
++# ─────────────────────────────────────────────
++# ① 記録する
++# ─────────────────────────────────────────────
++def log_event(event: str, severity: str = "INFO", page: str = "", **fields) -> None:
++    """セキュリティイベントを1行JSONで記録する。fields に個人情報を入れないこと。"""
++    try:
++        sid = session_id()
++    except Exception:  # noqa: BLE001
++        sid = "-"
++    rec = {
++        "ts": dt.datetime.now(JST).isoformat(timespec="seconds"),
++        "severity": severity,
++        "event": event,
++        "page": page,
++        "session": sid,
++        **{k: (v if isinstance(v, (int, float, bool)) or v is None else str(v)[:200]) for k, v in fields.items()},
++    }
++    _logger.log(SEVERITY.get(severity, 20), json.dumps(rec, ensure_ascii=False))
++    s = _shared()
++    burst = False
++    with s["lock"]:
++        s["events"].append(rec)
++        if SEVERITY.get(severity, 20) >= SEVERITY["WARNING"]:
++            now = time.time()
++            s["warn_times"].append(now)
++            recent = [t for t in s["warn_times"] if now - t <= BURST_WINDOW_SEC]
++            if (len(recent) >= BURST_THRESHOLD and event != "burst_detected"
++                    and now - s["last_burst"] > BURST_WINDOW_SEC):  # 同じ攻撃の波では1回だけ
++                burst, s["last_burst"] = True, now
++    if SEVERITY.get(severity, 20) >= SEVERITY["WARNING"]:
++        _alert(rec)
++    if burst:
++        log_event("burst_detected", "CRITICAL", page=page,
++                  detail=f"{BURST_WINDOW_SEC // 60}分間に警告{BURST_THRESHOLD}件以上")
++
++
++def recent_events() -> pd.DataFrame:
++    s = _shared()
++    with s["lock"]:
++        rows = list(s["events"])
++    return pd.DataFrame(rows)
++
++
++# ─────────────────────────────────────────────
++# ③ 知らせる（Webhook）
++# ─────────────────────────────────────────────
++def _alert(rec: dict) -> None:
++    url = _secret("SECURITY_WEBHOOK_URL")
++    if not url.startswith("https://"):
++        return
++    s = _shared()
++    key = rec["event"]
++    now = time.time()
++    with s["lock"]:
++        if now - s["last_alert"].get(key, 0) < ALERT_COOLDOWN_SEC:
++            return
++        s["last_alert"][key] = now
++    text = (f"[{rec['severity']}] スマートパン屋農家アプリ: {rec['event']}\n"
++            + "\n".join(f"{k}: {v}" for k, v in rec.items() if k not in ("severity", "event")))
++    body = json.dumps({"text": text, "content": text[:1900]}).encode()  # Slack は text, Discord は content
++
++    def _send() -> None:
++        try:
++            req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
++            urllib.request.urlopen(req, timeout=5).close()  # nosec B310
++        except Exception as e:  # noqa: BLE001
++            _logger.warning(json.dumps({"event": "alert_send_failed", "error": type(e).__name__}))
++
++    threading.Thread(target=_send, daemon=True).start()
++
++
++# ─────────────────────────────────────────────
++# 入力の検査
++# ─────────────────────────────────────────────
++def check_upload(up, max_bytes: int, page: str, kind: str) -> bool:
++    """アップロードファイルの大きさを確かめる。大きすぎれば拒否して記録する。"""
++    if up is None:
++        return False
++    size = getattr(up, "size", None) or len(up.getvalue())
++    if size > max_bytes:
++        log_event("upload_rejected", "WARNING", page=page, kind=kind, reason="too_large", bytes=size)
++        st.error(f"ファイルが大きすぎます（上限 {max_bytes // (1024 * 1024)} MB）。")
++        return False
++    log_event("upload_accepted", "INFO", page=page, kind=kind, bytes=size)
++    return True
++
++
++def read_csv_safely(up, page: str, kind: str = "csv", **kwargs) -> pd.DataFrame | None:
++    """アップロードCSVを、大きさ・行数・形式を確かめてから読む。失敗時は None。"""
++    if not check_upload(up, MAX_CSV_BYTES, page, kind):
++        return None
++    try:
++        df = pd.read_csv(io.BytesIO(up.getvalue()), nrows=MAX_CSV_ROWS + 1, **kwargs)
++    except Exception as e:  # noqa: BLE001
++        log_event("csv_parse_failed", "WARNING", page=page, kind=kind, error=type(e).__name__)
++        st.error("CSVを読み込めませんでした。列名と形式を確認してください。")
++        return None
++    if len(df) > MAX_CSV_ROWS:
++        log_event("upload_rejected", "WARNING", page=page, kind=kind, reason="too_many_rows")
++        st.error(f"行数が多すぎます（上限 {MAX_CSV_ROWS:,} 行）。")
++        return None
++    return df
++
++
++# ─────────────────────────────────────────────
++# 出力の無害化：CSVの数式インジェクション対策
++# ─────────────────────────────────────────────
++_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
++
++
++def _neutralize(v):
++    if isinstance(v, str) and v.startswith(_FORMULA_START):
++        return "'" + v
++    return v
++
++
++def safe_csv(df: pd.DataFrame, index: bool = False) -> bytes:
++    """Excel で開いたとき、= や + で始まるセルが数式として実行されないようにして CSV 化する。"""
++    out = df.copy()
++    for c in out.columns:
++        if not pd.api.types.is_numeric_dtype(out[c]):  # object / string（pandas 3）どちらも対象
++            out[c] = out[c].astype(object).map(_neutralize)
++    if index and not pd.api.types.is_numeric_dtype(out.index):
++        out.index = out.index.astype(object).map(_neutralize)
++    return out.to_csv(index=index).encode("utf-8-sig")
++
++
++# ─────────────────────────────────────────────
++# 生成AIの呼び出し上限（APIキーの不正利用・課金爆発の防止）
++# ─────────────────────────────────────────────
++def ai_quota_ok(page: str) -> bool:
++    """呼び出してよければ True を返し、回数を1つ消費する。"""
++    used = st.session_state.get("_sec_ai_used", 0)
++    if used >= AI_CALLS_PER_SESSION:
++        log_event("ai_rate_limited", "WARNING", page=page, scope="session", used=used)
++        st.warning(f"生成AIの利用は1回の訪問あたり {AI_CALLS_PER_SESSION} 回までです。")
++        return False
++    s = _shared()
++    today = dt.datetime.now(JST).date().isoformat()
++    with s["lock"]:
++        if s["ai_day"] != today:
++            s["ai_day"], s["ai_count"] = today, 0
++        if s["ai_count"] >= AI_CALLS_PER_DAY:
++            capped = True
++        else:
++            capped = False
++            s["ai_count"] += 1
++            total = s["ai_count"]
++    if capped:
++        log_event("ai_daily_cap_reached", "CRITICAL", page=page, cap=AI_CALLS_PER_DAY)
++        st.warning("本日の生成AI利用枠に達しました。手動で雑草を選んでください。")
++        return False
++    st.session_state._sec_ai_used = used + 1
++    log_event("ai_call", "INFO", page=page, today_total=total)
++    return True
++
++
++# ─────────────────────────────────────────────
++# 管理者認証（ログ閲覧ページ用）
++# ─────────────────────────────────────────────
++def admin_ok(token: str) -> bool:
++    expected = _secret("ADMIN_TOKEN")
++    if not expected or len(expected) < 16:
++        return False
++    ok = hmac.compare_digest(token.encode(), expected.encode())
++    if token and not ok:
++        log_event("admin_login_failed", "WARNING", page="security_log")
++    return ok
+diff --git a/soil_vision.py b/soil_vision.py
+index 1f8bdd4..6a48e45 100644
+--- a/soil_vision.py
++++ b/soil_vision.py
+@@ -18,13 +18,24 @@ import numpy as np
+ import pandas as pd
+ from PIL import Image, ImageOps
+ 
++# 解凍爆弾（極端に画素数の大きい画像でメモリを食いつぶす攻撃）を防ぐ上限：4000万画素
++Image.MAX_IMAGE_PIXELS = 40_000_000
++AI_MODEL = os.environ.get("SOIL_AI_MODEL", "claude-sonnet-5-5")
++
+ 
+ # ─────────────────────────────────────────────
+ # ① 計算：植生指数
+ # ─────────────────────────────────────────────
+ def load_image(src, max_side: int = 900) -> np.ndarray:
+     """ファイルパス／アップロードファイルを読み込み、向きを補正して縮小した RGB 配列を返す。"""
+-    im = ImageOps.exif_transpose(Image.open(src)).convert("RGB")
++    with Image.open(src) as im0:
++        if im0.format not in ("JPEG", "PNG", "MPO"):
++            raise ValueError(f"対応していない画像形式です: {im0.format}")
++        w, h = im0.size  # ヘッダだけを読んだ段階で画素数を確かめ、展開前に止める
++        if w * h > Image.MAX_IMAGE_PIXELS:
++            raise ValueError(f"画像が大きすぎます（{w}×{h}）")
++        im0.draft("RGB", (max_side * 2, max_side * 2))  # JPEG は読み込み時点で縮小（メモリ節約）
++        im = ImageOps.exif_transpose(im0).convert("RGB")
+     im.thumbnail((max_side, max_side))
+     return np.asarray(im).astype(np.float32)
+ 
+@@ -140,7 +151,7 @@ def ai_available() -> bool:
+     return bool(os.environ.get("ANTHROPIC_API_KEY"))
+ 
+ 
+-def ai_suggest_weeds(rgb: np.ndarray, model: str = "claude-sonnet-5") -> dict:
++def ai_suggest_weeds(rgb: np.ndarray, model: str = AI_MODEL) -> dict:
+     """
+     写真を Claude に送り、INDICATORS のうち写っていそうな雑草を JSON で返させる。
+     返り値は「候補」であり、最終判断は人が行う（Human-in-the-Loop）。
+@@ -167,4 +178,16 @@ def ai_suggest_weeds(rgb: np.ndarray, model: str = "claude-sonnet-5") -> dict:
+     )
+     text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+     start, end = text.find("{"), text.rfind("}")
+-    return json.loads(text[start:end + 1])
++    data = json.loads(text[start:end + 1])
++    # 写真に書かれた文字などで指示が混入しても（プロンプトインジェクション）、
++    # 決められた候補名・数値・短い文字列以外は捨てる
++    cands = []
++    for c in data.get("candidates", [])[:10]:
++        if not isinstance(c, dict) or c.get("name") not in INDICATORS:
++            continue
++        try:
++            conf = min(max(float(c.get("confidence", 0)), 0.0), 1.0)
++        except (TypeError, ValueError):
++            conf = 0.0
++        cands.append({"name": c["name"], "confidence": conf, "reason": str(c.get("reason", ""))[:120]})
++    return {"candidates": cands, "note": str(data.get("note", ""))[:200]}
+-- 
+2.43.0
+
