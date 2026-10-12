@@ -20,6 +20,7 @@ import security_guard as sg
 import shogai_koyo as sk
 import soil_vision as sv
 import social as sn
+import sowing_calendar as sc
 import strategy as stg
 
 # ─────────────────────────────────────────────
@@ -165,7 +166,7 @@ if "log" not in st.session_state:
 MAIN_TABS = ["🏠 ホーム", "🧭 10年戦略", "🎓 探究学習（構想）", "🤝 受け入れ体制", "🌿 農園で働く方へ", "📝 活動ログ"]
 MORE_TAB = "🔎 詳しく見る"
 DETAIL_TABS = [
-    "🌱 小麦の播種シミュレーター", "📡 圃場モニター", "🍞 原料レジリエンス",
+    "🗓️ 今まく作物", "🌱 小麦の播種シミュレーター", "📡 圃場モニター", "🍞 原料レジリエンス",
     "📷 圃場フォト", "🔬 AI土壌診断", "🖨️ 3Dプリンター", "🤖 AIロボット", "💻 情報Ⅰ",
 ]
 _main = st.tabs(MAIN_TABS + [MORE_TAB])
@@ -245,8 +246,10 @@ with T["🏠 ホーム"]:
     c1.caption("ハウス・畑の2区画")
     c2.metric("播種目標日", SOW_DAY.strftime("%m/%d"))
     c2.caption(f"あと {(SOW_DAY - today).days} 日（発芽率の最適期）" if SOW_DAY >= today else "播種済み")
-    c3.metric("栽培品目", "パン用小麦")
-    c3.caption("ほかに柿・キウイ・栗")
+    _now = sc.crop_table(today)
+    _active = _now[_now["状態"] == "適期中"]
+    c3.metric("いま適期の作物", f"{len(_active)} 品目")
+    c3.caption("→ 🔎 詳しく見る › 今まく作物" if len(_active) else "本命はパン用小麦。ほかに柿・キウイ・栗")
     phase = stg.current_phase(today)
     c4.metric("10年戦略", f"フェーズ{phase.no}")
     c4.caption(f"{phase.name}｜進行中の工程 {len(doing)} 件")
@@ -286,6 +289,12 @@ with T["🧭 10年戦略"]:
 # ═════════════════════════════════════════════
 with T["🌿 農園で働く方へ"]:
     sk.render()
+
+# ═════════════════════════════════════════════
+# 2-0. 今まく作物（秋の播種カレンダー）
+# ═════════════════════════════════════════════
+with T["🗓️ 今まく作物"]:
+    sc.render()
 
 # ═════════════════════════════════════════════
 # 2. 小麦の播種シミュレーター
