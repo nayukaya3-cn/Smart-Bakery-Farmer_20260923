@@ -13,6 +13,7 @@ diary_text.py — 作業日誌の自由記述を「データ」として読む�
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable
 
 import pandas as pd
@@ -46,6 +47,12 @@ def mask(text: str, names: Iterable[str] = (), partners: Iterable[str] = ()) -> 
         for w in sorted({w.strip() for w in words if str(w).strip()}, key=len, reverse=True):
             out = out.replace(w, label)
     return out
+
+
+def normalize(text: str) -> str:
+    """見た目が同じでも別の文字（全角英数・半角カナ・全角空白など）を NFKC でそろえる。
+    第1回 発展A1：同じ「が」でも len が 2 になることがある。そろえないと検索が漏れる。"""
+    return unicodedata.normalize("NFKC", str(text))
 
 
 def residual(texts: Iterable[str], words: Iterable[str]) -> list[str]:
@@ -120,3 +127,70 @@ def synonym_hits(df: pd.DataFrame, col: str = "本文") -> pd.DataFrame:
                 rows.append({"ID": r.get("ID", ""), "分類": kw, "言い換え": p.replace("(?<!人)", ""),
                              "本文": r[col], "規則の判定": rule_label(r[col], kw)})
     return pd.DataFrame(rows, columns=["ID", "分類", "言い換え", "本文", "規則の判定"])
+
+
+# ------------------------------------------------------------
+# 検証用：第2回「生成AIと始めるPython」の for 文・if 文・カウンタをそのまま書いたもの
+#   pandas 版（search）と同じ答えになるかを、手で数えられる小さな例で確かめるために使う。
+# ------------------------------------------------------------
+def count_answers(texts: Iterable[str], word: str) -> int:
+    """回答件数：語を含む日誌が何件あるか（in + if）。カウンタは繰り返しの「前」で 0 にする。"""
+    answer_count = 0
+    for text in texts:
+        if word in str(text):
+            answer_count = answer_count + 1
+    return answer_count
+
+
+def count_occurrences(texts: Iterable[str], word: str) -> int:
+    """出現回数：語が全部で何回現れたか（count）。1件に2回あれば2と数える。"""
+    total = 0
+    for text in texts:
+        total = total + str(text).count(word)
+    return total
+
+
+def count_answers_buggy(texts: Iterable[str], word: str) -> int:
+    """わざと間違えた例：カウンタを for の内側で 0 に戻している（最後の1件分しか残らない）。
+    エラーは出ないので、手で数えた答えと比べないと気づけない。"""
+    answer_count = 0
+    for text in texts:
+        answer_count = 0  # ← ここが誤り
+        if word in str(text):
+            answer_count = answer_count + 1
+    return answer_count
+
+
+def trace(texts: Iterable[str], word: str, ids: Iterable[str] | None = None) -> pd.DataFrame:
+    """トレース表：カウンタの値が1件ごとにどう変わるかを1行ずつ記録する（DNCLの手で追う表と同じ形）。"""
+    texts = list(texts)
+    ids = list(ids) if ids is not None else [str(i) for i in range(len(texts))]
+    rows, n = [{"i": "—", "ID": "—", "本文": "（繰り返しの前）", f"「{word}」を含む？": "—", "answer_count": 0}], 0
+    for i, (id_, t) in enumerate(zip(ids, texts)):
+        hit = word in str(t)
+        n += int(hit)
+        rows.append({"i": str(i), "ID": id_, "本文": str(t), f"「{word}」を含む？": "はい" if hit else "いいえ",
+                     "answer_count": n})
+    return pd.DataFrame(rows)
+
+
+def three_lines(word: str, res: dict, judged: pd.DataFrame) -> str:
+    """提出用の3行（観測／解釈と根拠／限界）。観測と解釈を分け、解釈にはIDと原文を根拠として付ける。"""
+    obs = (f"観測：「{word}」を部分文字列一致で検索。出現{res['回数']}回／該当{res['件数']}件／"
+           f"分母{res['分母']}件（{res['件数'] / max(res['分母'], 1):.1%}）。")
+    j = judged[judged["語"] == word] if len(judged) else judged
+    if len(j) == 0:
+        mid = "解釈と根拠：まだ原文を読んでいない（人の判定が0組）。割合は困りごとの割合ではない。"
+    else:
+        parts = []
+        for lab in ["困りごと", "否定", "保留"]:
+            g = j[j["人の判定"] == lab]
+            if len(g):
+                ex = g.iloc[0]
+                parts.append(f"{lab}{len(g)}件（{'・'.join(g['ID'].head(4))}{'ほか' if len(g) > 4 else ''}。"
+                             f"例 {ex['ID']}「{str(ex['本文'])[:24]}」）")
+        mid = f"解釈と根拠：判定した{len(j)}件のうち、" + "、".join(parts) + "。"
+    syn = "・".join(f"「{p.replace('(?<!人)', '')}」" for p in SYNONYMS.get(word, []))
+    lim = (f"限界・次に調べること：言い換え{'（' + syn + '等）' if syn else ''}は「{word}」では拾えない。"
+           "判定者は1人で、規則は手元の日誌を見て作った後付け。件数は重要度ではなく、止まった時間は日誌に無い。")
+    return "\n".join([obs, mid, lim])
