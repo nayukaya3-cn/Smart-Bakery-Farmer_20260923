@@ -1,0 +1,369 @@
+From 4f204e076eef19f3355426064169b81ac3365d65 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 14 Oct 2026 05:31:57 +0900
+Subject: [PATCH] =?UTF-8?q?=E4=BD=9C=E6=A5=AD=E6=97=A5=E8=AA=8C=E3=83=86?=
+ =?UTF-8?q?=E3=82=AD=E3=82=B9=E3=83=88=E5=88=86=E6=9E=90=EF=BC=9A=E6=A4=9C?=
+ =?UTF-8?q?=E8=A8=BC=E3=82=B9=E3=83=86=E3=83=83=E3=83=97=E3=83=BB3?=
+ =?UTF-8?q?=E8=A1=8C=E5=A0=B1=E5=91=8A=E3=83=BB=E6=95=B0=E3=81=88=E6=96=B9?=
+ =?UTF-8?q?=E3=81=AE3=E9=80=9A=E3=82=8A=E3=83=BBNFKC=E6=AD=A3=E8=A6=8F?=
+ =?UTF-8?q?=E5=8C=96=E3=82=92=E8=BF=BD=E5=8A=A0?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+第1回（6工程・回数/件数/意味・3行報告）と第2回（for/if/カウンタ・手計算による検証・トレース表）を画面に反映。
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01WdMze2noBPC65ZLuN2LoQ6
+---
+ diary_text.py                                 |  74 +++++++++
+ docs/research_memo_text_analysis.md           |   6 +-
+ ...71\343\203\210\345\210\206\346\236\220.py" | 152 +++++++++++++++++-
+ 3 files changed, 229 insertions(+), 3 deletions(-)
+
+diff --git a/diary_text.py b/diary_text.py
+index 35f453e..b092619 100644
+--- a/diary_text.py
++++ b/diary_text.py
+@@ -13,6 +13,7 @@ diary_text.py — 作業日誌の自由記述を「データ」として読む
+ from __future__ import annotations
+ 
+ import re
++import unicodedata
+ from collections.abc import Iterable
+ 
+ import pandas as pd
+@@ -48,6 +49,12 @@ def mask(text: str, names: Iterable[str] = (), partners: Iterable[str] = ()) ->
+     return out
+ 
+ 
++def normalize(text: str) -> str:
++    """見た目が同じでも別の文字（全角英数・半角カナ・全角空白など）を NFKC でそろえる。
++    第1回 発展A1：同じ「が」でも len が 2 になることがある。そろえないと検索が漏れる。"""
++    return unicodedata.normalize("NFKC", str(text))
++
++
+ def residual(texts: Iterable[str], words: Iterable[str]) -> list[str]:
+     """匿名化のあとに残ってしまった語（0件でなければ分析に進まない）"""
+     joined = "\n".join(map(str, texts))
+@@ -120,3 +127,70 @@ def synonym_hits(df: pd.DataFrame, col: str = "本文") -> pd.DataFrame:
+                 rows.append({"ID": r.get("ID", ""), "分類": kw, "言い換え": p.replace("(?<!人)", ""),
+                              "本文": r[col], "規則の判定": rule_label(r[col], kw)})
+     return pd.DataFrame(rows, columns=["ID", "分類", "言い換え", "本文", "規則の判定"])
++
++
++# ------------------------------------------------------------
++# 検証用：第2回「生成AIと始めるPython」の for 文・if 文・カウンタをそのまま書いたもの
++#   pandas 版（search）と同じ答えになるかを、手で数えられる小さな例で確かめるために使う。
++# ------------------------------------------------------------
++def count_answers(texts: Iterable[str], word: str) -> int:
++    """回答件数：語を含む日誌が何件あるか（in + if）。カウンタは繰り返しの「前」で 0 にする。"""
++    answer_count = 0
++    for text in texts:
++        if word in str(text):
++            answer_count = answer_count + 1
++    return answer_count
++
++
++def count_occurrences(texts: Iterable[str], word: str) -> int:
++    """出現回数：語が全部で何回現れたか（count）。1件に2回あれば2と数える。"""
++    total = 0
++    for text in texts:
++        total = total + str(text).count(word)
++    return total
++
++
++def count_answers_buggy(texts: Iterable[str], word: str) -> int:
++    """わざと間違えた例：カウンタを for の内側で 0 に戻している（最後の1件分しか残らない）。
++    エラーは出ないので、手で数えた答えと比べないと気づけない。"""
++    answer_count = 0
++    for text in texts:
++        answer_count = 0  # ← ここが誤り
++        if word in str(text):
++            answer_count = answer_count + 1
++    return answer_count
++
++
++def trace(texts: Iterable[str], word: str, ids: Iterable[str] | None = None) -> pd.DataFrame:
++    """トレース表：カウンタの値が1件ごとにどう変わるかを1行ずつ記録する（DNCLの手で追う表と同じ形）。"""
++    texts = list(texts)
++    ids = list(ids) if ids is not None else [str(i) for i in range(len(texts))]
++    rows, n = [{"i": "—", "ID": "—", "本文": "（繰り返しの前）", f"「{word}」を含む？": "—", "answer_count": 0}], 0
++    for i, (id_, t) in enumerate(zip(ids, texts)):
++        hit = word in str(t)
++        n += int(hit)
++        rows.append({"i": str(i), "ID": id_, "本文": str(t), f"「{word}」を含む？": "はい" if hit else "いいえ",
++                     "answer_count": n})
++    return pd.DataFrame(rows)
++
++
++def three_lines(word: str, res: dict, judged: pd.DataFrame) -> str:
++    """提出用の3行（観測／解釈と根拠／限界）。観測と解釈を分け、解釈にはIDと原文を根拠として付ける。"""
++    obs = (f"観測：「{word}」を部分文字列一致で検索。出現{res['回数']}回／該当{res['件数']}件／"
++           f"分母{res['分母']}件（{res['件数'] / max(res['分母'], 1):.1%}）。")
++    j = judged[judged["語"] == word] if len(judged) else judged
++    if len(j) == 0:
++        mid = "解釈と根拠：まだ原文を読んでいない（人の判定が0組）。割合は困りごとの割合ではない。"
++    else:
++        parts = []
++        for lab in ["困りごと", "否定", "保留"]:
++            g = j[j["人の判定"] == lab]
++            if len(g):
++                ex = g.iloc[0]
++                parts.append(f"{lab}{len(g)}件（{'・'.join(g['ID'].head(4))}{'ほか' if len(g) > 4 else ''}。"
++                             f"例 {ex['ID']}「{str(ex['本文'])[:24]}」）")
++        mid = f"解釈と根拠：判定した{len(j)}件のうち、" + "、".join(parts) + "。"
++    syn = "・".join(f"「{p.replace('(?<!人)', '')}」" for p in SYNONYMS.get(word, []))
++    lim = (f"限界・次に調べること：言い換え{'（' + syn + '等）' if syn else ''}は「{word}」では拾えない。"
++           "判定者は1人で、規則は手元の日誌を見て作った後付け。件数は重要度ではなく、止まった時間は日誌に無い。")
++    return "\n".join([obs, mid, lim])
+diff --git a/docs/research_memo_text_analysis.md b/docs/research_memo_text_analysis.md
+index f8c3933..a21864a 100644
+--- a/docs/research_memo_text_analysis.md
++++ b/docs/research_memo_text_analysis.md
+@@ -32,14 +32,18 @@
+ |---|---|---|
+ | 0 匿名化 | 辞書で［人名］［取引先］に置換 → 残り0件を `assert` | 辞書を入力、残りがあれば止まる |
+ | ① 計算する | 回数・件数・分母、KWIC、素朴な規則と規則2を人の判定と比較 | 同じ。人の判定を表で書きかえると一致率が変わる |
++| ✅ 検証する | — | 手で数えた小さな例（件数≠回数になる例を含む）で期待値を先に決め、pandas版・for文版と照合。よくある2つの誤り（count を足す／カウンタを for の中で0に戻す）とトレース表（DNCL対応） |
+ | ② 可視化する | 確認済みの困りごとを作業×月のヒートマップに | 同じ（言い換えの含める／含めないを切替） |
+ | ③ 判断する | 損失時間・データの準備度を自分で入れ、最初に入れるエージェントを決める | スライダーで同じ判断 |
+ 
++画面ではさらに、表記ゆれの正規化（NFKC）、`len`/`count`/`in` を1件で試す欄、「検索で一致した件数」と「読んで困りごとと確かめた件数」の比較棒グラフ、3行の報告（観測／解釈と根拠／限界）の下書きを加えた（授業 第1回・第2回との対応）。
++
+ 共通の部品は `diary_text.py`（検索・KWIC・否定の規則・言い換え・匿名化）。どちらも外部の生成AIを呼び出しません。
+ 
+ ## 架空データでの結果（手順の確認用。実態の主張ではない）
+ 
+-- 分母36件。「遅れ」14回・14件、「故障」**8回・7件**（D10に2回）、「人手」9回・9件。
++- 分母36件。3語のどれかを含む日誌は**27件**、日誌×語の組は**30組**、出現回数の合計は**31回**（何を1つと数えるかで3通り）。
++- 「遅れ」14回・14件、「故障」**8回・7件**（D10に2回）、「人手」9回・9件。
+ - 一致した30組（日誌×語）を人が読むと、困りごと18・否定9・保留3。
+ - 素朴な規則（「ない」があれば否定）の一致は **60%**。「人手が足り**ない**」を否定と誤る。
+ - 規則2（語の直後の形を語ごとに判定）の一致は **87%**。残る4組は推測の打ち消し・対象が作物・予測・解消の報告で、規則では決められない。
+diff --git "a/pages/5_\360\237\224\244_\344\275\234\346\245\255\346\227\245\350\252\214\343\203\206\343\202\255\343\202\271\343\203\210\345\210\206\346\236\220.py" "b/pages/5_\360\237\224\244_\344\275\234\346\245\255\346\227\245\350\252\214\343\203\206\343\202\255\343\202\271\343\203\210\345\210\206\346\236\220.py"
+index 1ffb5f3..c9275aa 100644
+--- "a/pages/5_\360\237\224\244_\344\275\234\346\245\255\346\227\245\350\252\214\343\203\206\343\202\255\343\202\271\343\203\210\345\210\206\346\236\220.py"
++++ "b/pages/5_\360\237\224\244_\344\275\234\346\245\255\346\227\245\350\252\214\343\203\206\343\202\255\343\202\271\343\203\210\345\210\206\346\236\220.py"
+@@ -3,9 +3,13 @@
+ 配置先: pages/5_🔤_作業日誌テキスト分析.py （Streamlit のマルチページ構成）
+ 
+ 研究メモ（テキスト分析 課題3）の手順を画面にしたもの。骨格はリポジトリ共通の3段構え：
+-  0 匿名化 → ① 計算する（回数・件数・分母、KWIC、否定の判定）→ ② 可視化する → ③ 自分の条件で判断する
++  0 匿名化 → ① 計算する（回数・件数・分母、KWIC、否定の判定）→ ✅ 検証する → ② 可視化する → ③ 自分の条件で判断する
+ 同じ手順のノートブック: notebooks/text_analysis_work_diary.ipynb
+ 
++授業との対応
++  第1回「テキストを『データ』として読む」：6工程（問い→データ→表現→計算→検証→解釈）、回数・件数・意味の区別、3行の報告
++  第2回「生成AIと始めるPython」：for・if・カウンタ、手で数えた小さな例でAIのコードを検証、トレース表（DNCL）
++
+ 方針
+   - 日誌の原文は、このページから外部の生成AIに送らない（AI呼び出しは一切ない）。
+   - アップロードした日誌はそのセッション内だけで使い、サーバーには残さない。
+@@ -54,6 +58,21 @@ with st.container(border=True):
+         "第四に、氏名や取引先名を匿名化してから分析し、外部のAIには入力しない。"
+     )
+ 
++with st.expander("このページの道のり：6つの工程と、人・AI・Pythonの役割", expanded=False):
++    st.markdown(
++        "**数えることはコンピュータにできる。「何を1つと数えるか」を決めることと、"
++        "「その数字が何を意味するか」を読むことは、人の仕事。**\n\n"
++        "| 工程 | このページのどこ | 担当 | ここで決めること |\n|---|---|---|---|\n"
++        "| 1 問い | 研究メモ | 人 | 大きすぎる問い（AIは役に立つか？）を、日誌で確かめられる大きさにする |\n"
++        "| 2 データ | 📝入力・0 匿名化 | 人 | 1日1件＝分母。困りごとがない日も書く |\n"
++        "| 3 表現 | ① 検索語 | 人 | 何を1つと数えるか（回数／日誌の件数／日誌×語の組） |\n"
++        "| 4 計算 | ① 表 | Python | 言われたとおりに数える（意味は考えない） |\n"
++        "| 5 検証 | ✅ 検証 | 人 | 手で数えた答えを**先に**決め、コードの結果と比べる |\n"
++        "| 6 解釈 | ①判定・②・③・3行 | 人 | 原文に戻って意味を読み、言える範囲を決める |\n\n"
++        "AI（生成AI）はコードの候補を出す係です。このページの部品 `diary_text.py` も、"
++        "動いたから正しいとは考えず、✅ 検証で手計算と照らし合わせています。"
++    )
++
+ # ------------------------------------------------------------
+ # 入力：Google フォーム → スプレッドシート → 匿名化CSV → このページ
+ # ------------------------------------------------------------
+@@ -125,9 +144,19 @@ name_list = [w.strip() for w in names.splitlines() if w.strip()]
+ partner_list = [w.strip() for w in partners.splitlines() if w.strip()]
+ 
+ df = raw.copy()
++use_nfkc = st.toggle("表記ゆれをそろえる（NFKC：全角英数・半角カナ・濁点の分かれた文字など）", value=True)
++if use_nfkc:
++    before = df["本文"].copy()
++    df["本文"] = [dtx.normalize(t) for t in df["本文"]]
++    n_norm = int((before != df["本文"]).sum())
++    st.caption(f"そろえた日誌：{n_norm} 件。見た目が同じ「が」でも `len` が 2 になる文字があり、"
++               "そろえないと検索から漏れます（第1回 発展A1）。")
++    name_list = [dtx.normalize(w) for w in name_list]
++    partner_list = [dtx.normalize(w) for w in partner_list]
++pre_mask = df["本文"].copy()
+ df["本文"] = [dtx.mask(t, name_list, partner_list) for t in df["本文"]]
+ left = dtx.residual(df["本文"], name_list + partner_list)
+-changed = int((raw["本文"] != df["本文"]).sum())
++changed = int((pre_mask != df["本文"]).sum())
+ if left:
+     st.error(f"匿名化のあとに残っている語があります：{', '.join(left)}。ここで止めます。")
+     st.stop()
+@@ -143,6 +172,8 @@ st.caption("⚠️ 辞書に載っていない名前は残ります。最後は
+ st.header("① 現象を計算する：回数と件数（分母つき）")
+ kw_text = st.text_input("検索語（読点・空白で区切る）", "遅れ、故障、人手")
+ keywords = [w for w in kw_text.replace("、", " ").replace(",", " ").split() if w]
++if use_nfkc:
++    keywords = list(dict.fromkeys(dtx.normalize(w) for w in keywords))
+ if not keywords:
+     st.stop()
+ 
+@@ -153,6 +184,30 @@ summary["検索規則"] = [r["規則"] for r in results]
+ st.dataframe(summary, hide_index=True, width="stretch")
+ st.caption("**回数**＝その語が現れた数（1件に2回あれば2）／**件数**＝その語を含む日誌の数。"
+            "ここで言えるのは「その文字列を含む日誌が何件あるか」だけで、困りごとの件数ではありません。")
++pair_n = int(summary["件数"].sum())
++any_hit = df["本文"].apply(lambda t: any(k in t for k in keywords))
++c1, c2, c3 = st.columns(3)
++c1.metric("出現回数の合計", f"{int(summary['回数'].sum())} 回")
++c2.metric("日誌×語の組", f"{pair_n} 組", help="1件の日誌に「遅れ」と「人手」があれば2組")
++c3.metric("どれか1語を含む日誌", f"{int(any_hit.sum())} 件 / {len(df)} 件",
++          help="重複を除いた日誌の数。分母は日誌の日数")
++st.caption("同じデータでも「何を1つと数えるか」で数字が3通りになります。報告には単位と分母を必ず添えます。"
++           "**件数が多い語が重要とは限りません**（件数は重要度の順位ではない）。")
++
++with st.expander("Pythonの3つの道具：`len`・`count`・`in` を1件の日誌で試す"):
++    pick = st.selectbox("日誌を選ぶ", df["ID"].tolist(),
++                        index=df["ID"].tolist().index("D10") if "D10" in df["ID"].tolist() else 0)
++    text = df.loc[df["ID"] == pick, "本文"].iloc[0]
++    st.code(f'text = "{text}"', language="python")
++    tool_rows = [{"コード": "len(text)", "結果": str(len(text)), "意味": "文字数（句読点も1文字）。満足度や重要度ではない"}]
++    for kw in keywords:
++        tool_rows += [
++            {"コード": f'text.count("{kw}")', "結果": str(text.count(kw)), "意味": "出現回数（1件に2回あれば2）"},
++            {"コード": f'"{kw}" in text', "結果": str(kw in text), "意味": "含むかどうか → 件数を数える材料"},
++        ]
++    st.dataframe(pd.DataFrame(tool_rows), hide_index=True, width="stretch")
++    st.caption("D10「草刈機がまた故障。先週の故障と同じ所。」は count が 2、in は True。"
++               "故障した日誌は**1件**で、しかも2回目の「故障」は過去の話です。")
+ 
+ with st.expander("KWIC：語の前後を並べて読む"):
+     for kw in keywords:
+@@ -199,6 +254,71 @@ with st.expander(f"検索の漏れ：3語では拾えない言い換え（{len(s
+     st.dataframe(syn, hide_index=True, width="stretch")
+     st.caption("拾えなかった困りごとは、全件を読むか言い換えの辞書で探します。書かれなかった困りごとは数えられません。")
+ 
++# ------------------------------------------------------------
++# ✅ 検証する（第2回：AIのコードが動いても、正しいとは限らない）
++# ------------------------------------------------------------
++st.header("✅ 検証する：手で数えた答えとコードを照らし合わせる")
++st.caption("このページの数字は `diary_text.py` が出しています。動いてエラーが出なくても、"
++           "**目的と違う数**を出していることがあります。手で数えられる小さな例で確かめます。")
++
++v1, v2 = st.columns([3, 2])
++with v1:
++    test_text = st.text_area("小さな例（1行が日誌1件）", "雨で遅れた。\n遅れ、遅れと言われた。\n特に問題なし。", height=110)
++    test_word = st.text_input("数える語", keywords[0], key="test_word")
++with v2:
++    st.markdown("**① 人が先に答えを決める**")
++    exp_ans = st.number_input("期待する件数（語を含む行の数）", 0, 100, 2)
++    exp_occ = st.number_input("期待する回数（語が現れた数）", 0, 100, 3)
++tests = [t for t in test_text.splitlines() if t.strip()]
++tdf = pd.DataFrame({"ID": [f"T{i + 1:02d}" for i in range(len(tests))], "本文": tests})
++got = dtx.search(tdf, test_word) if tests and test_word else {"件数": 0, "回数": 0}
++check = pd.DataFrame([
++    {"何を": "件数", "期待値（人）": exp_ans, "pandas版 search()": got["件数"],
++     "for文版 count_answers()": dtx.count_answers(tests, test_word)},
++    {"何を": "回数", "期待値（人）": exp_occ, "pandas版 search()": got["回数"],
++     "for文版 count_answers()": dtx.count_occurrences(tests, test_word)},
++])
++check["一致"] = [
++    "✅" if r["期待値（人）"] == r["pandas版 search()"] == r["for文版 count_answers()"] else "❌"
++    for _, r in check.iterrows()
++]
++check = check.rename(columns={"for文版 count_answers()": "for文版"})
++st.markdown("**② コードを実行して比べる**")
++st.dataframe(check, hide_index=True, width="stretch")
++if (check["一致"] == "❌").any():
++    st.warning("食い違いがあります。手で数え直すか、コードが「件数」と「回数」のどちらを数えているかを確かめます。")
++else:
++    st.success("人の答え・pandas版・for文版の3つが一致しました。")
++st.caption("件数と回数が**違う値になる例**（同じ行に2回出る行）を必ず1つ入れます。"
++           "両方が同じ値の例では、取り違えに気づけません。")
++
++with st.expander("よくある2つの間違い（エラーは出ないのに、数がずれる）"):
++    w0, texts_all = keywords[0], df["本文"].tolist()
++    st.code(
++        "answer_count = 0                 # ① 繰り返しの「前」で 0 にする\n"
++        "for text in texts:               # ② 1件ずつ取り出す\n"
++        f'    if "{w0}" in text:            # ③ 含むなら\n'
++        "        answer_count = answer_count + 1  # ④ 1を足す\n"
++        "print(answer_count)              # ⑤ 全部終わってから表示", language="python")
++    st.dataframe(pd.DataFrame([
++        {"書き方": "正しい：in で数える", "結果": dtx.count_answers(texts_all, w0), "何を数えたか": "件数（目的どおり）"},
++        {"書き方": "誤り1：count を足す", "結果": dtx.count_occurrences(texts_all, w0), "何を数えたか": "出現回数（1件に2回あれば2）"},
++        {"書き方": "誤り2：for の中で 0 に戻す", "結果": dtx.count_answers_buggy(texts_all, w0),
++         "何を数えたか": "最後の1件の分だけ（0か1）"},
++    ]), hide_index=True, width="stretch")
++    st.caption(f"「{w0}」の日誌全{len(df)}件で実行した結果。誤り2は、正の字を1票ごとに捨てているのと同じです。")
++
++with st.expander("トレース表：カウンタの値を1件ずつ追う（共通テスト『情報Ⅰ』のDNCLと対応）"):
++    n_tr = st.slider("追う件数", 3, min(12, len(df)), min(6, len(df)))
++    st.dataframe(dtx.trace(df["本文"].head(n_tr), keywords[0], df["ID"].head(n_tr)),
++                 hide_index=True, width="stretch")
++    st.code(
++        "answer_count = 0\n"
++        "i を 0 から 要素数(texts)-1 まで 1 ずつ増やしながら繰り返す:\n"
++        f'│ もし texts[i] が "{keywords[0]}" を含む ならば:\n'
++        "│ └ answer_count = answer_count + 1\n"
++        "表示する(answer_count)", language="text")
++
+ # ------------------------------------------------------------
+ # ② 可視化する
+ # ------------------------------------------------------------
+@@ -225,6 +345,22 @@ else:
+     g2.dataframe(rate.sort_values("日誌1件あたり", ascending=False), width="stretch")
+     g2.caption("単位は「日誌×語」。作業ごとに日誌の日数が違うので、日数で割った値でも比べます。")
+ 
++st.subheader("文字列が一致した件数 ≠ 困りごとの件数")
++gap = summary[["語", "件数"]].rename(columns={"件数": "検索で一致"}).copy()
++jc = judged.groupby("語")["人の判定"].value_counts().unstack(fill_value=0) if len(judged) else pd.DataFrame()
++for lab in ["困りごと", "否定", "保留"]:
++    gap[f"読んで{lab}"] = [int(jc.loc[k, lab]) if k in jc.index and lab in jc.columns else 0 for k in gap["語"]]
++gap["未判定"] = gap["検索で一致"] - gap[["読んで困りごと", "読んで否定", "読んで保留"]].sum(axis=1)
++long = gap.melt(id_vars="語", value_vars=["読んで困りごと", "読んで否定", "読んで保留", "未判定"],
++                var_name="原文を読んだ結果", value_name="件数")
++fig2 = px.bar(long, x="件数", y="語", color="原文を読んだ結果", orientation="h",
++              color_discrete_map={"読んで困りごと": "#c2410c", "読んで否定": "#64748b",
++                                  "読んで保留": "#cbd5e1", "未判定": "#e5e7eb"})
++fig2.update_layout(height=60 + 50 * len(gap), margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
++st.plotly_chart(fig2, width="stretch")
++st.caption("棒の全長が「検索で一致した日誌の件数」、濃い部分が「原文を読んで困りごとと確かめた件数」。"
++           "割合を報告するときは、どちらの割合かを書き分けます（例：「遅れ」を含む日誌の割合 ≠ 遅れが起きた日の割合）。")
++
+ # ------------------------------------------------------------
+ # ③ 自分の条件で判断する
+ # ------------------------------------------------------------
+@@ -243,6 +379,7 @@ for kw, c in zip(keywords, cols):
+     n = int(counts.get(kw, 0))
+     rows.append({"語": kw, "確認済みの件数": n, "損失時間の見込み(h)": n * loss,
+                  "優先度": round(n * loss * ready, 1), "エージェント候補": agent, "必要なデータ": need})
++st.latex(r"\text{優先度} = \text{確認済みの件数} \times \text{1件あたりの損失時間} \times \text{データの準備度}")
+ decide = pd.DataFrame(rows).sort_values("優先度", ascending=False)
+ st.dataframe(decide, hide_index=True, width="stretch")
+ if len(decide) and decide["優先度"].max() > 0:
+@@ -251,6 +388,17 @@ if len(decide) and decide["優先度"].max() > 0:
+ st.info("この判断に必要なのに日誌に無いもの：困りごとで**止まった時間**・**影響した量**。"
+         "次の一手は、自由記述を残したまま「止まった時間（分）」「影響（出荷・作業・品質）」の2欄を日誌に足すこと。")
+ 
++# ------------------------------------------------------------
++# 3行の報告（第1回 E09）：観測と解釈を分け、解釈にはIDと原文を根拠として付ける
++# ------------------------------------------------------------
++st.header("📝 3行で報告する：観測／解釈と根拠／限界")
++rep_word = st.selectbox("報告する語", keywords, key="rep_word")
++draft = dtx.three_lines(rep_word, results[keywords.index(rep_word)], judged)
++report = st.text_area("下書き（自分の言葉に書きかえる）", draft, height=150, key=f"rep_{rep_word}_{len(judged)}")
++st.caption("観測＝数えた事実（単位と分母つき）。解釈＝意味の読み取り（IDと原文を根拠に）。"
++           "限界＝拾えないもの・一般化できない理由。生成した下書きをそのまま出さず、原文を読み直して直します。")
++st.download_button("3行の報告を保存（.txt）", report.encode("utf-8"), f"3行報告_{rep_word}.txt", "text/plain")
++
+ st.divider()
+ st.download_button("判定結果をCSVで保存（匿名化済み）", sg.safe_csv(edited), "日誌_判定結果.csv", "text/csv")
+ st.caption("© スマートパン屋農家プロジェクト ｜ 初期表示は教材用の架空データです。")
+-- 
+2.43.0
+
