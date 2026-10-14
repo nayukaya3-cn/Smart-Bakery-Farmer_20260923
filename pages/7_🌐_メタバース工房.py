@@ -179,13 +179,57 @@ def read_check(text: str) -> dict:
 # ─────────────────────────────────────────────
 # 画面
 # ─────────────────────────────────────────────
-st.title("🌐 メタバース工房")
+HERO_IMG = Path(__file__).parents[1] / "docs" / "img" / "metaverse_avatar.jpg"  # VRoid→Unity の完成イメージ
+
 st.markdown(
-    "#### 三原の畑・ハウス・パン工房を、**ブラウザで歩ける3Dワールド**にしよう\n"
-    "プログラミングが苦手でも大丈夫です。このコーナーの主役は**企画・ことば・ルールづくり**。"
-    "「だれに・何を伝えるか」を決めて、寸法を計算し、地図と3Dで下見してから、つくり始めます。"
+    """
+    <style>
+    .mv-hero {padding: 1.6rem 1.8rem; border-radius: 18px; height: 100%;
+              background: linear-gradient(135deg, #2e3a63 0%, #5b6fa8 55%, #f2a7c3 100%); color: #fff;}
+    .mv-hero .eyebrow {font-size: .82rem; letter-spacing: .12em; opacity: .85; margin: 0 0 .5rem;}
+    .mv-hero h1 {font-size: 2.1rem; line-height: 1.3; margin: 0 0 .7rem; color: #fff;}
+    .mv-hero h1 em {font-style: normal; color: #ffe08a;}
+    .mv-hero .lead {font-size: 1.02rem; line-height: 1.85; margin: 0 0 1rem;}
+    .mv-steps {display: flex; flex-wrap: wrap; gap: .45rem; margin: 0 0 1rem;}
+    .mv-steps span {background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35);
+                    border-radius: 999px; padding: .3rem .8rem; font-size: .9rem; white-space: nowrap;}
+    .mv-steps span.arr {background: none; border: none; padding: .3rem 0; opacity: .8;}
+    .mv-tools {display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem;}
+    .mv-tools div {background: rgba(255,255,255,.92); color: #2e3a63; border-radius: 12px;
+                   padding: .55rem .6rem; font-size: .85rem; line-height: 1.4; text-align: center;}
+    .mv-tools b {display: block; font-size: 1.35rem;}
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
-st.caption("① 計算する（実寸で設計）→ ② 可視化する（地図と3Dで下見）→ ③ 自分の条件で判断する（コース選び・公開前チェック）")
+hero_l, hero_r = st.columns([3, 2], vertical_alignment="center")
+with hero_l:
+    st.markdown(
+        """
+        <div class="mv-hero">
+          <p class="eyebrow">🌐 METAVERSE STUDIO ─ 文系の中高生も、主役になれる</p>
+          <h1>自分でつくったアバターで、<br><em>三原の小麦畑</em>を歩こう。</h1>
+          <p class="lead">VRoid でアバターをつくり、Unity で畑とパン工房を建てて、Vket Cloud でブラウザに公開。
+          プログラミングが苦手でも大丈夫。主役は<b>企画・ことば・ルールづくり</b>です。</p>
+          <div class="mv-steps">
+            <span>① 寸法を計算する</span><span class="arr">→</span><span>② 地図と3Dで下見する</span><span class="arr">→</span><span>③ 自分の条件で決める</span>
+          </div>
+          <div class="mv-tools">
+            <div><b>🧑</b>VRoid Studio<br>アバター</div>
+            <div><b>🧱</b>Unity<br>ワールド</div>
+            <div><b>🌐</b>Vket Cloud<br>ブラウザで公開</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+with hero_r:
+    if HERO_IMG.exists():
+        st.image(str(HERO_IMG), width="stretch",
+                 caption="VRoid Studio でつくったアバターを、Unity の部屋に立たせたところ（研修での制作例）")
+    else:
+        st.info("完成イメージの画像は docs/img/metaverse_avatar.jpg に置くと表示されます。")
+st.write("")
 
 with st.sidebar:
     st.header("🌐 メタバース工房")
@@ -529,7 +573,13 @@ with tabs[4]:
     st.caption("手順の元資料：HICS 広島情報専門学校「教職員対象パソコン活用研修会」（R07/08/04・05）。画面やバージョンは更新されることがあります。")
 
     with st.expander("コースA：VRoid Studio で案内役アバターをつくる（コードなし）", expanded=True):
-        st.markdown(
+        if HERO_IMG.exists():
+            ca1, ca2 = st.columns([1, 2])
+            ca1.image(str(HERO_IMG), width="stretch", caption="ゴールのイメージ：自分のアバターがワールドに立つ")
+            _a_box = ca2
+        else:
+            _a_box = st.container()
+        _a_box.markdown(
             f"1. [VRoid Studio]({VROID_URL}) をインストール（Windows／macOS）\n"
             "2. 「新規作成」→ 用意された体・髪型・服を選び、色や大きさを変える\n"
             "3. 身長を ① で決めた値に合わせる（ドアや通路のチェックと同じ値に）\n"
