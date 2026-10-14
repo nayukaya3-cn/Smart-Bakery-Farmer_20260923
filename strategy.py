@@ -285,7 +285,7 @@ def render(log: pd.DataFrame, assets: Path, today: date | None = None) -> None:
             ("ルーブリック", "pages/1_📋_学校向け_記録が残る探究.py の RUBRIC"),
             ("活動ログの書式", "data/activity_log.csv（列：日付,カテゴリ,内容）"),
             ("教材ノート", "notebooks/（Google Colab で開ける）"),
-            ("安全・受け入れ手順", "🤝 受け入れ体制タブ ＋ 下のチェックリスト"),
+            ("安全・受け入れ手順", "🎓 学校の先生へ › 🤝 受け入れ体制 ＋ 下のチェックリスト"),
         ], columns=["引き継ぐもの", "置き場所"])
         st.dataframe(handover, width="stretch", hide_index=True)
         show_verdict(PHASES[3], [months >= 12], today)

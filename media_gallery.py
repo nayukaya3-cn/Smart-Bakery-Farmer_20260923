@@ -1,7 +1,7 @@
 """
 media_gallery.py — タブに画像・動画・PDF・テキストを組み込むための共通部品
 
-使い方（app.py の各タブ内で）:
+使い方（home.py の各タブ内で）:
     import media_gallery as mg
     mg.media_section(ASSETS / "3d_printer", key="p3d", title="📂 記録・資料")
 
