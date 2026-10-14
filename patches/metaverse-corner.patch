@@ -1,0 +1,953 @@
+From a97b57efc9bbf538f67948ae61f81bb14dad580b Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 15 Oct 2026 04:06:39 +0900
+Subject: [PATCH] =?UTF-8?q?=E3=83=A1=E3=82=BF=E3=83=90=E3=83=BC=E3=82=B9?=
+ =?UTF-8?q?=E5=B7=A5=E6=88=BF=E3=82=B3=E3=83=BC=E3=83=8A=E3=83=BC=E3=82=92?=
+ =?UTF-8?q?=E8=BF=BD=E5=8A=A0=EF=BC=88=E6=96=87=E7=B3=BB=E4=B8=AD=E9=AB=98?=
+ =?UTF-8?q?=E7=94=9F=E5=90=91=E3=81=91=E3=83=BB3=E6=AE=B5=E6=A7=8B?=
+ =?UTF-8?q?=E3=81=88=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- pages/7_🌐_メタバース工房.py：実寸設計→地図と3D下見→コース診断・公開前チェック
+- app.py：🔎詳しく見る に「🌐 メタバース」タブ、サイドバーにリンク
+- assets/metaverse/：制作記録の置き場所
+- README：メタバース工房の説明
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01NaGBSr58vTYAw1ph5z9SUY
+---
+ README.md                                     |  17 +
+ app.py                                        |  29 +-
+ .../metaverse/\343\203\241\343\203\242.md"    |   9 +
+ ...74\343\202\271\345\267\245\346\210\277.py" | 812 ++++++++++++++++++
+ 4 files changed, 866 insertions(+), 1 deletion(-)
+ create mode 100644 "assets/metaverse/\343\203\241\343\203\242.md"
+ create mode 100644 "pages/7_\360\237\214\220_\343\203\241\343\202\277\343\203\220\343\203\274\343\202\271\345\267\245\346\210\277.py"
+
+diff --git a/README.md b/README.md
+index 4e5c532..177504b 100644
+--- a/README.md
++++ b/README.md
+@@ -109,6 +109,23 @@ CSVは Excel やメモ帳で直接書き足しても構いません（列は `
+ - 小麦だけは実体験の最適日（10/20頃）を使っています。
+ - 7月以降はその年の秋、6月までは前年の秋のカレンダーを表示します。
+ 
++## 🌐 メタバース工房（`pages/7_🌐_メタバース工房.py`）
++三原の小麦畑・ハウス・パン工房を**実寸の3Dワールド**にする、文系の中高生向けコーナーです（「🔎 詳しく見る → 🌐 メタバース」タブからも入れます）。
++主役は企画・ことば・ルールづくりで、コース0（紙とブラウザ）ならソフトのインストールなしで完結します。
++
++| タブ | やること |
++|---|---|
++| ① 計算する | 現実の寸法(m) → Unity の Scale・Position。ドア・車椅子通路・VRM容量のチェック |
++| ② 可視化する | 設計図の表 → 真上の地図＋3Dプレビュー、建物のすき間チェック、Unity用の配置表CSV |
++| ✍️ ことばを置く | 看板の文字数・一文の長さ・漢字の割合を数える。案内役のセリフを分岐つきで試す |
++| 🛠️ つくる手順 | コースA（VRoid）・B（Unity＋Vket Cloud）・C（麦の穂あつめゲーム、C#のお手本つき） |
++| ③ 判断する | パソコン・容量・期間からコース診断。公開前チェック（全部✅まで非公開） |
++| 📝 まとめる | 試してもらった記録の集計、活動報告書200字の下書き |
++
++- 初期配置は `WORLD_DEFAULT`、看板とセリフは `SIGNS_DEFAULT`・`GUIDE_DEFAULT` を書きかえます。
++- 制作の記録は `assets/metaverse/YYYYMMDD/` に置くと表示されます。
++- 手順の元資料：HICS 広島情報専門学校「教職員対象パソコン活用研修会」（R07/08/04・05）。Unity と Vket Cloud SDK の対応バージョンは更新されるため、必ず公式で確認してください。
++
+ ## 🔤 作業日誌テキスト分析（研究メモの実践）
+ テキスト分析の研究メモ「作業日誌の自由記述から、困りごとがどの作業・時期に、どんな言葉で書かれているかを調べる」を、3段構えで動かせる形にしたものです。メモ本文・初版からの変更点・結果の要約は [docs/research_memo_text_analysis.md](docs/research_memo_text_analysis.md)。
+ 
+diff --git a/app.py b/app.py
+index b1b7a66..24d9341 100644
+--- a/app.py
++++ b/app.py
+@@ -41,6 +41,7 @@ SCHOOL_PAGE = "pages/1_📋_学校向け_記録が残る探究.py"  # 学校向
+ AYAME_PAGE = "pages/2_🌾_地元の農業法人_農作業.py"  # あやめの郷での農作業（有給の実証期間）
+ DIARY_PAGE = "pages/5_🔤_作業日誌テキスト分析.py"  # 作業日誌の困りごとを数え、原文で確かめる（研究メモ）
+ COMPARE_PAGE = "pages/3_⚖️_比べて確かめる探究.py"  # 寒締めほうれん草：くじで分けて測る・比べる・グラフ・判断
++METAVERSE_PAGE = "pages/7_🌐_メタバース工房.py"  # 畑・ハウス・パン工房を実寸の3Dワールドに（文系中高生向け）
+ 
+ 
+ def safe_page_link(page: str, label: str, icon: str) -> None:
+@@ -102,6 +103,7 @@ with st.sidebar:
+     safe_page_link(AYAME_PAGE, "地元の農業法人での農作業（実証ログ）", "🌾")
+     safe_page_link(DIARY_PAGE, "作業日誌テキスト分析（研究メモ）", "🔤")
+     safe_page_link(COMPARE_PAGE, "比べて確かめる探究（寒締めほうれん草）", "⚖️")
++    safe_page_link(METAVERSE_PAGE, "メタバース工房（3Dワールドづくり）", "🌐")
+     st.divider()
+     st.caption("拠点：広島県三原市西部（ハウス・畑区画）")
+     st.caption(f"圃場面積：約 {FIELD_AREA_M2} ㎡")
+@@ -171,7 +173,7 @@ MAIN_TABS = ["🏠 ホーム", "🧭 10年戦略", "🎓 探究学習（構想
+ MORE_TAB = "🔎 詳しく見る"
+ DETAIL_TABS = [
+     "🗓️ 今まく作物", "🌱 小麦の播種シミュレーター", "📡 圃場モニター", "🍞 原料レジリエンス",
+-    "📷 圃場フォト", "🔬 AI土壌診断", "🖨️ 3Dプリンター", "🤖 AIロボット", "💻 情報Ⅰ",
++    "📷 圃場フォト", "🔬 AI土壌診断", "🖨️ 3Dプリンター", "🤖 AIロボット", "🌐 メタバース", "💻 情報Ⅰ",
+ ]
+ _main = st.tabs(MAIN_TABS + [MORE_TAB])
+ T = dict(zip(MAIN_TABS, _main))  # タブは名前で指定する（並べ替えても壊れない）
+@@ -991,6 +993,31 @@ with T["🤖 AIロボット"]:
+     st.divider()
+     mg.media_section(ASSETS / "robot", key="robot", title="📂 AIロボットの記録・資料")
+ 
++# ═════════════════════════════════════════════
++# 10.5 メタバース（畑を実寸の3Dワールドに）— 本体は pages/7_🌐_メタバース工房.py
++# ═════════════════════════════════════════════
++with T["🌐 メタバース"]:
++    st.header("🌐 メタバース工房：畑を、ブラウザで歩ける3Dワールドに")
++    st.write(
++        "三原の小麦畑・ハウス・パン工房を**実際の寸法どおり**に3Dで再現し、"
++        "案内役のアバターと看板で「小麦がパンになるまで」を伝えるワールドをつくります。"
++        "主役は**企画・ことば・ルールづくり**。プログラミングが苦手な文系の中高生でも参加できます。"
++    )
++    mv = pd.DataFrame([
++        ("0 紙とブラウザ", "企画書・地図・看板の文章・案内役のセリフ", "なし", "1〜2週"),
++        ("A アバター", "VRoid Studio で案内役アバターをつくる", "なし", "1〜2週"),
++        ("B ワールド", "Unity に数値を入れて畑を組み立て、Vket Cloud で公開", "なし", "2〜3週"),
++        ("C ゲーム化", "「麦の穂あつめ」ゲーム（C# のお手本を写して改造）", "あり", "3〜4週"),
++    ], columns=["コース", "やること", "プログラミング", "目安"])
++    st.dataframe(mv, width="stretch", hide_index=True)
++    st.markdown(
++        "**3段構え**：① 現実の寸法を Unity の数字に直す → ② 地図と3Dプレビューで下見し、車椅子で通れるか確かめる → "
++        "③ 自分のパソコン・期間でコースを選び、公開前チェックを全部終えてから公開する"
++    )
++    safe_page_link(METAVERSE_PAGE, "メタバース工房を開く", "➡️")
++    st.divider()
++    mg.media_section(ASSETS / "metaverse", key="metaverse_tab", title="📂 メタバースの記録・資料")
++
+ # ═════════════════════════════════════════════
+ # 11. 情報Ⅰ（データの活用・プログラミング）からアプローチする
+ # ═════════════════════════════════════════════
+diff --git "a/assets/metaverse/\343\203\241\343\203\242.md" "b/assets/metaverse/\343\203\241\343\203\242.md"
+new file mode 100644
+index 0000000..f5b8690
+--- /dev/null
++++ "b/assets/metaverse/\343\203\241\343\203\242.md"
+@@ -0,0 +1,9 @@
++# メタバース工房の記録
++
++ここに、制作の記録を日付フォルダごとに置きます（例：`assets/metaverse/20261020/`）。
++
++- ワールドのスクリーンショット（jpg / png）
++- 3分のデモ動画（mp4。100MBをこえる場合は YouTube の限定公開にしてリンクを書く）
++- 企画書・活動報告書の下書き（PDF / md）
++
++⚠️ 生徒の顔・本名・学校名が写っているものは置かない（公開ページになります）。
+diff --git "a/pages/7_\360\237\214\220_\343\203\241\343\202\277\343\203\220\343\203\274\343\202\271\345\267\245\346\210\277.py" "b/pages/7_\360\237\214\220_\343\203\241\343\202\277\343\203\220\343\203\274\343\202\271\345\267\245\346\210\277.py"
+new file mode 100644
+index 0000000..11363f1
+--- /dev/null
++++ "b/pages/7_\360\237\214\220_\343\203\241\343\202\277\343\203\220\343\203\274\343\202\271\345\267\245\346\210\277.py"
+@@ -0,0 +1,812 @@
++"""
++メタバース工房 ─「バーチャル・スマートパン屋農家」を、文系の中高生がつくる
++配置先: pages/7_🌐_メタバース工房.py （Streamlit のマルチページ構成）
++
++ねらい:
++  プログラミングが得意でなくても、「企画・ことば・ルールづくり」を主役にして
++  三原の畑・ハウス・パン工房を、ブラウザで歩ける3Dワールドにする。
++  骨格はほかのページと同じ「① 計算する → ② 可視化する → ③ 自分の条件で判断する」。
++
++使う道具（すべて無料で始められる）:
++  VRoid Studio（アバター）／Unity（ワールド）／Vket Cloud（ブラウザで公開）
++  手順の元資料：HICS 広島情報専門学校「教職員対象パソコン活用研修会」（R07/08/04・05）
++
++変えたいとき:
++  - ワールドの初期配置          → WORLD_DEFAULT
++  - 看板・案内役のセリフの初期値 → SIGNS_DEFAULT
++  - コースの中身                → COURSES
++"""
++from __future__ import annotations
++
++import re
++from pathlib import Path
++
++import pandas as pd
++import plotly.graph_objects as go
++import streamlit as st
++
++import media_gallery as mg
++import security_guard as sg
++
++st.set_page_config(page_title="メタバース工房", page_icon="🌐", layout="wide")
++
++ASSETS = Path(__file__).parents[1] / "assets"
++VROID_URL = "https://vroid.com/studio"
++UNITY_URL = "https://unity.com/ja/download"
++VKET_CLOUD_URL = "https://cloud.vket.com/"
++UNIVRM_URL = "https://github.com/vrm-c/UniVRM/releases"
++
++# ─────────────────────────────────────────────
++# 初期データ
++# ─────────────────────────────────────────────
++# 単位はすべて m（メートル）。Unity は「1 = 1m」で考えると、現実の寸法をそのまま使える。
++# X = 東西（右がプラス）、Z = 南北（奥がプラス）。数値は説明用の仮置き。
++WORLD_COLS = ["名前（英数字）", "日本語ラベル", "形", "X", "Z", "幅", "奥行き", "高さ", "色"]
++WORLD_DEFAULT = pd.DataFrame([
++    ("Ground",      "地面",                   "Plane",    0.0,  2.0, 30.0, 26.0, 0.0, "#c9d8b6"),
++    ("WheatField",  "パン用小麦の畑（約96㎡）", "Cube",    -7.0,  0.0,  8.0, 12.0, 0.2, "#e8c872"),
++    ("Greenhouse",  "ハウス",                 "Cube",     5.0,  0.0,  6.0, 10.0, 3.0, "#a9cfe0"),
++    ("Workshop",    "パン工房（農機具小屋）",   "Cube",     5.0, 10.0,  4.0,  4.0, 3.0, "#b07a4a"),
++    ("Persimmon",   "柿の木",                 "Cylinder", -9.0, 10.0,  1.2,  1.2, 3.0, "#e07b39"),
++    ("Kiwi",        "キウイ",                 "Cylinder", -6.5, 10.0,  1.2,  1.2, 2.5, "#7aa95c"),
++    ("Chestnut",    "栗の木",                 "Cylinder", -4.0, 10.0,  1.2,  1.2, 3.5, "#8a5a2b"),
++    ("Windmill",    "モグラよけ風車",          "Cylinder", -2.5, -5.0,  0.3,  0.3, 1.5, "#f2f2f2"),
++    ("GuideNPC",    "案内役アバター",          "Cylinder",  0.0, -8.0,  0.6,  0.6, 1.6, "#d46a8c"),
++    ("SignField",   "看板：小麦の畑",          "Cube",     -2.5,  6.5,  1.0,  0.1, 1.2, "#6b4f2a"),
++    ("SpawnPoint",  "スタート地点",            "Cylinder",  0.0, -10.0, 0.5,  0.5, 0.05, "#3b2f1e"),
++], columns=WORLD_COLS)
++
++SIGN_COLS = ["置き場所（名前）", "見出し", "本文"]
++SIGNS_DEFAULT = pd.DataFrame([
++    ("SignField", "パン用小麦の畑",
++     "ここでパン用の小麦を育てています。10月20日ごろに種をまき、6月に収穫します。"),
++    ("Greenhouse", "ハウスと通路",
++     "ハウスのまわりには、車椅子でも一周できる通路をつくっています。だれでも作業に参加できる畑をめざしています。"),
++    ("Workshop", "パン工房",
++     "もとは農機具小屋です。ここで小麦を粉にして、天然酵母のパンを焼く予定です。"),
++    ("Windmill", "モグラよけ風車",
++     "ペットボトルでつくった風車です。回ると支柱がふるえて、その振動が地面に伝わります。"),
++], columns=SIGN_COLS)
++
++GUIDE_DEFAULT = pd.DataFrame([
++    ("あいさつ", "ようこそ、バーチャル・スマートパン屋農家へ！ わたしは案内役です。", "畑を見る／工房を見る"),
++    ("畑を見る", "左の黄色い区画が小麦の畑です。看板の前に立つと説明が読めます。", "工房を見る／おわる"),
++    ("工房を見る", "奥の小屋がパン工房です。収穫した小麦がパンになるまでを、ここで紹介します。", "畑を見る／おわる"),
++    ("おわる", "来てくれてありがとうございました。気づいたことをアンケートで教えてください。", ""),
++], columns=["場面", "セリフ", "次に選べる場面（／で区切る）"])
++
++for key, df in [("mv_world", WORLD_DEFAULT), ("mv_signs", SIGNS_DEFAULT), ("mv_guide", GUIDE_DEFAULT)]:
++    if key not in st.session_state:
++        st.session_state[key] = df.copy()
++
++COURSES = pd.DataFrame([
++    ("0 紙とブラウザ", "企画書・地図・看板の文章・案内役のセリフをつくる（このページだけで完結）",
++     "このページ・紙・ペン", "なし", "1〜2週"),
++    ("A アバター", "VRoid Studio で案内役アバターをつくり、VRM で書き出す",
++     "VRoid Studio", "なし（マウス操作だけ）", "1〜2週"),
++    ("B ワールド", "Unity に箱と板を並べて畑を再現し、Vket Cloud でブラウザ公開する",
++     "Unity・Vket Cloud SDK", "なし（数値を入れるだけ）", "2〜3週"),
++    ("C ゲーム化", "「麦の穂あつめ」ゲームにする。C# のお手本を写して、少しだけ改造する",
++     "Unity・Visual Studio", "あり（写して改造）", "3〜4週"),
++], columns=["コース", "やること", "使う道具", "プログラミング", "目安"])
++
++ROLES = pd.DataFrame([
++    ("プランナー", "だれに・何を伝えるワールドか決める。企画書を書く", "国語・総合探究"),
++    ("ライター", "看板の説明文・案内役のセリフを書く。読みやすさを確かめる", "国語・英語"),
++    ("デザイナー", "地図を描き、色と配置を決める。アバターをつくる", "美術"),
++    ("ビルダー", "Unity に配置表の数値を入れて、ワールドを組み立てる", "情報"),
++    ("リサーチャー", "アンケートをとり、何人が・どこで迷ったかを数える", "数学・公民"),
++], columns=["役割", "やること", "生かせる教科"])
++
++
++# ─────────────────────────────────────────────
++# 計算の部品
++# ─────────────────────────────────────────────
++NAME_OK = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
++
++
++def clean_world(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++    for c in ["X", "Z", "幅", "奥行き", "高さ"]:
++        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
++    df["名前（英数字）"] = df["名前（英数字）"].fillna("").astype(str).str.strip()
++    df["日本語ラベル"] = df["日本語ラベル"].fillna("").astype(str)
++    df["形"] = df["形"].where(df["形"].isin(["Cube", "Plane", "Cylinder"]), "Cube")
++    df["色"] = df["色"].where(df["色"].astype(str).str.match(r"^#[0-9a-fA-F]{6}$"), "#999999")
++    return df[df["名前（英数字）"] != ""].reset_index(drop=True)
++
++
++def unity_table(df: pd.DataFrame) -> pd.DataFrame:
++    """現実の寸法(m) → Unity の Position / Scale に変換する。
++
++    Cube    : 1辺1m の立方体。Scale = (幅, 高さ, 奥行き)、中心の高さ Y = 高さ/2
++    Plane   : 10m×10m の板。   Scale = (幅/10, 1, 奥行き/10)、Y = 0
++    Cylinder: 直径1m・高さ2m。 Scale = (直径, 高さ/2, 直径)、Y = 高さ/2
++    """
++    rows = []
++    for _, r in df.iterrows():
++        w, d, h = r["幅"], r["奥行き"], r["高さ"]
++        if r["形"] == "Plane":
++            pos_y, sc = 0.0, (w / 10, 1.0, d / 10)
++        elif r["形"] == "Cylinder":
++            pos_y, sc = h / 2, (w, h / 2, d)
++        else:
++            pos_y, sc = h / 2, (w, h, d)
++        rows.append({
++            "名前": r["名前（英数字）"], "ラベル": r["日本語ラベル"], "3D Object": r["形"],
++            "Position X": round(r["X"], 2), "Position Y": round(pos_y, 2), "Position Z": round(r["Z"], 2),
++            "Scale X": round(sc[0], 3), "Scale Y": round(sc[1], 3), "Scale Z": round(sc[2], 3),
++        })
++    return pd.DataFrame(rows)
++
++
++def gap(a: pd.Series, b: pd.Series) -> float:
++    """真上から見た2つの四角のすき間（m）。重なっていれば 0 未満。"""
++    dx = abs(a["X"] - b["X"]) - (a["幅"] + b["幅"]) / 2
++    dz = abs(a["Z"] - b["Z"]) - (a["奥行き"] + b["奥行き"]) / 2
++    if dx < 0 and dz < 0:
++        return max(dx, dz)          # 重なり（マイナス）
++    return max(dx, 0) if dz < 0 else (max(dz, 0) if dx < 0 else (dx**2 + dz**2) ** 0.5)
++
++
++def box_mesh(x, z, w, d, h, color, name, y0=0.0):
++    xs = [x - w/2, x + w/2, x + w/2, x - w/2] * 2
++    zs = [z - d/2, z - d/2, z + d/2, z + d/2] * 2
++    ys = [y0] * 4 + [y0 + max(h, 0.02)] * 4
++    i = [0, 0, 4, 4, 0, 0, 1, 1, 2, 2, 3, 3]
++    j = [1, 2, 5, 6, 1, 5, 2, 6, 3, 7, 0, 4]
++    k = [2, 3, 6, 7, 5, 4, 6, 5, 7, 6, 4, 7]
++    return go.Mesh3d(x=xs, y=zs, z=ys, i=i, j=j, k=k, color=color, opacity=1.0,
++                     flatshading=True, name=name, hovertext=name, hoverinfo="text")
++
++
++KANJI = re.compile(r"[\u4e00-\u9fff]")
++
++
++def read_check(text: str) -> dict:
++    text = str(text or "")
++    body = re.sub(r"\s", "", text)
++    sentences = [s for s in re.split(r"[。！？!?]", body) if s]
++    n = len(body)
++    return {
++        "文字数": n,
++        "文の数": len(sentences),
++        "いちばん長い文": max((len(s) for s in sentences), default=0),
++        "漢字の割合%": round(len(KANJI.findall(body)) / n * 100, 1) if n else 0.0,
++    }
++
++
++# ─────────────────────────────────────────────
++# 画面
++# ─────────────────────────────────────────────
++st.title("🌐 メタバース工房")
++st.markdown(
++    "#### 三原の畑・ハウス・パン工房を、**ブラウザで歩ける3Dワールド**にしよう\n"
++    "プログラミングが苦手でも大丈夫です。このコーナーの主役は**企画・ことば・ルールづくり**。"
++    "「だれに・何を伝えるか」を決めて、寸法を計算し、地図と3Dで下見してから、つくり始めます。"
++)
++st.caption("① 計算する（実寸で設計）→ ② 可視化する（地図と3Dで下見）→ ③ 自分の条件で判断する（コース選び・公開前チェック）")
++
++with st.sidebar:
++    st.header("🌐 メタバース工房")
++    st.write("文系の中高生でもつくれる、3段構えのワールドづくり。")
++    st.link_button("🧑 VRoid Studio（アバター）", VROID_URL, width="stretch")
++    st.link_button("🧱 Unity（ワールド）", UNITY_URL, width="stretch")
++    st.link_button("🌐 Vket Cloud（ブラウザで公開）", VKET_CLOUD_URL, width="stretch")
++    st.divider()
++    st.caption("つくったデータは、ページを閉じると消えます。各タブの「CSVで保存」で手元に残してください。")
++
++tabs = st.tabs([
++    "🧭 はじめに", "① 計算する", "② 可視化する", "✍️ ことばを置く",
++    "🛠️ つくる手順", "③ 判断する", "📝 まとめる", "📂 記録",
++])
++
++# ═════════════════════════════════════════════
++# 0. はじめに
++# ═════════════════════════════════════════════
++with tabs[0]:
++    st.header("🧭 メタバースって何？ 何をつくる？")
++    c1, c2 = st.columns(2)
++    with c1:
++        st.markdown(
++            "##### メタバースとは\n"
++            "インターネット上の**3次元の仮想空間**で、アバター（自分の分身）になって歩いたり、"
++            "人と話したりできる場所のことです。"
++            "「超越（meta）」と「宇宙（universe）」を合わせた言葉で、はっきりした定義はまだありません。\n\n"
++            "##### 社会での使われ方\n"
++            "- **お店**：家具を実物と同じ大きさで並べて、部屋に置いたときの感じを確かめる\n"
++            "- **まちづくり**：再開発後の建物の見え方や、災害時に通れる道を確かめる\n"
++            "- **学校**：全国のキャンパスの生徒が、同じ仮想空間に集まって式典や授業を行う"
++        )
++    with c2:
++        st.markdown(
++            "##### このコーナーでつくるもの\n"
++            "**「バーチャル・スマートパン屋農家」**\n\n"
++            "広島県三原市の約96㎡の小麦畑・ハウス・パン工房（もとは農機具小屋）を、"
++            "**実際の寸法どおり**に3Dで再現します。訪れた人は案内役のアバターと話し、"
++            "看板を読みながら「小麦がパンになるまで」を知ることができます。\n\n"
++            "##### なぜ実寸にこだわるの？\n"
++            "ハウスのまわりには、**車椅子でも一周できる通路**を実際につくっています。"
++            "ワールドでも同じ幅で通路をつくれば、「この幅で本当に通れるか」を仮想空間で確かめられます。"
++        )
++
++    st.subheader("4つのコース：自分に合うところから")
++    st.dataframe(COURSES, width="stretch", hide_index=True)
++    st.caption("どのコースも、つくる前に①〜③を通ります。コース0だけでも、企画・地図・文章がそろった立派な作品です。")
++
++    st.subheader("チームの役割：得意なことで参加する")
++    st.dataframe(ROLES, width="stretch", hide_index=True)
++    st.info("1〜3人のチームがおすすめです。1人で全部やる必要はありません。"
++            "「何を担当して、どう協力したか」は、そのまま活動報告書に書ける材料になります。")
++
++# ═════════════════════════════════════════════
++# 1. 計算する
++# ═════════════════════════════════════════════
++with tabs[1]:
++    st.header("① 計算する：現実の寸法を、Unity の数字に直す")
++    st.markdown(
++        "Unity では **1 = 1m** と決めておくと、現実の寸法をそのまま使えます。"
++        "ただし、最初から置ける形はそれぞれ大きさが決まっているので、**かけ算・わり算で「倍率（Scale）」を出す**必要があります。"
++    )
++    base = pd.DataFrame([
++        ("Cube（立方体）", "1m × 1m × 1m", "(幅, 高さ, 奥行き)", "高さ ÷ 2"),
++        ("Plane（板）", "10m × 10m（厚さなし）", "(幅 ÷ 10, 1, 奥行き ÷ 10)", "0"),
++        ("Cylinder（円柱）", "直径1m・高さ2m", "(直径, 高さ ÷ 2, 直径)", "高さ ÷ 2"),
++    ], columns=["形", "最初の大きさ", "Scale の求め方", "Position Y（中心の高さ）"])
++    st.dataframe(base, width="stretch", hide_index=True)
++    st.caption("Position Y を「高さ ÷ 2」にするのは、Unity の位置が物体の**中心**を指しているからです。0 のままだと半分が地面に埋まります。")
++
++    st.subheader("練習：畑の板をつくる")
++    p1, p2, p3 = st.columns(3)
++    pw = p1.number_input("畑の幅 m", 1.0, 100.0, 8.0, 0.5, key="mv_pw")
++    pd_ = p2.number_input("畑の奥行き m", 1.0, 100.0, 12.0, 0.5, key="mv_pd")
++    with p3:
++        st.metric("面積", f"{pw * pd_:.0f} ㎡")
++    st.markdown(
++        f"Plane は 10m × 10m なので、Scale は **X = {pw} ÷ 10 = {pw/10:g}**、"
++        f"**Z = {pd_} ÷ 10 = {pd_/10:g}**、Y = 1 になります。"
++    )
++
++    st.subheader("確かめ：アバターはドアを通れる？ 通路を通れる？")
++    q1, q2, q3, q4 = st.columns(4)
++    av_h = q1.number_input("アバターの身長 m", 0.5, 2.5, 1.6, 0.05, key="mv_avh")
++    door_h = q2.number_input("工房の入口の高さ m", 0.5, 4.0, 1.9, 0.05, key="mv_door")
++    wc_w = q3.number_input("車椅子が通れる幅の目安 m", 0.5, 2.0, 0.9, 0.05, key="mv_wc")
++    path_w = q4.number_input("ワールドの通路の幅 m", 0.3, 5.0, 1.0, 0.1, key="mv_path")
++    r1, r2 = st.columns(2)
++    with r1:
++        if door_h - av_h >= 0.1:
++            st.success(f"入口はアバターより {door_h - av_h:.2f} m 高い → 通れます")
++        else:
++            st.error(f"入口とアバターの差が {door_h - av_h:.2f} m → 頭がぶつかります。入口を高くしましょう")
++    with r2:
++        if path_w >= wc_w:
++            st.success(f"通路 {path_w} m ≥ 目安 {wc_w} m → 車椅子でも通れる幅です")
++        else:
++            st.warning(f"通路 {path_w} m < 目安 {wc_w} m → 実際の畑の通路と同じ幅まで広げましょう")
++    st.caption("車椅子の幅の目安は、実際に畑でつくっている通路の幅に合わせて入れ直してください。")
++
++    st.subheader("確かめ：アバターのファイルは重すぎない？")
++    v1, v2 = st.columns([1, 2])
++    vrm_mb = v1.number_input("書き出した VRM ファイルの大きさ MB", 0.0, 500.0, 18.0, 1.0, key="mv_vrm")
++    limit = v1.number_input("上限の目安 MB", 1.0, 200.0, 30.0, 1.0, key="mv_vrm_lim",
++                            help="Vket Cloud のアバターは 30MB 以下が推奨（最新の上限は公式で確認）")
++    with v2:
++        ratio = vrm_mb / limit if limit else 0
++        st.progress(min(ratio, 1.0), text=f"上限の {ratio*100:.0f}%")
++        if ratio > 1:
++            st.error("重すぎます。VRoid Studio の書き出し設定で、ポリゴン数やテクスチャの大きさを減らしましょう。")
++        else:
++            st.success("大丈夫です。")
++        st.caption("Vket Cloud で使うアバターは **VRM 0.x** で書き出します（VRM 1.0 はアップロードできない場合があります）。")
++
++# ═════════════════════════════════════════════
++# 2. 可視化する
++# ═════════════════════════════════════════════
++with tabs[2]:
++    st.header("② 可視化する：地図と3Dで下見する")
++    st.markdown(
++        "下の表がワールドの**設計図**です。数字を書きかえると、地図と3Dプレビューがすぐ変わります。"
++        "行を足せば、自分の考えた建物や看板も置けます。"
++    )
++    with st.expander("📌 表の書き方", expanded=False):
++        st.markdown(
++            "- **名前（英数字）**：Unity に付ける名前。**日本語は使わない**（書き出しのエラーの原因になります）\n"
++            "- **形**：Cube／Plane／Cylinder のどれか\n"
++            "- **X・Z**：真上から見た中心の位置（m）。X は右がプラス、Z は奥がプラス\n"
++            "- **幅・奥行き・高さ**：m。円柱は幅＝直径\n"
++            "- **色**：`#e8c872` のような6けたの色コード"
++        )
++    st.session_state["mv_world"] = st.data_editor(
++        st.session_state["mv_world"], num_rows="dynamic", width="stretch", key="mv_world_ed",
++        column_config={
++            "形": st.column_config.SelectboxColumn(options=["Cube", "Plane", "Cylinder"], required=True),
++            "X": st.column_config.NumberColumn(format="%.1f"),
++            "Z": st.column_config.NumberColumn(format="%.1f"),
++        },
++    )
++    world = clean_world(st.session_state["mv_world"])
++
++    bad = [n for n in world["名前（英数字）"] if not NAME_OK.match(n)]
++    dup = world["名前（英数字）"][world["名前（英数字）"].duplicated()].tolist()
++    if bad:
++        st.error("英数字以外の名前があります：" + "、".join(bad) + "（英字で始め、英数字と _ だけにしてください）")
++    if dup:
++        st.warning("同じ名前が2つ以上あります：" + "、".join(sorted(set(dup))))
++
++    view2d, view3d = st.columns(2)
++    with view2d:
++        st.markdown("##### 🗺️ 真上から見た地図")
++        fig = go.Figure()
++        for _, r in world.iterrows():
++            x0, x1 = r["X"] - r["幅"]/2, r["X"] + r["幅"]/2
++            z0, z1 = r["Z"] - r["奥行き"]/2, r["Z"] + r["奥行き"]/2
++            if r["形"] == "Cylinder":
++                fig.add_shape(type="circle", x0=x0, x1=x1, y0=z0, y1=z1, layer="below",
++                              fillcolor=r["色"], line=dict(color="#555", width=1))
++            else:
++                fig.add_shape(type="rect", x0=x0, x1=x1, y0=z0, y1=z1, fillcolor=r["色"], layer="below",
++                              opacity=0.55 if r["形"] == "Plane" else 0.9, line=dict(color="#555", width=1))
++        others = world[world["形"] != "Plane"]
++        big = others[others["幅"] * others["奥行き"] >= 4]     # 大きいものは中に名前
++        small = others[others["幅"] * others["奥行き"] < 4]   # 小さいものは上に小さく
++        fig.add_trace(go.Scatter(x=big["X"], y=big["Z"], mode="text", text=big["日本語ラベル"],
++                                 textfont=dict(size=11, color="#222"), hoverinfo="text"))
++        fig.add_trace(go.Scatter(x=small["X"], y=small["Z"] + small["奥行き"] / 2, mode="text",
++                                 text=small["日本語ラベル"], textposition="top center",
++                                 textfont=dict(size=9, color="#333"), hoverinfo="text"))
++        if not world.empty:
++            fig.update_xaxes(title="X（m）", range=[(world["X"] - world["幅"]/2).min() - 1,
++                                                    (world["X"] + world["幅"]/2).max() + 1])
++            fig.update_yaxes(title="Z（m）", range=[(world["Z"] - world["奥行き"]/2).min() - 1,
++                                                    (world["Z"] + world["奥行き"]/2).max() + 1],
++                             scaleanchor="x", scaleratio=1)
++        fig.update_layout(height=460, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
++                          plot_bgcolor="#fafafa")
++        st.plotly_chart(fig, width="stretch")
++    with view3d:
++        st.markdown("##### 🧊 3Dプレビュー（ドラッグで回せます）")
++        fig3 = go.Figure()
++        for _, r in world.iterrows():
++            fig3.add_trace(box_mesh(r["X"], r["Z"], r["幅"], r["奥行き"],
++                                    0.02 if r["形"] == "Plane" else r["高さ"], r["色"],
++                                    r["日本語ラベル"] or r["名前（英数字）"],
++                                    y0=-0.02 if r["形"] == "Plane" else 0.0))
++        fig3.update_layout(
++            height=460, margin=dict(l=0, r=0, t=0, b=0), showlegend=False,
++            scene=dict(aspectmode="data", xaxis_title="X", yaxis_title="Z", zaxis_title="高さ",
++                       camera=dict(eye=dict(x=1.2, y=-1.6, z=1.0))),
++        )
++        st.plotly_chart(fig3, width="stretch")
++
++    st.subheader("🦽 通れるかチェック：建物どうしのすき間")
++    wc = st.session_state.get("mv_wc", 0.9)
++    obst = world[(world["形"] != "Plane") & (world["高さ"] >= 0.5)].reset_index(drop=True)
++    pairs = []
++    for a in range(len(obst)):
++        for b in range(a + 1, len(obst)):
++            g = gap(obst.loc[a], obst.loc[b])
++            if g < max(wc * 2, 2.0):  # 近いものだけ表示
++                pairs.append({
++                    "A": obst.loc[a, "日本語ラベル"], "B": obst.loc[b, "日本語ラベル"],
++                    "すき間 m": round(g, 2),
++                    "判定": "❌ 重なっている" if g < 0 else ("⚠️ 車椅子は通れない" if g < wc else "✅ 通れる"),
++                })
++    if pairs:
++        st.dataframe(pd.DataFrame(pairs).sort_values("すき間 m"), width="stretch", hide_index=True)
++    else:
++        st.caption("近くに並んでいる建物はありません。")
++    st.caption(f"高さ0.5m以上のものを「通れない障害物」とし、①の目安幅 {wc} m と比べています。")
++
++    st.subheader("🧱 Unity に入れる数字（配置表）")
++    ut = unity_table(world)
++    st.dataframe(ut, width="stretch", hide_index=True)
++    st.caption("Unity の Hierarchy で「＋ → 3D Object → 形」を選び、Inspector の Transform に、この表の数字を入れていきます。")
++    d1, d2 = st.columns(2)
++    d1.download_button("配置表をCSVで保存（Unity 作業用）", sg.safe_csv(ut), "metaverse_unity_layout.csv", "text/csv")
++    d2.download_button("設計図をCSVで保存（このページに読み込み直せる）", sg.safe_csv(world),
++                       "metaverse_world_plan.csv", "text/csv")
++    up = st.file_uploader("保存した設計図のCSVを読み込む", type="csv", key="mv_world_up")
++    if up is not None:
++        _df = sg.read_csv_safely(up, page="metaverse", kind="world", encoding="utf-8-sig")
++        if _df is not None and set(WORLD_COLS) <= set(_df.columns):
++            st.session_state["mv_world"] = _df[WORLD_COLS]
++            st.success("読み込みました。表を確認してください。")
++        elif _df is not None:
++            st.error("列の名前が違います。このページで保存した設計図のCSVを使ってください。")
++
++# ═════════════════════════════════════════════
++# 3. ことばを置く（文系の主役）
++# ═════════════════════════════════════════════
++with tabs[3]:
++    st.header("✍️ ことばを置く：看板と案内役のセリフ")
++    st.markdown(
++        "ワールドの印象を決めるのは、建物よりも**ことば**です。"
++        "初めて来た人が、**看板を1枚10秒で読めるか**を、数字で確かめてから置きましょう。"
++    )
++
++    st.subheader("① 看板の文章をつくる")
++    st.session_state["mv_signs"] = st.data_editor(
++        st.session_state["mv_signs"], num_rows="dynamic", width="stretch", key="mv_signs_ed",
++        column_config={"本文": st.column_config.TextColumn(width="large")},
++    )
++    s1, s2, s3 = st.columns(3)
++    max_chars = s1.slider("本文の文字数の上限", 30, 200, 80, 10, key="mv_maxc",
++                          help="1秒に読める文字数を8字前後とすると、10秒で80字くらい（目安）")
++    max_sent = s2.slider("一文の長さの上限（字）", 20, 80, 40, 5, key="mv_maxs")
++    max_kanji = s3.slider("漢字の割合の上限 %", 10, 60, 35, 5, key="mv_maxk")
++
++    rows = []
++    for _, r in st.session_state["mv_signs"].fillna("").iterrows():
++        m = read_check(r["本文"])
++        hints = []
++        if m["文字数"] > max_chars:
++            hints.append("長い→2枚に分ける")
++        if m["いちばん長い文"] > max_sent:
++            hints.append("文を切る")
++        if m["漢字の割合%"] > max_kanji:
++            hints.append("ひらがなに開く")
++        rows.append({"見出し": r["見出し"], **m, "読む時間の目安 秒": round(m["文字数"] / 8, 1),
++                     "判定": "✅ 読みやすい" if not hints else "⚠️ " + "・".join(hints)})
++    if rows:
++        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
++    st.caption("上限の値は、このページでの目安です。読む人（小学生・お年寄り・外国の人）に合わせて変えてみましょう。"
++               "実際に友だちに読んでもらい、かかった秒数を測ると、もっと確かになります。")
++
++    names = set(clean_world(st.session_state["mv_world"])["名前（英数字）"])
++    missing = [p for p in st.session_state["mv_signs"]["置き場所（名前）"].fillna("") if p and p not in names]
++    if missing:
++        st.warning("設計図にない置き場所があります：" + "、".join(missing) + "（② の表の名前と同じにしてください）")
++
++    st.subheader("② 案内役アバターのセリフ（会話の分かれ道）")
++    st.session_state["mv_guide"] = st.data_editor(
++        st.session_state["mv_guide"], num_rows="dynamic", width="stretch", key="mv_guide_ed",
++        column_config={"セリフ": st.column_config.TextColumn(width="large")},
++    )
++    guide = st.session_state["mv_guide"].fillna("")
++    scenes = list(guide["場面"])
++    if scenes:
++        st.markdown("##### ▶ 試しに話してみる")
++        cur = st.session_state.get("mv_scene", scenes[0])
++        if cur not in scenes:
++            cur = scenes[0]
++        row = guide[guide["場面"] == cur].iloc[0]
++        with st.chat_message("assistant", avatar="🧑‍🌾"):
++            st.write(row["セリフ"])
++        nexts = [s.strip() for s in str(row["次に選べる場面（／で区切る）"]).split("／") if s.strip()]
++        cols = st.columns(max(len(nexts), 1) + 1)
++        for col, nx in zip(cols, nexts):
++            if col.button(nx, key=f"mv_go_{cur}_{nx}"):
++                if nx in scenes:
++                    st.session_state["mv_scene"] = nx
++                    st.rerun()
++                else:
++                    st.warning(f"「{nx}」という場面がありません。表に行を足してください。")
++        if cols[-1].button("↺ 最初から", key="mv_go_reset"):
++            st.session_state["mv_scene"] = scenes[0]
++            st.rerun()
++        unreachable = set(scenes[1:]) - {s.strip() for v in guide["次に選べる場面（／で区切る）"]
++                                         for s in str(v).split("／")}
++        if unreachable:
++            st.caption("どこからも行けない場面があります：" + "、".join(unreachable))
++
++    st.download_button(
++        "看板とセリフをCSVで保存",
++        sg.safe_csv(pd.concat([
++            st.session_state["mv_signs"].assign(種類="看板"),
++            guide.rename(columns={"場面": "見出し", "セリフ": "本文"}).assign(種類="セリフ"),
++        ], ignore_index=True)),
++        "metaverse_texts.csv", "text/csv",
++    )
++    with st.expander("💡 ことばづくりのヒント"):
++        st.markdown(
++            "- **主語と述語をはっきり**：「これは〇〇です」「〇〇が△△します」。文字だけの世界では、短い言葉ほど誤解されます。\n"
++            "- **数字を1つ入れる**：「6月に収穫」「約96㎡」。具体的な数字があると、覚えてもらいやすくなります。\n"
++            "- **敬語をそろえる**：案内役は「です・ます」で統一。あいさつと、おわりのお礼を必ず入れる。\n"
++            "- **英語版もつくる**：看板の見出しだけでも英語を添えると、ワールドに来る人の幅が広がります。"
++        )
++
++# ═════════════════════════════════════════════
++# 4. つくる手順
++# ═════════════════════════════════════════════
++with tabs[4]:
++    st.header("🛠️ つくる手順")
++    st.caption("手順の元資料：HICS 広島情報専門学校「教職員対象パソコン活用研修会」（R07/08/04・05）。画面やバージョンは更新されることがあります。")
++
++    with st.expander("コースA：VRoid Studio で案内役アバターをつくる（コードなし）", expanded=True):
++        st.markdown(
++            f"1. [VRoid Studio]({VROID_URL}) をインストール（Windows／macOS）\n"
++            "2. 「新規作成」→ 用意された体・髪型・服を選び、色や大きさを変える\n"
++            "3. 身長を ① で決めた値に合わせる（ドアや通路のチェックと同じ値に）\n"
++            "4. 右上の「↑（書き出し）」→「VRM エクスポート」\n"
++            "   - **Vket Cloud で使う → VRM 0.x を選ぶ**\n"
++            "   - Unity（コースC）だけで使う → VRM 1.0 でもOK\n"
++            "5. ファイルの大きさを ① の「重すぎない？」で確かめる\n\n"
++            "⚠️ 実在の人の顔写真を貼ったり、アニメやゲームのキャラクターそっくりにしたりしないこと。"
++            "**オリジナルの案内役**をつくりましょう。"
++        )
++
++    with st.expander("コースB：Unity で畑を組み立て、Vket Cloud で公開する（コードなし）"):
++        st.markdown(
++            f"**準備（先生と一緒に）**\n"
++            f"1. [Unity Hub]({UNITY_URL}) をインストールし、Unity アカウントでサインイン\n"
++            "2. **Vket Cloud SDK が対応している Unity のバージョン**を、Vket Cloud 公式の手順で確認して入れる\n"
++            "   - Unity Hub で**「セキュリティ警告」が付いたバージョンは使わない**。同じ系列（2022.3 など）で警告の付かない新しいものを選び、SDK が対応しているか公式で確かめる\n"
++            "3. 新しいプロジェクトを作る。**プロジェクト名と保存場所に日本語を入れない**（例：`C:\\Unity\\VketCloud`）\n"
++            "4. 編集 → プロジェクト設定 → パッケージマネージャーに SDK の情報を登録し、"
++            "ウィンドウ → パッケージマネージャーから **VketCloud SDK Install Wizard** で導入\n"
++            "5. メニューに「VketCloudSDK」が出たら、Login でサインイン\n\n"
++            "**組み立て**\n"
++            "6. ② で保存した**配置表CSV**を見ながら、Hierarchy の「World」の中に Cube・Plane・Cylinder を置き、"
++            "Transform に数字を入れる\n"
++            "7. Assets で右クリック → Create → Material で色をつくり、物体にドラッグ\n"
++            "8. 登場位置（SpawnPoint の座標）を合わせ、テスト出力して自分のワールドを歩いてみる\n\n"
++            "**公開**\n"
++            "9. Vket Cloud 公式サイト → ワールド管理 → ワールドを追加（カスタマイズ許可「許可しない」、成人向け「いいえ」）\n"
++            "10. Unity の VketCloudSDK → Upload to Remote Server\n"
++            "11. 公開設定は、**③ の公開前チェックが全部終わるまで「非公開」か「限定公開」のまま**"
++        )
++
++    with st.expander("コースC：「麦の穂あつめ」ゲームにする（C# を写して改造）"):
++        st.markdown(
++            "研修資料の「コイン集めゲーム」を、**畑で麦の穂を集めるゲーム**に置きかえたものです。"
++            "プログラムは**写すところから**。意味は右のコメント（// の後ろ）を読めば分かるようにしてあります。\n\n"
++            "**準備**\n"
++            "1. Asset Store で **Starter Assets – Third Person Character Controller**（Unity公式・無料）をインポート\n"
++            f"2. [UniVRM]({UNIVRM_URL}) の `.unitypackage` をインポート（メニューに「VRM1」などが出ればOK）\n"
++            "3. StarterAssets → ThirdPersonController → Scenes → **Playground** を開く\n"
++            "4. コースAでつくった VRM を **PlayerArmature** にドラッグ → Inspector の Avatar を **humanoid** に\n"
++            "5. PlayerArmature の Tag が **Player** になっているか確認\n\n"
++            "**麦の穂をつくる**\n"
++            "6. 3D Object → Capsule を置き、名前を `Wheat` に。Scale を (0.2, 0.4, 0.2) くらいにして、黄色のマテリアルをつける\n"
++            "7. Collider の **Is Trigger にチェック**、Add Component で **Rigidbody** を追加（Use Gravity は外すと浮いたままになります）\n"
++            "8. Add Component → New Script → 名前 `Wheat` で、下の Wheat.cs を入力\n"
++            "9. 完成した Wheat を Assets にドラッグして**プレハブ化** → 畑に好きなだけ並べる"
++        )
++        st.code(
++            """using UnityEngine;
++
++// ファイル名とクラス名は同じにする（Wheat.cs ↔ Wheat）
++public class Wheat : MonoBehaviour
++{
++    void Start()
++    {
++        GameFlow.wheat_count = GameFlow.wheat_count + 1;   // 置いた穂の数を1つ増やす
++    }
++
++    private void OnTriggerEnter(Collider other)
++    {
++        if (other.CompareTag("Player"))                    // ぶつかったのがプレイヤーなら
++        {
++            GameFlow.wheat_count = GameFlow.wheat_count - 1; // 残りの数を1つ減らして
++            Destroy(gameObject);                           // この穂を消す
++        }
++    }
++}
++""",
++            language="csharp",
++        )
++        st.markdown(
++            "**クリア表示をつくる**\n"
++            "10. ＋ → UI → Canvas、その中に UI → Text - TextMeshPro（初回は Import TMP Essentials）。"
++            "名前を `clear`、文字を「収穫完了！パンを焼こう」に\n"
++            "11. ＋ → Create Empty で空のオブジェクトをつくり、名前を `GameFlow` に。"
++            "New Script → `GameFlow` で、下の GameFlow.cs を入力\n"
++            "12. Inspector の **Clear_msg** に `clear`、**Player** に `PlayerArmature` をドラッグしてつなぐ"
++        )
++        st.code(
++            """using UnityEngine;
++
++public class GameFlow : MonoBehaviour
++{
++    public static int wheat_count;   // 畑に残っている穂の数（Wheat.cs から増減する）
++    public GameObject clear_msg;     // クリアのときに出す文字
++    public GameObject player;        // プレイヤー（PlayerArmature）
++    private Vector3 start_pos;       // スタート地点を覚えておく
++    private bool fall_flg;           // 落ちたかどうか
++
++    private void Awake()
++    {
++        wheat_count = 0;
++        clear_msg.SetActive(false);              // 最初はクリアの文字を隠す
++        start_pos = player.transform.position;   // スタート地点を記録
++        fall_flg = false;
++    }
++
++    void Update()
++    {
++        if (wheat_count <= 0)
++        {
++            clear_msg.SetActive(true);           // 全部集めたらクリア表示
++        }
++
++        if (player.transform.position.y < -20 && fall_flg == false)
++        {
++            player.SetActive(false);             // 畑から落ちたら、いったん止めて
++            fall_flg = true;
++        }
++        else if (fall_flg == true)
++        {
++            player.transform.position = start_pos;  // スタート地点に戻す
++            player.SetActive(true);
++            fall_flg = false;
++        }
++    }
++}
++""",
++            language="csharp",
++        )
++        st.markdown(
++            "**改造アイデア（1つ選んで挑戦）**\n"
++            "- 残りの穂の数を画面に出す（TextMeshPro に `wheat_count` を表示）\n"
++            "- 集め終わるまでの**秒数**を測って表示する → 友だちの記録を表にして比べる（②可視化につながる）\n"
++            "- 穂を取るたびに、看板の豆知識（✍️ でつくった文章）を1つ表示する"
++        )
++
++    with st.expander("🔧 うまくいかないとき"):
++        st.dataframe(pd.DataFrame([
++            ("Unity Hub がオフラインと出る", "Wi-Fi に接続 → Hub を×で閉じ、タスクトレイの Unity アイコンも終了 → 起動し直す → 右上でサインイン確認"),
++            ("インストールが途中で止まる", "空き容量を確認（Unity と Visual Studio で 15〜20GB 程度）。インストール先を `C:\\Unity` など短い場所に"),
++            ("学校のネットワークで失敗する", "フィルタで止まることがある。先生に相談し、許可された回線で試す"),
++            ("書き出し（出力）でエラー", "オブジェクト名・プロジェクト名・保存場所に日本語が入っていないか確認"),
++            ("アバターが動かない／Tポーズのまま", "PlayerArmature の Avatar が humanoid になっているか確認"),
++            ("穂に触れても消えない", "Is Trigger のチェック、Rigidbody の追加、PlayerArmature の Tag が Player か確認"),
++            ("プロジェクトを持ち帰ったら壊れた", "プロジェクトのフォルダを zip に圧縮してから USB やクラウドへ。USB の中で直接開かない"),
++        ], columns=["こまったこと", "やってみること"]), width="stretch", hide_index=True)
++        st.caption("作業を終えるときは、File → Save（シーン）と File → Save Project（全体）の両方を必ず行う。")
++
++# ═════════════════════════════════════════════
++# 5. 判断する
++# ═════════════════════════════════════════════
++with tabs[5]:
++    st.header("③ 自分の条件で判断する")
++
++    st.subheader("コース診断：自分の環境で、どこまでつくる？")
++    j1, j2, j3 = st.columns(3)
++    pc = j1.selectbox("使えるパソコン", ["Windows", "Mac", "Chromebook・タブレットだけ", "まだ決まっていない"], key="mv_pc")
++    disk = j1.number_input("空き容量 GB", 0, 2000, 30, 5, key="mv_disk")
++    admin = j2.radio("ソフトを入れてよい？（管理者の許可）", ["はい", "いいえ・分からない"], key="mv_admin")
++    weeks = j2.slider("使える期間（週）", 1, 12, 4, key="mv_weeks")
++    code_ok = j3.radio("プログラムを写すのは？", ["やってみたい", "できれば避けたい"], key="mv_code")
++    team = j3.number_input("チームの人数", 1, 6, 2, key="mv_team")
++
++    reasons = []
++    if pc in ("Chromebook・タブレットだけ", "まだ決まっていない"):
++        course = "0 紙とブラウザ"
++        reasons.append("VRoid Studio と Unity は Windows か Mac が必要です")
++    elif admin != "はい":
++        course = "0 紙とブラウザ"
++        reasons.append("ソフトのインストールに許可が必要です。先に先生・家の人に相談しましょう")
++    elif disk < 20 or weeks < 2:
++        course = "A アバター"
++        reasons.append("Unity には 15〜20GB 程度の空き容量と、2週間以上の時間がほしいです" if disk < 20
++                       else "2週間未満なら、アバターづくりまでで十分な作品になります")
++    elif code_ok == "やってみたい" and weeks >= 5:
++        course = "C ゲーム化"
++        reasons.append("時間・容量ともに足りています。お手本を写すところから始めましょう")
++    else:
++        course = "B ワールド"
++        reasons.append("プログラムなしで、ワールドを組み立てて公開するところまで行けます")
++    if team == 1 and course in ("B ワールド", "C ゲーム化"):
++        reasons.append("1人の場合は、看板とセリフを先に完成させ、建物は3つまでに絞ると完走しやすいです")
++
++    picked = COURSES[COURSES["コース"] == course].iloc[0]
++    with st.container(border=True):
++        st.markdown(f"### おすすめ：コース{course}")
++        st.write(picked["やること"])
++        for r in reasons:
++            st.markdown(f"- {r}")
++        st.caption(f"目安：{picked['目安']}／プログラミング：{picked['プログラミング']}")
++
++    st.subheader("8週間の進め方（例）")
++    st.dataframe(pd.DataFrame([
++        ("1〜2週", "テーマ決め・役割分担・紙に地図を描く", "🧭・②の表"),
++        ("3〜4週", "寸法を計算し、配置表と看板の文章を完成させる", "①・②・✍️"),
++        ("5週", "アバター・ワールドを組み立てる", "🛠️"),
++        ("6週", "友だち3〜5人に試してもらい、迷った場所・かかった時間を記録", "📝"),
++        ("7週", "直して、もう一度試す（直す前と後を比べる）", "②・✍️"),
++        ("8週", "公開前チェック → 3分のデモ動画と報告書づくり", "③・📝"),
++    ], columns=["時期", "やること", "使うタブ"]), width="stretch", hide_index=True)
++
++    st.subheader("🔐 公開前チェック：全部 ✅ になるまで「非公開」のまま")
++    st.caption("メタバースは、知らない人も見る場所です。公開してから消しても、画像や情報は残ることがあります。")
++    checks = [
++        ("本名・学校名・住んでいる地域が、ワールド名・看板・アバター名に入っていない", "個人情報"),
++        ("実在の人の顔写真を、アバターや看板に貼っていない", "肖像権"),
++        ("アニメ・ゲームのキャラクターやブランドのロゴ・デザインをまねしていない", "著作権・商標"),
++        ("配布されているアセット・音楽・画像は、利用条件（ライセンス）を読んで守っている", "著作権"),
++        ("VRoid Studio・Vket Cloud の利用規約を読んだ", "規約"),
++        ("写真から場所が分からないようにした（畑の住所・近所の家・車のナンバーが写っていない）", "個人情報"),
++        ("看板とセリフを、チーム以外の人にも読んでもらった", "ことば"),
++        ("先生（または家の人）が、公開してよいと確認した", "大人の確認"),
++    ]
++    done = 0
++    for i, (text, cat) in enumerate(checks):
++        if st.checkbox(f"【{cat}】{text}", key=f"mv_chk_{i}"):
++            done += 1
++    st.progress(done / len(checks), text=f"{done} / {len(checks)}")
++    if done == len(checks):
++        st.success("公開してよい状態です。最初は「限定公開」で、URLを知っている人だけに見てもらうのがおすすめです。")
++    else:
++        st.warning("まだ公開しません。ワールドは「非公開」のままにしておきましょう。")
++
++    with st.expander("🛡️ ワールドの中で人と話すときのルール"):
++        st.markdown(
++            "- **相手がだれかは分からない**前提で話す。まわりの人も見ている・聞いている\n"
++            "- **お金の話・住んでいる地域の話**が出たら、会話をやめてその場を離れる\n"
++            "- 文字だけの会話は誤解されやすい。「だれが・何が」をはっきり書く\n"
++            "- いやなことを言われたら、言い返さずに離れて、ブロック・通報し、先生や家の人に話す\n"
++            "- ほかの人のアバターのふりをしない。人の作品のまわりで騒がない（美術館と同じマナー）"
++        )
++
++# ═════════════════════════════════════════════
++# 6. まとめる
++# ═════════════════════════════════════════════
++with tabs[6]:
++    st.header("📝 まとめる：試してもらい、数字で直す")
++    st.markdown("作品は**直した回数**で強くなります。友だちに歩いてもらい、迷った場所と時間を記録しましょう。")
++
++    st.subheader("① 試してもらった記録")
++    if "mv_test" not in st.session_state:
++        st.session_state["mv_test"] = pd.DataFrame([
++            ("直す前", "Aさん", 210, "工房の入口", 3),
++            ("直す前", "Bさん", 260, "看板が読めない", 2),
++            ("直した後", "Cさん", 150, "", 4),
++            ("直した後", "Dさん", 170, "", 5),
++        ], columns=["回", "試した人（仮名）", "1周の時間 秒", "迷った・困った場所", "分かりやすさ（1〜5）"])
++    st.session_state["mv_test"] = st.data_editor(st.session_state["mv_test"], num_rows="dynamic",
++                                                 width="stretch", key="mv_test_ed")
++    tdf = st.session_state["mv_test"].copy()
++    for c in ["1周の時間 秒", "分かりやすさ（1〜5）"]:
++        tdf[c] = pd.to_numeric(tdf[c], errors="coerce")
++    summ = tdf.groupby("回", sort=False).agg(人数=("試した人（仮名）", "count"),
++                                            平均時間=("1周の時間 秒", "mean"),
++                                            分かりやすさ平均=("分かりやすさ（1〜5）", "mean")).round(1)
++    if not summ.empty:
++        sc1, sc2 = st.columns([1, 1])
++        sc1.dataframe(summ, width="stretch")
++        figb = go.Figure(go.Bar(x=summ.index, y=summ["平均時間"], marker_color="#8a4b12",
++                                text=summ["平均時間"], textposition="outside"))
++        figb.update_layout(height=260, margin=dict(l=10, r=10, t=20, b=10), yaxis_title="平均時間 秒")
++        sc2.plotly_chart(figb, width="stretch")
++        st.caption("人数が少ないので、差は「目安」です。言いすぎず、「今回の数人では〜だった」と書きましょう。")
++    st.download_button("試した記録をCSVで保存", sg.safe_csv(st.session_state["mv_test"]),
++                       "metaverse_test_log.csv", "text/csv")
++
++    st.subheader("② 活動報告書の下書き（200字）")
++    st.caption("総合型選抜の活動報告書は、200字前後の欄が多く使われます。数字を1つ以上入れると説得力が増します。")
++    w1, w2 = st.columns(2)
++    theme = w1.text_input("何をつくった？", "三原の小麦畑を実寸で再現したメタバース", key="mv_w_theme")
++    role = w1.text_input("自分の役割は？", "看板の文章と案内役のセリフ", key="mv_w_role")
++    issue = w2.text_input("何に困った？", "初めて来た人が工房の入口で迷った", key="mv_w_issue")
++    fix = w2.text_input("どう直した？", "看板の文を短くし、入口までの道に矢印を置いた", key="mv_w_fix")
++    nums = ""
++    if summ is not None and len(summ) >= 2 and summ["平均時間"].notna().sum() >= 2:
++        a, b = summ["平均時間"].iloc[0], summ["平均時間"].iloc[-1]
++        nums = f"その結果、1周の平均時間は{a:.0f}秒から{b:.0f}秒になった。"
++    learn = st.text_input("何を学んだ？", "読む人の立場で言葉を選ぶ大切さ", key="mv_w_learn")
++    draft = (f"私は{theme}を、チームで制作した。担当は{role}である。"
++             f"試してもらうと、{issue}。そこで{fix}。{nums}"
++             f"この経験から、{learn}を学んだ。")
++    st.text_area("下書き（自由に書きかえてください）", draft, height=140, key=f"mv_draft_{hash(draft)}")
++    n = len(re.sub(r"\s", "", draft))
++    st.progress(min(n / 200, 1.0), text=f"{n} / 200 字")
++    if n > 200:
++        st.warning("200字をこえています。言葉を短くしましょう。")
++    st.caption("この下書きは「型」です。最後は必ず自分の言葉で書き直してください。")
++
++    with st.expander("🎤 面接で聞かれそうなこと"):
++        st.markdown(
++            "- なぜ「実寸」にしたのですか？ → 通路の幅など、現実の課題を仮想空間で確かめるため\n"
++            "- 看板の文字数はどう決めましたか？ → 読む時間の目安から上限を決め、実際に読んでもらって確かめた\n"
++            "- 何人に試してもらいましたか？ 結果は言い切れますか？ → 人数と、言える範囲を正直に答える\n"
++            "- もう一度つくるなら、何を変えますか？"
++        )
++
++# ═════════════════════════════════════════════
++# 7. 記録
++# ═════════════════════════════════════════════
++with tabs[7]:
++    st.header("📂 制作の記録")
++    st.caption("スクリーンショット・デモ動画・企画書（PDF）を `assets/metaverse/YYYYMMDD/` に置くと、ここに表示されます。")
++    mg.media_section(ASSETS / "metaverse", key="metaverse", title="📂 メタバース工房の記録・資料")
+-- 
+2.43.0
+
