@@ -1,7 +1,7 @@
 From f6ab8838ba707759ba138466e94c7282f284349d Mon Sep 17 00:00:00 2001
 From: Kusukaya <nayukaya9@gmail.com>
 Date: Wed, 14 Oct 2026 16:03:49 +0900
-Subject: [PATCH 1/2] =?UTF-8?q?=E4=B8=AD=E5=AD=A6=E7=90=86=E7=A7=91?=
+Subject: [PATCH 1/3] =?UTF-8?q?=E4=B8=AD=E5=AD=A6=E7=90=86=E7=A7=91?=
  =?UTF-8?q?=E3=80=8C=E9=87=8F=E3=81=AE=E8=A8=88=E7=AE=97=E3=80=8D=E3=83=9A?=
  =?UTF-8?q?=E3=83=BC=E3=82=B8=E3=82=92=E8=BF=BD=E5=8A=A0=EF=BC=88=E3=82=AA?=
  =?UTF-8?q?=E3=83=BC=E3=83=A0=E3=81=AE=E6=B3=95=E5=89=87=E3=83=BB=E6=BF=83?=
@@ -721,7 +721,7 @@ index 0000000..48eea8c
 From e51dc5234e5a42f3f318044a62283a4471eb4add Mon Sep 17 00:00:00 2001
 From: Kusukaya <nayukaya9@gmail.com>
 Date: Wed, 14 Oct 2026 16:25:06 +0900
-Subject: [PATCH 2/2] =?UTF-8?q?=E5=AD=A6=E6=A0=A1=E5=90=8D=E3=81=AE?=
+Subject: [PATCH 2/3] =?UTF-8?q?=E5=AD=A6=E6=A0=A1=E5=90=8D=E3=81=AE?=
  =?UTF-8?q?=E8=A1=A8=E8=A8=98=E3=82=92=E3=80=8C=E3=81=A8=E3=81=82=E3=82=8B?=
  =?UTF-8?q?=E4=B8=AD=E5=AD=A6=E6=A0=A1=E3=80=8D=E3=81=AB=E5=A4=89=E6=9B=B4?=
 MIME-Version: 1.0
@@ -747,6 +747,437 @@ index 48eea8c..53f74bc 100644
               "この「量の計算」の単元です。ここでつまずくと「自分は理科（数式）ができない」という自己像ができ、"
               "高1の文理選択で理系を選ばなくなる、という流れが起こりえます。")
  
+-- 
+2.43.0
+
+
+From 9da5b5cc5f3fa57de09028f894c46504dda8abeb Mon Sep 17 00:00:00 2001
+From: Kusukaya <nayukaya9@gmail.com>
+Date: Wed, 14 Oct 2026 18:01:58 +0900
+Subject: [PATCH 3/3] =?UTF-8?q?=E6=A8=AA=E8=BB=B8=E3=82=BF=E3=83=96?=
+ =?UTF-8?q?=E3=82=92=E3=80=8C=E4=BD=BF=E3=81=86=E4=BB=95=E4=BA=8B=E3=81=8C?=
+ =?UTF-8?q?=E6=83=B3=E5=83=8F=E3=81=A7=E3=81=8D=E3=82=8B=E3=80=8D=E5=AD=A6?=
+ =?UTF-8?q?=E3=81=B3=E3=81=AB=E4=BD=9C=E3=82=8A=E7=9B=B4=E3=81=99=EF=BC=88?=
+ =?UTF-8?q?5=E5=8E=9F=E5=89=87=E3=83=BB=E4=BB=95=E4=BA=8B=E3=83=9F?=
+ =?UTF-8?q?=E3=83=83=E3=82=B7=E3=83=A7=E3=83=B3=E3=83=BB=E8=87=AA=E5=88=86?=
+ =?UTF-8?q?=E3=81=AE=E8=A8=80=E8=91=89=E3=81=A7=E3=81=A4=E3=81=AA=E3=81=90?=
+ =?UTF-8?q?=E3=83=BB=E8=BA=AB=E8=BF=91=E3=81=AA=E5=A4=A7=E4=BA=BA=E3=81=AB?=
+ =?UTF-8?q?=E8=81=9E=E3=81=8F=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DsVRLT5c8cofVVcdgc4MV2
+---
+ README.md                                     |   8 +-
+ chugaku_rika.py                               | 135 ++++++++++++++---
+ ...17\343\201\256\350\250\210\347\256\227.py" | 137 ++++++++++++++----
+ 3 files changed, 226 insertions(+), 54 deletions(-)
+
+diff --git a/README.md b/README.md
+index 4846869..a50effe 100644
+--- a/README.md
++++ b/README.md
+@@ -206,4 +206,10 @@ conda create が "Solving environment" のまま長時間止まる場合は、An
+ 
+ - 3単元とも「比べる量 = もとにする量 × 割合」（y = a x）の同じ形として示し、つまずきの原因を「何を もと にするか」に絞っています。
+ - 各単元の「つまずきチェック」は、典型的な間違い方（分母を水だけにする、電力と電圧をかける、出ていった気体と残った固体を取り違える）を見分けて言葉で返します。
+-- 横軸タブ：TIMSS 2023 中学2年（理科が得意 日本45%／国際51%、理科を使う職業につきたい 日本27%／国際58%）を示し、単元ごとに「得意だと思う（1〜4）」の前後と「使う仕事」を記録してCSVで保存できます。
++- 横軸タブ「使う仕事が想像できる」：TIMSS 2023 中学2年で日本と国際平均の差がいちばん大きいのは「理科を使う職業につきたい」（日本27%／国際58%）。職業名を並べるのではなく、次の5原則で「誰かがこの計算で何を決めているか」を体験させます。
++  1. 仕事の名前ではなく「判断の場面」を見せる（各単元の冒頭「この計算で決めている人」）
++  2. 間違えたときの代償を見せる（火災・肥料焼け・苦いパン・不良品）
++  3. 本物の数字と道具を使う（タップの定格表示・液肥ラベル・重曹の袋）
++  4. 関連は生徒が自分の言葉で書く（Hulleman & Harackiewicz, 2009）
++  5. 身近な大人の仕事の中に見つける（Harackiewicz et al., 2012）
++- 仕事ミッション6題（パン職人・農家・パン工房の店主・電気工事士・菓子職人・品質管理）は `chugaku_rika.MISSIONS` で増やせます。自己評価は「得意だと思う」「使う仕事が想像できる」の2項目を前後で記録し、CSVで保存できます。
+diff --git a/chugaku_rika.py b/chugaku_rika.py
+index bb6766a..59bf85f 100644
+--- a/chugaku_rika.py
++++ b/chugaku_rika.py
+@@ -230,7 +230,7 @@ def diagnose_residue(answer_g: float, soda_g: float, ratio: float = NAHCO3_RESID
+ 
+ 
+ # ─────────────────────────────────────────────
+-# 横軸：自己効力感と将来像（TIMSS 2023 中学2年・理科、出典はページに明記）
++# 横軸：「使う仕事が想像できる」学び（TIMSS 2023 中学2年・理科、出典はページに明記）
+ # ─────────────────────────────────────────────
+ TIMSS2023_G8_SCIENCE = pd.DataFrame([
+     ("理科の勉強は楽しい", 70, 79),
+@@ -238,31 +238,107 @@ TIMSS2023_G8_SCIENCE = pd.DataFrame([
+     ("理科を使う職業につきたい", 27, 58),
+ ], columns=["質問", "日本_%", "国際平均_%"])
+ 
+-JOBS = pd.DataFrame([
+-    ("オームの法則・電力", "パン職人", "オーブンと発酵器を同じ回路で使えるか、ブレーカーが落ちない組み合わせを決める"),
+-    ("オームの法則・電力", "電気工事士・設備保全", "機器の定格と配線の太さから、安全に使える範囲を決める"),
+-    ("オームの法則・電力", "スマート農業・ロボット", "ハウスのヒーターやセンサー、ロボットの電源容量を見積もる"),
+-    ("質量パーセント濃度", "パン職人", "塩・砂糖・酵母をベーカーズ％で配合し、仕込み量を変えても同じ味にする"),
+-    ("質量パーセント濃度", "農家", "液肥を何倍に薄めるか、ぼかし肥料の水分を何％にするかを決める"),
+-    ("質量パーセント濃度", "看護師・薬剤師", "点滴や消毒液の濃度を計算する"),
+-    ("化学変化と質量", "パン・菓子職人", "重曹やベーキングパウダーの量から、ふくらみと苦みのバランスを決める"),
+-    ("化学変化と質量", "食品の品質管理（HACCP）", "加熱前後の重さの変化から、水分や工程の異常を見つける"),
+-    ("化学変化と質量", "環境・エネルギー", "燃料を燃やしたときに出る二酸化炭素の量を見積もる"),
+-], columns=["単元", "仕事", "使う場面"])
++# 「使う仕事が想像できる」学びの設計原則（ページの横軸タブで表示）
++DESIGN_PRINCIPLES = pd.DataFrame([
++    ("① 仕事の名前ではなく「判断の場面」を見せる",
++     "「パン職人が使う」で終わらせず、「誰が・いつ・何を決めるために」計算するかまで言う",
++     "各単元の冒頭「この計算で決めている人」／仕事ミッションの「決めること」"),
++    ("② 間違えたときの代償を見せる",
++     "計算を間違えると現場で何が起きるか（火災・肥料焼け・苦いパン・不良品）",
++     "③ 判断の警告表示／仕事ミッションの「間違えると」"),
++    ("③ 本物の数字と道具を使う",
++     "教科書の数値ではなく、タップの定格表示・液肥のラベル・重曹の袋の表示を読む",
++     "機器の表や配合は、実物の表示に書き換えて使える"),
++    ("④ 関連は生徒が自分の言葉で書く",
++     "教師が「役に立つよ」と言うより、生徒自身が自分の生活とのつながりを書くほうが効く",
++     "「自分の言葉でつなぐ」欄（3つの空欄を埋める）"),
++    ("⑤ 身近な大人の仕事の中に見つける",
++     "遠い職業ではなく、家族・地域の大人が実際にこの計算をしているかを聞く",
++     "「身近な大人に聞く」インタビューシート"),
++], columns=["原則", "やり方", "このページでは"])
++
++# 仕事ミッション：仕事の人になって、その仕事で実際に決める数値を計算する
++MISSIONS = [
++    {"仕事": "🥖 パン職人", "単元": "質量パーセント濃度",
++     "場面": "明日は強力粉 3 kg で食パンを仕込む。塩はベーカーズ％で 2%（粉に対して）と決めている。",
++     "問い": "計量する塩は何 g？", "答え": 60.0, "単位": "g",
++     "式": "塩 = 粉 3000 g × 2 / 100",
++     "決めること": "仕込みの量が毎日変わっても、同じ味のパンを焼く",
++     "間違えると": "分母を生地全体にすると塩が足りず、味がぼやけ、生地もだれる"},
++    {"仕事": "🌱 農家", "単元": "質量パーセント濃度",
++     "場面": "液肥を 500 倍に薄めて、10 L のジョウロで 2 杯分（20 L）作る。",
++     "問い": "原液は何 mL 要る？", "答え": 40.0, "単位": "mL",
++     "式": "原液 = 20000 mL ÷ 500",
++     "決めること": "苗に与える肥料の濃さ",
++     "間違えると": "濃すぎると根が傷む（肥料焼け）。薄すぎると育たず、収穫が遅れる"},
++    {"仕事": "🏪 パン工房の店主", "単元": "オームの法則・電力",
++     "場面": "1300 W のオーブンを使いながら、同じタップ（定格 15 A・100 V）で電気ケトルも使いたい。",
++     "問い": "ケトルは何 W までなら定格を超えない？", "答え": 200.0, "単位": "W",
++     "式": "15 A × 100 V = 1500 W、1500 − 1300",
++     "決めること": "どの機器を同じタップで同時に使うか",
++     "間違えると": "タップやコードが過熱して火災の原因になる。営業中にブレーカーが落ちる"},
++    {"仕事": "⚡ 電気工事士", "単元": "オームの法則・電力",
++     "場面": "ハウスの育苗ヒーター（抵抗 20 Ω）を 100 V につなぐ。",
++     "問い": "流れる電流は何 A？", "答え": 5.0, "単位": "A",
++     "式": "I = V ÷ R = 100 ÷ 20",
++     "決めること": "配線の太さとブレーカーの容量",
++     "間違えると": "細すぎる配線は熱をもち、ハウスの火災につながる"},
++    {"仕事": "🧁 菓子職人", "単元": "化学変化と質量",
++     "場面": "重曹は加熱すると、加熱前の質量の約 0.26 倍の二酸化炭素を出す。蒸しパン1台で 1.3 g の二酸化炭素を出したい。",
++     "問い": "重曹は何 g 入れる？", "答え": 5.0, "単位": "g",
++     "式": "重曹 = 1.3 g ÷ 0.26（比例の逆算）",
++     "決めること": "ふくらみと苦みのバランス",
++     "間違えると": "多すぎると炭酸ナトリウムが残って苦く黄色くなる。少なすぎるとふくらまない"},
++    {"仕事": "🔍 食品の品質管理（HACCP）", "単元": "化学変化と質量",
++     "場面": "焼く前の生地 600 g が、焼き上がりで 540 g になった。工場では焼いて減った割合（焼減率）を毎回記録している。",
++     "問い": "焼減率は何 %？", "答え": 10.0, "単位": "%",
++     "式": "(600 − 540) ÷ 600 × 100",
++     "決めること": "オーブンの温度や焼き時間に異常がないか",
++     "間違えると": "いつもと違う値を見逃すと、生焼けや焦げの不良品が出荷される"},
++]
++
++
++def check_mission(answer: float, mission: dict) -> bool:
++    """仕事ミッションの答え合わせ（2% までの誤差は正解とみなす）。"""
++    return bool(np.isclose(answer, mission["答え"], rtol=0.02))
++
++
++# 生徒が自分の言葉で関連を書くための型（④）
++UTILITY_TEMPLATE = ("この計算は、（　誰が　）が（　何を決める　）ときに使う。"
++                    "間違えると（　何が起きる　）。自分の生活では（　どこで　）使えそう。")
++
++# 身近な大人に聞く（⑤）
++INTERVIEW_QUESTIONS = [
++    "仕事で、何かを「何倍」「何％」「何 g あたり」で決めることはありますか？",
++    "そのとき、どんな計算をしていますか？（電卓・表・頭の中など）",
++    "その計算を間違えると、何が起きますか？",
++    "中学の理科・数学で習ったことで、仕事で使っているものはありますか？",
++]
+ 
+ EFFICACY_LEVELS = {1: "まったくそう思わない", 2: "あまりそう思わない", 3: "ややそう思う", 4: "とてもそう思う"}
++EFFICACY_ITEMS = {  # 列の接頭辞 → 質問（TIMSS の2項目に対応させる）
++    "得意": "この計算は得意だと思う",
++    "仕事": "この計算を使う仕事が想像できる",
++}
+ 
+ 
+ def efficacy_summary(rec: pd.DataFrame) -> pd.DataFrame:
+-    """自己評価（前・後）を単元ごとにまとめ、「得意だ（3以上）」の割合を出す。"""
+-    if rec.empty:
+-        return pd.DataFrame(columns=["単元", "前_平均", "後_平均", "前_得意%", "後_得意%"])
+-    g = rec.groupby("単元")
+-    return pd.DataFrame({
+-        "前_平均": g["前"].mean(), "後_平均": g["後"].mean(),
+-        "前_得意%": g["前"].apply(lambda s: (s >= 3).mean() * 100),
+-        "後_得意%": g["後"].apply(lambda s: (s >= 3).mean() * 100),
+-    }).reset_index()
++    """自己評価（前・後）を単元×質問ごとにまとめ、平均と「肯定（3以上）」の割合を出す。
++
++    rec の列：単元, 得意_前, 得意_後, 仕事_前, 仕事_後
++    """
++    rows = []
++    for key, label in EFFICACY_ITEMS.items():
++        for when in ("前", "後"):
++            col = f"{key}_{when}"
++            if col not in rec:
++                continue
++            for unit, s in rec.groupby("単元")[col]:
++                s = s.dropna()
++                if s.empty:
++                    continue
++                rows.append((unit, label, when, float(s.mean()), float((s >= 3).mean() * 100)))
++    return pd.DataFrame(rows, columns=["単元", "質問", "時点", "平均", "肯定%"])
+ 
+ 
+ # ─────────────────────────────────────────────
+@@ -306,7 +382,18 @@ if __name__ == "__main__":
+     oc = open_vs_closed(2.0)
+     assert np.isclose(oc.loc[1, "加熱後_g"], 2.0) and oc.loc[0, "加熱後_g"] < 2.0
+     # 横軸
+-    rec = pd.DataFrame({"単元": ["A", "A"], "前": [2, 3], "後": [3, 4]})
+-    s = efficacy_summary(rec)
+-    assert np.isclose(s["前_得意%"].iloc[0], 50) and np.isclose(s["後_得意%"].iloc[0], 100)
++    rec = pd.DataFrame({"単元": ["A", "A"], "得意_前": [2, 3], "得意_後": [3, 4],
++                        "仕事_前": [1, 1], "仕事_後": [3, 3]})
++    s = efficacy_summary(rec).set_index(["質問", "時点"])
++    assert np.isclose(s.loc[(EFFICACY_ITEMS["得意"], "前"), "肯定%"], 50)
++    assert np.isclose(s.loc[(EFFICACY_ITEMS["仕事"], "後"), "肯定%"], 100)
++    # 仕事ミッションの答えが式と合っているか
++    m = {x["仕事"]: x for x in MISSIONS}
++    assert check_mission(3000 * 2 / 100, m["🥖 パン職人"])
++    assert check_mission(stock_ml_for(20_000, 500), m["🌱 農家"])
++    assert check_mission(TAP_LIMIT_A * VOLTAGE - 1300, m["🏪 パン工房の店主"])
++    assert check_mission(VOLTAGE / 20, m["⚡ 電気工事士"])
++    assert check_mission(1.3 / round(NAHCO3_CO2, 2), m["🧁 菓子職人"])
++    assert check_mission((600 - 540) / 600 * 100, m["🔍 食品の品質管理（HACCP）"])
++    assert not check_mission(1.3 / 0.26 * 2, m["🧁 菓子職人"])
+     print("chugaku_rika: all checks passed")
+diff --git "a/pages/6_\360\237\247\252_\344\270\255\345\255\246\347\220\206\347\247\221_\351\207\217\343\201\256\350\250\210\347\256\227.py" "b/pages/6_\360\237\247\252_\344\270\255\345\255\246\347\220\206\347\247\221_\351\207\217\343\201\256\350\250\210\347\256\227.py"
+index 53f74bc..f178b5e 100644
+--- "a/pages/6_\360\237\247\252_\344\270\255\345\255\246\347\220\206\347\247\221_\351\207\217\343\201\256\350\250\210\347\256\227.py"
++++ "b/pages/6_\360\237\247\252_\344\270\255\345\255\246\347\220\206\347\247\221_\351\207\217\343\201\256\350\250\210\347\256\227.py"
+@@ -31,6 +31,8 @@ import social as sn  # noqa: E402  SNSのURLは social.py で一括管理
+ UPDATED = "2026-10-14"
+ TIMSS_URL = "https://www.nippon.com/ja/japan-data/h02233/"
+ MEXT_TIMSS_URL = "https://www.mext.go.jp/content/20241223-mxt_chousa02-000039290-9.pdf"
++HULLEMAN_URL = "https://sparq.stanford.edu/sites/g/files/sbiybj19021/files/media/file/hulleman_harackiewicz_2009_-_promoting_interest_performance_in_high_school_science_classes.pdf"
++PARENT_URL = "https://journals.sagepub.com/doi/10.1177/0956797611435530"
+ UNITS = ["⚡ オームの法則", "🧂 質量パーセント濃度", "🔥 化学変化と質量"]
+ OK, NG = "#2e7d5b", "#c0392b"
+ 
+@@ -45,6 +47,14 @@ def check_box(key: str, question: str, diagnose, *args, unit: str = "", step: fl
+             (st.success if ok else st.warning)(msg)
+ 
+ 
++def deciders(unit: str) -> None:
++    """単元の冒頭：この計算で「何を決めている人」がいるか（原則①）。"""
++    ms = [m for m in cr.MISSIONS if m["単元"] == unit]
++    lines = "\n".join(f"- **{m['仕事']}**：{m['決めること']}" for m in ms)
++    st.info(f"👷 **この計算で決めている人**\n{lines}\n\n"
++            "→ 「🌱 横軸：使う仕事が想像できる」タブの仕事ミッションで、その人になって計算できます。")
++
++
+ with st.sidebar:
+     st.header("🧪 中学理科 量の計算")
+     st.caption("3つの単元は、どれも「比べる量 = もとにする量 × 割合」。")
+@@ -53,10 +63,10 @@ with st.sidebar:
+     sn.buttons("で相談する", stacked=True)
+ 
+ st.title("🧪 中学理科「量の計算」── パン工房と畑で使う")
+-st.caption("① 現象を計算する → ② 数値を可視化する → ③ 自分の条件で判断する　＋　横軸：得意だと思えるか・使う仕事が浮かぶか")
++st.caption("① 現象を計算する → ② 数値を可視化する → ③ 自分の条件で判断する　＋　横軸：使う仕事が想像できるか")
+ 
+ tab_flow, tab_a, tab_b, tab_c, tab_x = st.tabs([
+-    "🧭 なぜ中学でつまずくか", *UNITS, "🌱 横軸：得意だと思えるか",
++    "🧭 なぜ中学でつまずくか", *UNITS, "🌱 横軸：使う仕事が想像できる",
+ ])
+ 
+ # ═════════════════════════════════════════════
+@@ -73,6 +83,9 @@ with tab_flow:
+     st.info("**つまずきの多くは理科ではなく「何を もと（100%・1）にするか」の取り違え**です。"
+             "濃度の分母を水だけにする、電力と電圧をかけてしまう、残った質量と出ていった気体を取り違える──"
+             "各タブの「つまずきチェック」は、この間違い方を見分けて言葉で返します。")
++    st.info("**もう一つの段差は「何に使うのか分からない」こと。** 国際調査では、日本の中2で"
++            "「理科を使う職業につきたい」は27%（国際平均58%）。そこで各単元は「誰が・何を決めるために」"
++            "計算するかから始め、横軸タブで仕事の人になって数値を決める体験をします。")
+ 
+     st.subheader("1単元あたりの流れ（50分の例）")
+     st.dataframe(pd.DataFrame([
+@@ -80,7 +93,7 @@ with tab_flow:
+         ("10–25分", "① 現象を計算する", "式に入れる前に「もとにする量」を指でさす"),
+         ("25–35分", "② 数値を可視化する", "グラフの傾きが「割合 a」だと確かめる"),
+         ("35–45分", "③ 自分の条件で判断する", "自分の家・畑の数値を入れて決める。答えは人によって違う"),
+-        ("45–50分", "横軸：自己評価", "「得意だと思うか」「使う仕事を1つ書けるか」を前後で記録"),
++        ("45–50分", "横軸：使う仕事", "仕事ミッションを1つ解き、「自分の言葉でつなぐ」を書く。前後の自己評価を記録"),
+     ], columns=["時間", "段", "ポイント"]), width="stretch", hide_index=True)
+     st.caption("※ 計算は教育用に単純化しています。電気機器は本体の表示、肥料は製品の説明書、"
+                "食品は衛生上の基準に必ず従ってください。")
+@@ -90,6 +103,7 @@ with tab_flow:
+ # ═════════════════════════════════════════════
+ with tab_a:
+     st.header("⚡ オーブンと発酵器、同じタップにつないでいい？")
++    deciders("オームの法則・電力")
+     st.write(f"家のコンセントは **{cr.VOLTAGE:.0f} V**。1つのタップにつないだ機器は **並列** なので、"
+              f"電流は **足し算** になります。テーブルタップの定格は一般に **{cr.TAP_LIMIT_A:.0f} A** です。")
+ 
+@@ -156,6 +170,7 @@ with tab_a:
+ # ═════════════════════════════════════════════
+ with tab_b:
+     st.header("🧂 パン屋の「塩2%」と、理科の「2%」は同じ？")
++    deciders("質量パーセント濃度")
+     st.write("理科の質量パーセント濃度は **溶液全体** が分母。パン屋のベーカーズ％は **粉** が分母。"
+              "「何を100とするか」で、同じ材料でも％が変わります。")
+ 
+@@ -210,6 +225,7 @@ with tab_b:
+ # ═════════════════════════════════════════════
+ with tab_c:
+     st.header("🔥 蒸しパンの重曹は、どこへ行く？")
++    deciders("化学変化と質量")
+     st.write("重曹（炭酸水素ナトリウム）を加熱すると、**炭酸ナトリウム（固体）が残り**、"
+              "**二酸化炭素と水蒸気が出ていきます**。出ていく二酸化炭素が生地をふくらませ、"
+              "残る炭酸ナトリウムが多すぎると苦みや黄ばみの原因になります。")
+@@ -265,10 +281,10 @@ with tab_c:
+     st.text_area("自分の判断：自分の蒸しパンには重曹を何 g 入れる？　ふくらみと苦みのどちらを優先した？", key="judge_c")
+ 
+ # ═════════════════════════════════════════════
+-# 横軸：自己効力感と将来像
++# 横軸：「使う仕事が想像できる」学び
+ # ═════════════════════════════════════════════
+ with tab_x:
+-    st.header("🌱 文理選択を決めるのは、点数より「得意だと思えるか」「使う仕事が浮かぶか」")
++    st.header("🌱 「使う仕事が想像できる」学びにする")
+     st.subheader("国際調査（TIMSS 2023）中学2年・理科")
+     t = cr.TIMSS2023_G8_SCIENCE.melt(id_vars="質問", var_name="", value_name="%")
+     t[""] = t[""].str.replace("_%", "")
+@@ -281,39 +297,102 @@ with tab_x:
+         "- 日本の中2は「楽しい」が70%あっても、「得意だ」は45%、"
+         "**「理科を使う職業につきたい」は27%で、国際平均（58%）の半分以下**。\n"
+         "- 差がいちばん大きいのは「楽しさ」ではなく **「使う仕事が想像できるか」**。"
+-        "だからこのページでは、どの計算も「パン工房・畑で、誰が、何を決めるために使うか」から始めます。"
+     )
+     st.caption(f"出典：IEA 国際数学・理科教育動向調査（TIMSS 2023）。数値は nippon.com の記事より（{TIMSS_URL}）。"
+                f"詳細は文部科学省・国立教育政策研究所の公表資料（{MEXT_TIMSS_URL}）を参照。")
+ 
+-    st.subheader("この計算を使う仕事")
+-    st.dataframe(cr.JOBS, width="stretch", hide_index=True)
+-
+-    st.subheader("自分の記録：前と後で「得意だと思える」は変わった？")
+-    st.caption("授業の前と後に、各単元について「この計算は得意だと思う」を1〜4で記録します（氏名は書かない）。")
+-    if "eff_rec" not in st.session_state:
+-        st.session_state.eff_rec = pd.DataFrame({"単元": UNITS, "前": [2] * 3, "後": [2] * 3,
+-                                                 "使う仕事を1つ": [""] * 3})
++    # ── なぜ「職業一覧」では足りないか ──
++    st.subheader("「この計算を使う職業」の一覧を見せるだけでは足りない")
++    st.write("「看護師も使います」「エンジニアも使います」と名前を並べても、"
++             "生徒の頭には **その人が何をしている場面** が浮かびません。想像できるのは、"
++             "**誰かが、ある数値を決めるために計算し、間違えると困ることが起きる** という場面まで見えたときです。"
++             "このページでは、次の5つの原則で組み立てています。")
++    st.dataframe(cr.DESIGN_PRINCIPLES, width="stretch", hide_index=True)
++    with st.expander("原則④⑤の根拠（研究の例）"):
++        st.markdown(
++            f"- **④ 生徒が自分で書く**：米国の高校理科で、学んだ内容と自分の生活とのつながりを生徒自身に"
++            f"書かせる課題を続けたところ、成績への見通しが低かった生徒ほど、興味と成績が伸びたと報告されています"
++            f"（Hulleman & Harackiewicz, 2009, *Science*）。[論文PDF]({HULLEMAN_URL})\n"
++            f"- **⑤ 身近な大人**：保護者に「理数がどう役に立つか」を伝える資料を渡したところ、"
++            f"子どもの高校での理数科目の履修が増えたと報告されています"
++            f"（Harackiewicz et al., 2012, *Psychological Science*）。[論文]({PARENT_URL})\n"
++            "- どちらも米国での研究です。日本の中学生に同じ効果があるかは、確かめる対象です。"
++        )
++
++    # ── 💼 仕事ミッション ──
++    st.subheader("💼 仕事ミッション：その仕事の人になって、数値を決める")
++    st.caption("仕事を1つ選び、その人が実際に決めている数値を計算します。正解すると「何を決めているか」「間違えると何が起きるか」が開きます。")
++    names = [m["仕事"] for m in cr.MISSIONS]
++    pick = st.radio("仕事を選ぶ", names, horizontal=True, key="mission_pick")
++    m = cr.MISSIONS[names.index(pick)]
++    with st.container(border=True):
++        st.markdown(f"**{m['仕事']}**（{m['単元']}）")
++        st.write(m["場面"])
++        st.markdown(f"**問い：{m['問い']}**")
++        ans = st.number_input(f"答え（{m['単位']}）", value=None, step=1.0, format="%.2f",
++                              key=f"mission_{names.index(pick)}")
++        if ans is not None:
++            if cr.check_mission(ans, m):
++                st.success(f"正解。{m['式']} = {m['答え']:g} {m['単位']}")
++                c1, c2 = st.columns(2)
++                c1.info(f"**この数値で決めること**\n\n{m['決めること']}")
++                c2.error(f"**間違えると**\n\n{m['間違えると']}")
++                st.session_state.setdefault("mission_done", set()).add(pick)
++            else:
++                st.warning("もう一度。「何を もと（100%・1）にするか」を確かめよう。")
++                with st.expander("ヒント：式"):
++                    st.write(m["式"])
++    done = st.session_state.get("mission_done", set())
++    st.progress(len(done) / len(names), text=f"クリアした仕事：{len(done)} / {len(names)}")
++
++    # ── ✍️ 自分の言葉でつなぐ ──
++    st.subheader("✍️ 自分の言葉でつなぐ（原則④）")
++    st.caption("先生や画面が「役に立つ」と言うより、自分で書いたつながりのほうが残ります。単元ごとに空欄を埋めてください。")
++    st.markdown(f"> {cr.UTILITY_TEMPLATE}")
++    for i, unit in enumerate(UNITS):
++        st.text_area(unit, key=f"utility_{i}", height=80,
++                     placeholder="例：この計算は、パン職人が明日の塩の量を決めるときに使う。"
++                                 "間違えると味がぼやける。自分の生活では、カルピスを薄めるときに使えそう。")
++
++    # ── 🗣️ 身近な大人に聞く ──
++    st.subheader("🗣️ 身近な大人に聞く（原則⑤）")
++    st.caption("家族や地域の大人に、次の4つを聞いてきます。名前は書かず、仕事の種類だけ書きます。")
++    job_kind = st.text_input("聞いた人の仕事の種類（例：介護職、農家、事務、料理人）", key="iv_job")
++    iv_answers = [st.text_area(f"Q{i + 1}. {q}", key=f"iv_{i}", height=70)
++                  for i, q in enumerate(cr.INTERVIEW_QUESTIONS)]
++    sheet = "身近な大人に聞く（中学理科 量の計算）\n" + f"仕事の種類：{job_kind}\n\n" + "\n\n".join(
++        f"Q{i + 1}. {q}\nA. {a}" for i, (q, a) in enumerate(zip(cr.INTERVIEW_QUESTIONS, iv_answers)))
++    utility = "\n\n".join(f"{u}\n{st.session_state.get(f'utility_{i}', '')}" for i, u in enumerate(UNITS))
++    st.download_button("「自分の言葉でつなぐ」と聞き取りを保存（テキスト）",
++                       (f"自分の言葉でつなぐ\n{cr.UTILITY_TEMPLATE}\n\n{utility}\n\n{'─' * 20}\n{sheet}").encode("utf-8-sig"),
++                       "使う仕事_ワークシート.txt", "text/plain")
++
++    # ── 📈 前後の記録 ──
++    st.subheader("📈 前と後で、何が変わった？")
++    st.caption("授業の前と後に、単元ごとに2つの質問を1〜4で記録します（氏名は書かない）。"
++               "TIMSS の「得意だ」「理科を使う職業」に対応させています。")
++    st.caption("、".join(f"{k}＝{v}" for k, v in cr.EFFICACY_LEVELS.items()))
++    if "eff_rec2" not in st.session_state:
++        st.session_state.eff_rec2 = pd.DataFrame({"単元": UNITS, "得意_前": [2] * 3, "得意_後": [2] * 3,
++                                                  "仕事_前": [2] * 3, "仕事_後": [2] * 3})
++    num = dict(min_value=1, max_value=4, step=1)
+     rec = st.data_editor(
+-        st.session_state.eff_rec, key="eff_ed", width="stretch", hide_index=True,
++        st.session_state.eff_rec2, key="eff_ed2", width="stretch", hide_index=True,
+         column_config={
+             "単元": st.column_config.TextColumn(disabled=True),
+-            "前": st.column_config.NumberColumn("前（1〜4）", min_value=1, max_value=4, step=1),
+-            "後": st.column_config.NumberColumn("後（1〜4）", min_value=1, max_value=4, step=1),
++            "得意_前": st.column_config.NumberColumn("得意だと思う（前）", **num),
++            "得意_後": st.column_config.NumberColumn("得意だと思う（後）", **num),
++            "仕事_前": st.column_config.NumberColumn("使う仕事が想像できる（前）", **num),
++            "仕事_後": st.column_config.NumberColumn("使う仕事が想像できる（後）", **num),
+         })
+-    st.caption("、".join(f"{k}＝{v}" for k, v in cr.EFFICACY_LEVELS.items()))
+-    rec_ok = rec.dropna(subset=["前", "後"])
+-    if not rec_ok.empty:
+-        summ = cr.efficacy_summary(rec_ok)
+-        fig_e = go.Figure()
+-        for _, row in summ.iterrows():
+-            fig_e.add_trace(go.Scatter(x=["前", "後"], y=[row["前_平均"], row["後_平均"]],
+-                                       mode="lines+markers", name=row["単元"]))
+-        fig_e.update_layout(height=280, margin=dict(t=10, b=10), yaxis=dict(range=[0.8, 4.2], dtick=1,
+-                            title="得意だと思う（1〜4）"))
++    summ = cr.efficacy_summary(rec)
++    if not summ.empty:
++        fig_e = px.line(summ, x="時点", y="平均", color="単元", facet_col="質問", markers=True,
++                        category_orders={"時点": ["前", "後"]})
++        fig_e.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
++        fig_e.update_layout(height=300, margin=dict(t=30, b=10), legend_title="")
++        fig_e.update_yaxes(range=[0.8, 4.2], dtick=1, title="")
+         st.plotly_chart(fig_e, width="stretch")
+-        n_jobs = int((rec["使う仕事を1つ"].fillna("").str.strip() != "").sum())
+-        st.write(f"使う仕事を書けた単元：**{n_jobs} / {len(rec)}**")
+     st.download_button("自己評価をCSVで保存", sg.safe_csv(rec), "自己評価_量の計算.csv", "text/csv")
+     st.caption("研究で使う場合は、前後比較だけでは「授業のおかげ」とは言えません（慣れ・時期の影響が混ざる）。"
+                "「⚖️ 比べて確かめる探究」と同じく、比べる相手の置き方を先に決めます。")
 -- 
 2.43.0
 
