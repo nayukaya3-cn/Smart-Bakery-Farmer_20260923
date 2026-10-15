@@ -52,7 +52,7 @@ jobs:
 
       - name: レポートを保存（ログ記録）
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-report-${{ github.run_id }}
           path: |
