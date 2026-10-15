@@ -11,10 +11,19 @@
 必要な Secrets（Streamlit Community Cloud → アプリ → Settings → Secrets）は
 secrets.toml.example を参照。
 """
+import sys
+from pathlib import Path
+
 import streamlit as st
 
-import security_guard as sg
-from income_structure_tab import render_income_structure_tab
+# income_structure_tab.py はリポジトリ直下に置く想定。
+# pages/ に置いた場合でも動くよう、このファイルのフォルダも探す。
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.append(_HERE)
+
+import security_guard as sg  # noqa: E402
+from income_structure_tab import render_income_structure_tab  # noqa: E402
 
 st.set_page_config(page_title="収入構造（本人のみ）", page_icon="💴", layout="wide")
 
