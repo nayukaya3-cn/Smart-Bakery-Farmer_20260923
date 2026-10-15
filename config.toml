@@ -1,0 +1,12 @@
+# セキュリティ設定（公開アプリ用）
+[server]
+maxUploadSize = 60            # MB。既定の200MBから縮小（大容量ファイルでのサーバー圧迫を防ぐ）
+enableXsrfProtection = true   # クロスサイトリクエストフォージェリ対策（既定値を明示）
+enableCORS = true
+
+[client]
+showErrorDetails = "none"     # 画面にはエラーの詳細を出さない（内部情報の漏えい防止）。詳細はログへ
+toolbarMode = "viewer"        # 閲覧者に開発者メニューを見せない
+
+[browser]
+gatherUsageStats = false

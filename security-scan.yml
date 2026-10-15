@@ -1,0 +1,87 @@
+# 脆弱性スキャン：push・PRのたび＋毎週月曜（日本時間 8:52）
+# 失敗したら Issue を自動で作成（GitHub からメール通知が届く）。レポートは90日間保存。
+name: security-scan
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "52 23 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # 過去のコミットも秘密情報スキャンの対象にする
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 依存ライブラリの既知の脆弱性（pip-audit）
+        id: audit
+        continue-on-error: true
+        run: |
+          pip install -q pip-audit
+          pip-audit -r requirements.txt --desc -f markdown -o pip-audit.md
+          cat pip-audit.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: コードの危険なパターン（bandit）
+        id: bandit
+        continue-on-error: true
+        run: |
+          pip install -q bandit
+          bandit -r . -x ./.git,./.venv -ll -f txt -o bandit.txt
+          tail -20 bandit.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 秘密情報の混入（gitleaks・全履歴）
+        id: gitleaks
+        continue-on-error: true
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks git --redact -v --report-format json --report-path gitleaks.json .
+
+      - name: レポートを保存（ログ記録）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report-${{ github.run_id }}
+          path: |
+            pip-audit.md
+            bandit.txt
+            gitleaks.json
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: 結果の判定とアラーム（Issue作成）
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT: ${{ steps.audit.outcome }}
+          BANDIT: ${{ steps.bandit.outcome }}
+          LEAKS: ${{ steps.gitleaks.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          problems=""
+          [ "$AUDIT"  = "failure" ] && problems="$problems- 依存ライブラリに既知の脆弱性（pip-audit）\n"
+          [ "$BANDIT" = "failure" ] && problems="$problems- コードに中〜高リスクのパターン（bandit）\n"
+          [ "$LEAKS"  = "failure" ] && problems="$problems- **秘密情報（APIキー等）の混入の疑い（gitleaks）→ すぐにキーを無効化**\n"
+          if [ -z "$problems" ]; then echo "✅ 問題なし" >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          echo -e "## ⚠️ 検出\n$problems" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            title="[security] 脆弱性スキャンで問題を検出"
+            body=$(printf "%b\n詳細: %s\n\n対応手順は SECURITY.md の「インシデント対応手順」を参照。" "$problems" "$RUN_URL")
+            gh label create security --color D93F0B --force >/dev/null 2>&1 || true
+            num=$(gh issue list --label security --state open --search "$title in:title" --json number -q '.[0].number')
+            if [ -n "$num" ]; then gh issue comment "$num" --body "$body"; else gh issue create --title "$title" --label security --body "$body"; fi
+          fi
+          exit 1
