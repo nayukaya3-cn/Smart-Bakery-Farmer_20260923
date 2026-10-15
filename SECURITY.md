@@ -65,3 +65,18 @@ ADMIN_TOKEN = "16文字以上のランダムな文字列"  # 🔒セキュリテ
 ## 5. 脆弱性の報告
 
 このアプリの脆弱性に気づいた方は、公開の Issue ではなく、Facebook のメッセージで知らせてください。
+
+## 6. 所有者専用ページ（💴 収入構造）
+
+収入額など個人のお金の情報を扱うため、**Googleログイン＋許可リスト**で本人だけに表示します。
+
+| 層 | しくみ |
+|---|---|
+| 本人確認 | Googleアカウントでログイン（OpenID Connect）。**Googleアカウントの2段階認証が二重認証の役割**を果たす |
+| 許可 | ログインしたメールが Secrets の `OWNER_EMAILS` にあり、Googleで確認済みのときだけ表示 |
+| 設定漏れ | `[auth]` か `OWNER_EMAILS` が無ければ、誰にも表示しない |
+| 実際の金額 | コードには仮置きのみ。実額は Secrets の `[income]` に入れ、リポジトリに残さない |
+| ログ | `owner_login`（INFO）/ `owner_page_denied`（WARNING）。メールアドレスは残さない |
+
+初回設定は `secrets.toml.example` を参照。Google Cloud Console で OAuth クライアント（ウェブアプリ）を作り、
+承認済みリダイレクトURIに `https://smart-bakery-farm.streamlit.app/oauth2callback` を登録します。
