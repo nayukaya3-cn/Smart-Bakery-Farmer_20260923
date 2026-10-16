@@ -1,0 +1,969 @@
+From 9ae821e7b2f3cd2b95112d7295aa0dacd96f3658 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 16 Oct 2026 18:37:55 +0900
+Subject: [PATCH 1/2] =?UTF-8?q?=E6=8E=A2=E7=A9=B6=E3=82=B3=E3=83=BC?=
+ =?UTF-8?q?=E3=83=8A=E3=83=BC=E3=82=92=E8=BF=BD=E5=8A=A0=EF=BC=9A=E3=82=B2?=
+ =?UTF-8?q?=E3=83=BC=E3=83=A0=E7=89=B9=E5=8C=96=E5=9E=8B=E3=83=87=E3=83=BC?=
+ =?UTF-8?q?=E3=82=BF=E5=88=86=E6=9E=90=E3=82=92=E3=83=94=E3=83=9C=E3=83=83?=
+ =?UTF-8?q?=E3=83=88=E3=81=AB=E3=81=97=E3=81=9F=E6=8E=A2=E7=A9=B6=E3=83=9A?=
+ =?UTF-8?q?=E3=83=BC=E3=82=B8?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- pages/12_🎮_探究コーナー.py：集める→指標→探す→確かめる→判断する・試し続けるの6タブ
+- game_lab.py：品質チェック・KPIツリー・ファネル・リテンション・アラート・k-means・PCA・
+  並べ替え検定・ベイズA/B・トンプソン抽出（python game_lab.py で自己チェック）
+- app.py：左メニューに「🎮 探究コーナー」を追加（学校向けの探究は上限6ページのため別まとまり）
+- home.py：学校の先生向けバナーから探究コーナーへのリンク
+- README.md：構成表と探究コーナーの説明
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X715GVE7NE3gxZLTE2fo8Y
+---
+ README.md                                     |  20 +-
+ app.py                                        |   5 +-
+ game_lab.py                                   | 418 ++++++++++++++++++
+ home.py                                       |  11 +-
+ ...63\343\203\274\343\203\212\343\203\274.py" | 398 +++++++++++++++++
+ 5 files changed, 849 insertions(+), 3 deletions(-)
+ create mode 100644 game_lab.py
+ create mode 100644 "pages/12_\360\237\216\256_\346\216\242\347\251\266\343\202\263\343\203\274\343\203\212\343\203\274.py"
+
+diff --git a/README.md b/README.md
+index 7bdb18c..607885f 100644
+--- a/README.md
++++ b/README.md
+@@ -19,12 +19,13 @@ conda create が "Solving environment" のまま長時間止まる場合は、An
+ そこでこのアプリは、**どの段も最大6つ、なるべく4つ前後**に抑えています。7つ目が要るときは、似たものを束ねて1段下に入れます。
+ 上限は `app.py`・`home.py` の `MAX_CATEGORIES = 6` で、超えると起動時に止まって知らせます。
+ 
+-**左メニュー（4つのまとまり）** — `app.py` の `NAV`
++**左メニュー（5つのまとまり）** — `app.py` の `NAV`
+ 
+ | まとまり | ページ |
+ |---|---|
+ | 🌾 スマートパン屋農家 | ホーム |
+ | 🎓 学校向けの探究 | 記録が残る探究／比べて確かめる探究／中学理科 量の計算／メタバース工房 |
++| 🎮 探究コーナー | ゲーム運営の目で見る（ゲーム特化型データ分析を軸にした探究） |
+ | 🔬 研究・実証 | 作業日誌テキスト分析／地元の農業法人での農作業（ファイルを置くと出る）／自給家計簿 |
+ | 🔒 管理 | セキュリティログ（管理者専用） |
+ 
+@@ -49,6 +50,7 @@ conda create が "Solving environment" のまま長時間止まる場合は、An
+ | social.py | Facebook・LinkedIn のURLとボタン（全ページ共通） |
+ | strategy.py | 🧭 10年戦略：フェーズ・判断ゲート・準備チェックリスト |
+ | pages/ | 各ページ（左メニューのどのまとまりに出すかは `app.py` の `NAV` で決める） |
++| game_lab.py | 探究コーナーの計算（来訪ログの品質チェック・KPIツリー・ファネル・リテンション・アラート・k-means・PCA・並べ替え検定・ベイズA/B・トンプソン抽出）。`python game_lab.py` で自己チェック |
+ | compare_lab.py | 比べて確かめる探究の計算（くじ・列単位の比較・並べ替え検定・ブートストラップ・差の差） |
+ | docs/ | 表紙ページ（GitHub Pages）、研究メモ、画面の写真（`docs/img/`） |
+ | media_gallery.py | 画像・動画・PDF・テキスト・ノートブックの表示部品、Colab リンク |
+@@ -249,3 +251,19 @@ CSVは Excel やメモ帳で直接書き足しても構いません（列は `
+ アップロード検査・生成AIの利用上限・CSVの数式インジェクション対策・セキュリティログ（🔒ページ）・
+ 脆弱性スキャンと見張り番（GitHub Actions → Issue で通知）を入れています。
+ 初回設定とインシデント対応手順は [SECURITY.md](SECURITY.md) を参照してください。
++
++## 7. 🎮 探究コーナー（ゲーム特化型データ分析をピボットに）
++ThinkingData『ゲームデータアナリティクス よりよい開発・運営に向けたデータ分析の教科書』（翔泳社）の
++分析の流れを、農園の体験会・直売所の来訪ログに置き換えた探究ページです（`pages/12_🎮_探究コーナー.py`）。
++
++| タブ | ゲームでの考え方 | 農園での問い | 手法 | 書籍の章 |
++|---|---|---|---|---|
++| ① 集める | イベント設計・データプラン | 何を記録すれば分析できるか | データ品質チェック | 4章 |
++| ② 指標にする | 課金率・継続率・チュートリアル突破率 | どこで人が抜け、売上の差はどこから来たか | KPIツリー・ファネル・コホート・アラート | 5・6章 |
++| ③ 探す | プレイヤー分類 | どんなタイプの来訪者がいるか | 相関・k-means・PCA・ベイズの逆読み P(x\|y) | 7.1 |
++| ④ 確かめる | A/Bテスト | チラシA/Bの差は偶然か | 並べ替え検定・ベータ事後分布 | 7.2 |
++| ⑤ 判断する・試し続ける | きめ細やかな運営 | 自分の条件で何をどう試すか | 必要人数の計算・多腕バンディット（強化学習） | 8〜11章 |
++
++- 初期表示は架空データです（実測ではありません）。氏名は扱わず匿名IDだけ。外部の生成AIは呼び出しません。
++- 本ページの文章・データ・計算はこのアプリ独自のもので、書籍の内容の転載ではありません。
++
+diff --git a/app.py b/app.py
+index 22d1ee8..d3491da 100644
+--- a/app.py
++++ b/app.py
+@@ -4,7 +4,7 @@
+ 起動: streamlit run app.py
+   ホームの中身は home.py、各ページは pages/ にあります。
+ 
+-左メニューは「だれが・何のために開くか」で4つに束ねています。
++左メニューは「だれが・何のために開くか」で5つに束ねています。
+   人が一度に見分けられる塊は 4±1（Cowan, 2001）。1つのまとまりも、ページは最大6つまで。
+   ページを足すときは NAV に1行足すだけです（ファイルが無い行は自動で飛ばします）。
+ """
+@@ -32,6 +32,9 @@ NAV = {
+         ("8", "3Dプリンター", "🖨️"),
+         ("10", "AIロボット", "🤖"),
+     ],
++    "🎮 探究コーナー": [
++        ("12", "ゲーム運営の目で見る", "🎮"),
++    ],
+     "🔬 研究・実証": [
+         ("5", "作業日誌テキスト分析", "🔤"),
+         ("2", "地元の農業法人での農作業", "🌾"),
+diff --git a/game_lab.py b/game_lab.py
+new file mode 100644
+index 0000000..f48de84
+--- /dev/null
++++ b/game_lab.py
+@@ -0,0 +1,418 @@
++"""
++ゲーム運営の目で見る ─ 「ゲーム特化型」データ分析を農園の探究に移す計算部品
++
++pages/12_🎮_探究コーナー.py から呼び出します。画面を持たない純粋な関数だけを置き、
++`python game_lab.py` で自己チェック（assert）が走ります。
++
++下敷き：ThinkingData『ゲームデータアナリティクス』（翔泳社）の分析の流れ
++  収集（4章）→ 指標体系（5章）→ 探索的分析（7.1）→ 因果推論とテスト（7.2）
++  → 検証と改善（8〜10章）→ きめ細やかな運営（11章）
++を、「農園の体験会・直売所」に置き換えたもの。
++
++対応表（ゲーム ↔ 農園 ↔ 研究での言い方）
++  プレイヤー         ↔ 来訪者（匿名ID）                ↔ 観測単位
++  チュートリアル突破 ↔ 種まき→収穫→パン焼き の各段     ↔ ファネル（段ごとの残存率）
++  翌日継続率         ↔ 翌月の再来訪率                  ↔ コホート別リテンション
++  課金率・ARPPU      ↔ 購入率・客単価                  ↔ 指標の掛け算分解（KPIツリー）
++  プレイヤー分類     ↔ 来訪の仕方のタイプ               ↔ k-means＋主成分分析（PCA）
++  A/Bテスト          ↔ 案内チラシ2種                    ↔ 並べ替え検定・ベータ分布の事後確率
++  きめ細やかな運営   ↔ 次に勧める体験メニュー           ↔ 多腕バンディット（トンプソン抽出）
++
++方針
++  - 初期表示はすべて架空データ（実測ではありません）。氏名は扱わず、IDだけ。
++  - 外部ライブラリは numpy・pandas だけ（scikit-learn なしで中身が読める実装）。
++"""
++from __future__ import annotations
++
++import numpy as np
++import pandas as pd
++
++# ─────────────────────────────────────────────
++# ① 集める：データプラン（何を・いつ・どの形で記録するか）
++# ─────────────────────────────────────────────
++EVENT_COLS = ["日付", "来訪者ID", "できごと", "経路", "チラシ", "金額"]
++STEPS = ["来訪", "種まき体験", "収穫体験", "パン焼き体験", "購入"]  # ファネルの順
++ROUTES = ["学校", "SNS", "口コミ", "通りがかり"]
++FLYERS = ("A：写真中心", "B：数字中心")
++
++DATA_PLAN = [
++    # (項目, 例, 型, なぜ要るか, 守ること)
++    ("日付", "2026-11-03", "日付", "月ごとの再来訪を数えるため", "時刻までは取らない"),
++    ("来訪者ID", "V0012", "文字", "同じ人の2回目を数えるため", "氏名・連絡先は入れない（対応表は別に鍵付きで保管）"),
++    ("できごと", "収穫体験", "選択肢", "ファネルの段を数えるため", f"選択肢は {'・'.join(STEPS)} に固定"),
++    ("経路", "SNS", "選択肢", "どこから来た人が残るかを見るため", f"選択肢は {'・'.join(ROUTES)} に固定"),
++    ("チラシ", "A：写真中心", "選択肢", "A/Bテストのため（くじで配る）", "受け取ったチラシを本人に選ばせない"),
++    ("金額", "600", "整数（円）", "購入率・客単価を出すため", "購入以外の行は 0"),
++]
++
++
++def sample_events(n_visitors: int = 240, seed: int = 2026) -> pd.DataFrame:
++    """架空の来訪ログ（実測ではありません）。
++
++    来訪者ごとに「最初の月」「経路」「チラシ（くじ）」「関わりの強さ」を決め、
++    ファネルを1段ずつ進むか、翌月以降また来るかを確率で決める。
++    チラシBは収穫体験→パン焼き体験の段だけ少し強い（A/Bタブで見つける“正解”）。
++    """
++    rng = np.random.default_rng(seed)
++    months = pd.period_range("2026-10", "2027-03", freq="M")
++    route_p = np.array([0.30, 0.30, 0.25, 0.15])
++    route_bonus = {"学校": 0.10, "SNS": -0.05, "口コミ": 0.15, "通りがかり": -0.15}
++    route_spend = {"学校": 0.55, "SNS": 1.0, "口コミ": 1.25, "通りがかり": 0.9}
++    rows = []
++    for i in range(n_visitors):
++        vid = f"V{i + 1:04d}"
++        first = int(rng.integers(0, len(months) - 1))
++        route = ROUTES[int(rng.choice(len(ROUTES), p=route_p))]
++        flyer = FLYERS[int(rng.integers(0, 2))]  # くじ
++        engage = float(np.clip(rng.normal(0.5 + route_bonus[route], 0.18), 0.05, 0.95))
++        m = first
++        while m < len(months):
++            day = months[m].to_timestamp() + pd.Timedelta(days=int(rng.integers(0, 27)))
++            d = day.strftime("%Y-%m-%d")
++            p_next = [0.80, 0.70, 0.55, 0.60]  # 来訪→種まき→収穫→パン焼き→購入 の基本確率
++            rows.append((d, vid, STEPS[0], route, flyer, 0))
++            for k in range(1, len(STEPS)):
++                p = p_next[k - 1] * (0.6 + 0.8 * engage)
++                if k == 3 and flyer == FLYERS[1]:
++                    p += 0.12
++                if rng.random() > min(p, 0.97):
++                    break
++                amt = 0
++                if STEPS[k] == "購入":
++                    amt = int(round(rng.gamma(4.0, 220 * route_spend[route] * (0.7 + engage)) / 10) * 10)
++                rows.append((d, vid, STEPS[k], route, flyer, amt))
++            # 翌月また来るか（関わりが強いほど来る）
++            if rng.random() > 0.15 + 0.55 * engage:
++                break
++            m += 1
++    df = pd.DataFrame(rows, columns=EVENT_COLS)
++    return df.sort_values(["日付", "来訪者ID"]).reset_index(drop=True)
++
++
++def normalize_events(df: pd.DataFrame) -> pd.DataFrame:
++    """列をそろえ、型を直す（読み込んだCSVにも使う）。"""
++    out = df.copy()
++    for c in EVENT_COLS:
++        if c not in out.columns:
++            out[c] = np.nan
++    out = out[EVENT_COLS]
++    out["日付"] = pd.to_datetime(out["日付"], errors="coerce")
++    out["来訪者ID"] = out["来訪者ID"].astype("string").str.strip()
++    out["金額"] = pd.to_numeric(out["金額"], errors="coerce").fillna(0).astype(int)
++    return out
++
++
++def quality_report(df: pd.DataFrame) -> pd.DataFrame:
++    """データ品質チェック（書籍4.4.2の考え方）：記入漏れ・選択肢外・ありえない値・重複。"""
++    issues = []
++    for i, r in df.iterrows():
++        row = i + 1
++        if pd.isna(r["日付"]):
++            issues.append((row, "日付", "日付が読めない"))
++        if pd.isna(r["来訪者ID"]) or str(r["来訪者ID"]).strip() == "":
++            issues.append((row, "来訪者ID", "IDが空"))
++        if r["できごと"] not in STEPS:
++            issues.append((row, "できごと", f"選択肢外：{r['できごと']}"))
++        if r["経路"] not in ROUTES:
++            issues.append((row, "経路", f"選択肢外：{r['経路']}"))
++        if r["チラシ"] not in FLYERS:
++            issues.append((row, "チラシ", f"選択肢外：{r['チラシ']}"))
++        if r["金額"] < 0:
++            issues.append((row, "金額", "マイナスの金額"))
++        if r["できごと"] != "購入" and r["金額"] != 0:
++            issues.append((row, "金額", "購入以外の行に金額がある"))
++    dup = df.duplicated(subset=["日付", "来訪者ID", "できごと"], keep="first")
++    for i in np.flatnonzero(dup.to_numpy()):
++        issues.append((int(i) + 1, "行全体", "同じ日・同じ人・同じできごとが重複"))
++    return pd.DataFrame(issues, columns=["行", "列", "内容"])
++
++
++# ─────────────────────────────────────────────
++# ② 指標をつくる：KPIツリー・ファネル・リテンション・アラート
++# ─────────────────────────────────────────────
++def visits(df: pd.DataFrame) -> pd.DataFrame:
++    """1行＝1回の来訪（人×日）。その日にどの段まで進んだかと、使った金額。"""
++    order = {s: k for k, s in enumerate(STEPS)}
++    g = df.assign(段=df["できごと"].map(order)).groupby(["来訪者ID", "日付"], as_index=False)
++    v = g.agg(到達段=("段", "max"), 金額=("金額", "sum"), 経路=("経路", "first"), チラシ=("チラシ", "first"))
++    v["月"] = v["日付"].dt.to_period("M")
++    return v
++
++
++def kpi_tree(df: pd.DataFrame) -> pd.DataFrame:
++    """月ごとに 売上 = 来訪数 × 購入率 × 客単価 に分解する（書籍5章の指標体系の考え方）。"""
++    v = visits(df)
++    buy = v["到達段"] == len(STEPS) - 1
++    g = v.assign(購入=buy).groupby("月")
++    out = pd.DataFrame({
++        "来訪数": g.size(),
++        "購入数": g["購入"].sum(),
++        "売上": g["金額"].sum(),
++    })
++    out["購入率"] = out["購入数"] / out["来訪数"]
++    out["客単価"] = (out["売上"] / out["購入数"].replace(0, np.nan)).fillna(0)
++    out.index = out.index.astype(str)
++    return out.reset_index()
++
++
++def decompose_change(before: pd.Series, after: pd.Series) -> pd.DataFrame:
++    """売上の変化を「来訪数・購入率・客単価」のどれが動かしたかに分ける（対数での寄与）。
++
++    売上 = A×B×C なので log売上 = logA + logB + logC。各項の変化の割合で、売上の差を按分する。
++    """
++    keys = ["来訪数", "購入率", "客単価"]
++    d = {k: np.log(after[k]) - np.log(before[k]) for k in keys}
++    total = sum(d.values())
++    diff = float(after["売上"] - before["売上"])
++    share = {k: (d[k] / total if total != 0 else 1 / 3) for k in keys}
++    return pd.DataFrame({
++        "指標": keys,
++        "前": [before[k] for k in keys],
++        "後": [after[k] for k in keys],
++        "変化率": [after[k] / before[k] - 1 for k in keys],
++        "売上の差への寄与（円）": [diff * share[k] for k in keys],
++    })
++
++
++def funnel(df: pd.DataFrame, by: str | None = None) -> pd.DataFrame:
++    """段ごとに「そこまで進んだ来訪の数」と、前の段からの残存率（チュートリアル突破率の考え方）。"""
++    v = visits(df)
++    groups = [("全体", v)] if by is None else list(v.groupby(by))
++    rows = []
++    for name, gv in groups:
++        n0 = len(gv)
++        prev = n0
++        for k, s in enumerate(STEPS):
++            n = int((gv["到達段"] >= k).sum())
++            rows.append((name, k, s, n, n / n0 if n0 else np.nan, n / prev if prev else np.nan))
++            prev = n
++    return pd.DataFrame(rows, columns=["グループ", "順", "段", "人数", "最初からの割合", "前の段からの残存率"])
++
++
++def retention(df: pd.DataFrame) -> pd.DataFrame:
++    """コホート表：初来訪の月ごとに、k か月後にも来た人の割合（翌日継続率の“月”版）。"""
++    v = visits(df)
++    first = v.groupby("来訪者ID")["月"].min().rename("初回月")
++    v = v.join(first, on="来訪者ID")
++    v["経過月"] = (v["月"] - v["初回月"]).apply(lambda x: x.n)
++    size = v.groupby("初回月")["来訪者ID"].nunique()
++    act = v.groupby(["初回月", "経過月"])["来訪者ID"].nunique().unstack(fill_value=0)
++    rate = act.div(size, axis=0)
++    rate.index = rate.index.astype(str)
++    rate.columns = [f"{c}か月後" for c in rate.columns]
++    rate.insert(0, "人数", size.values)
++    return rate
++
++
++def alerts(series: pd.Series, window: int = 3, k: float = 2.0) -> pd.DataFrame:
++    """直前 window 個の平均±k×標準偏差から外れた点に印をつける（書籍5.3.2のアラート）。"""
++    s = series.astype(float)
++    mu = s.shift(1).rolling(window, min_periods=window).mean()
++    sd = s.shift(1).rolling(window, min_periods=window).std(ddof=1)
++    lo, hi = mu - k * sd, mu + k * sd
++    flag = (s < lo) | (s > hi)
++    return pd.DataFrame({"値": s, "下限": lo, "上限": hi, "アラート": flag.fillna(False)})
++
++
++# ─────────────────────────────────────────────
++# ③ 探す：来訪者ごとの特徴・相関・k-means・PCA
++# ─────────────────────────────────────────────
++FEATURES = ["来訪回数", "最深到達段", "購入回数", "合計金額", "利用月数"]
++
++
++def visitor_features(df: pd.DataFrame) -> pd.DataFrame:
++    """1行＝1人。探索的分析に使う特徴量。"""
++    v = visits(df)
++    g = v.groupby("来訪者ID")
++    f = pd.DataFrame({
++        "来訪回数": g.size(),
++        "最深到達段": g["到達段"].max(),
++        "購入回数": g["到達段"].apply(lambda s: int((s == len(STEPS) - 1).sum())),
++        "合計金額": g["金額"].sum(),
++        "利用月数": g["月"].nunique(),
++        "経路": g["経路"].first(),
++        "チラシ": g["チラシ"].first(),
++    })
++    return f.reset_index()
++
++
++def standardize(x: np.ndarray) -> np.ndarray:
++    sd = x.std(axis=0, ddof=0)
++    sd[sd == 0] = 1.0
++    return (x - x.mean(axis=0)) / sd
++
++
++def pca(x: np.ndarray, n: int = 2) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
++    """主成分分析（特異値分解）。戻り値：得点（行×n）、寄与率、負荷量（n×特徴）。"""
++    z = standardize(x)
++    u, s, vt = np.linalg.svd(z, full_matrices=False)
++    var = s ** 2 / (s ** 2).sum()
++    return z @ vt[:n].T, var[:n], vt[:n]
++
++
++def kmeans(x: np.ndarray, k: int, seed: int = 0, n_init: int = 10, iters: int = 100) -> tuple[np.ndarray, float]:
++    """k-means（k-means++ で初期化、n_init 回やって一番まとまりの良いもの）。戻り値：所属、群内平方和。"""
++    z = standardize(x)
++    rng = np.random.default_rng(seed)
++    best = (None, np.inf)
++    for _ in range(n_init):
++        c = [z[rng.integers(len(z))]]
++        for _ in range(1, k):
++            d2 = np.min([((z - ci) ** 2).sum(axis=1) for ci in c], axis=0)
++            c.append(z[rng.choice(len(z), p=d2 / d2.sum())] if d2.sum() > 0 else z[rng.integers(len(z))])
++        c = np.array(c)
++        for _ in range(iters):
++            lab = np.argmin(((z[:, None, :] - c[None]) ** 2).sum(axis=2), axis=1)
++            newc = np.array([z[lab == j].mean(axis=0) if (lab == j).any() else c[j] for j in range(k)])
++            if np.allclose(newc, c):
++                break
++            c = newc
++        sse = float(((z - c[lab]) ** 2).sum())
++        if sse < best[1]:
++            best = (lab, sse)
++    lab = best[0]
++    # 合計金額の小さい順にクラスタ番号を振り直す（見るたびに番号が入れ替わらないように）
++    spend_col = FEATURES.index("合計金額") if x.shape[1] == len(FEATURES) else 0
++    order = np.argsort([x[lab == j, spend_col].mean() for j in range(k)])
++    remap = {int(old): new for new, old in enumerate(order)}
++    return np.array([remap[int(i)] for i in lab]), best[1]
++
++
++def elbow(x: np.ndarray, k_max: int = 6, seed: int = 0) -> pd.DataFrame:
++    return pd.DataFrame([(k, kmeans(x, k, seed)[1]) for k in range(1, k_max + 1)], columns=["k", "群内平方和"])
++
++
++# ─────────────────────────────────────────────
++# ④ 確かめる：A/Bテスト（並べ替え検定・ベイズ）
++# ─────────────────────────────────────────────
++def ab_table(df: pd.DataFrame, step: str = "パン焼き体験", base: str = "収穫体験") -> pd.DataFrame:
++    """チラシごとに「base の段まで来た人のうち、step まで進んだ人」を数える（人単位）。"""
++    f = visitor_features(df)
++    kb, ks = STEPS.index(base), STEPS.index(step)
++    f = f[f["最深到達段"] >= kb]
++    g = f.assign(成功=(f["最深到達段"] >= ks).astype(int)).groupby("チラシ")["成功"]
++    out = pd.DataFrame({"人数": g.size(), "成功": g.sum()})
++    out["割合"] = out["成功"] / out["人数"]
++    return out.reindex(list(FLYERS)).fillna(0)
++
++
++def permutation_test(y: np.ndarray, group: np.ndarray, n_perm: int = 5000, seed: int = 0) -> tuple[float, float, np.ndarray]:
++    """2群の平均の差（group==1 − group==0）と、くじを引き直したときに同じくらい大きな差が出る割合（両側p）。"""
++    y = np.asarray(y, float)
++    g = np.asarray(group, bool)
++    obs = y[g].mean() - y[~g].mean()
++    rng = np.random.default_rng(seed)
++    null = np.empty(n_perm)
++    for i in range(n_perm):
++        p = rng.permutation(g)
++        null[i] = y[p].mean() - y[~p].mean()
++    pval = (np.sum(np.abs(null) >= abs(obs) - 1e-12) + 1) / (n_perm + 1)
++    return float(obs), float(pval), null
++
++
++def beta_posterior(success: int, n: int, a0: float = 1.0, b0: float = 1.0) -> tuple[float, float]:
++    """一様な事前分布 Beta(1,1) から、観測後の事後分布 Beta(a, b) のパラメータ。"""
++    return a0 + success, b0 + n - success
++
++
++def prob_b_beats_a(sa: int, na: int, sb: int, nb: int, draws: int = 40000, seed: int = 0) -> tuple[float, np.ndarray, np.ndarray]:
++    """P(B の割合 > A の割合 | データ) をサンプリングで求める。"""
++    rng = np.random.default_rng(seed)
++    pa = rng.beta(*beta_posterior(sa, na), size=draws)
++    pb = rng.beta(*beta_posterior(sb, nb), size=draws)
++    return float((pb > pa).mean()), pa, pb
++
++
++def sample_size_per_group(p0: float, lift: float) -> int:
++    """2つの割合の差を見つけるのに要る1群あたりの人数（有意水準5%両側・検出力80%の近似式）。"""
++    p1 = min(max(p0 + lift, 1e-6), 1 - 1e-6)
++    z_a, z_b = 1.959964, 0.841621
++    pbar = (p0 + p1) / 2
++    num = (z_a * np.sqrt(2 * pbar * (1 - pbar)) + z_b * np.sqrt(p0 * (1 - p0) + p1 * (1 - p1))) ** 2
++    return int(np.ceil(num / (p1 - p0) ** 2)) if p1 != p0 else 10 ** 9
++
++
++# ─────────────────────────────────────────────
++# ⑤ 試し続ける：多腕バンディット（トンプソン抽出 vs 均等配分）
++# ─────────────────────────────────────────────
++def bandit_sim(true_p: list[float], n_rounds: int = 300, seed: int = 0) -> pd.DataFrame:
++    """毎回「どの体験メニューを勧めるか」を選び、満足（1/0）を受け取る。
++
++    トンプソン抽出：各メニューの満足率をベータ分布で持ち、引いた値が最大のメニューを選ぶ（ベイズ推論×強化学習）。
++    均等配分：順番に回す（いわゆる“全部同じだけ試す”A/Bテスト型）。
++    戻り値は回ごとの累積の取りこぼし（最善メニューを選んでいれば得られた満足との差の期待値）。
++    """
++    rng = np.random.default_rng(seed)
++    p = np.asarray(true_p, float)
++    best = p.max()
++    a = np.ones(len(p))
++    b = np.ones(len(p))
++    reg_ts, reg_rr, picks = [], [], []
++    cum_ts = cum_rr = 0.0
++    for t in range(n_rounds):
++        arm = int(np.argmax(rng.beta(a, b)))
++        r = rng.random() < p[arm]
++        a[arm] += r
++        b[arm] += 1 - r
++        cum_ts += best - p[arm]
++        rr = t % len(p)
++        cum_rr += best - p[rr]
++        reg_ts.append(cum_ts)
++        reg_rr.append(cum_rr)
++        picks.append(arm)
++    return pd.DataFrame({"回": np.arange(1, n_rounds + 1), "トンプソン抽出": reg_ts, "均等配分": reg_rr, "選んだメニュー": picks})
++
++
++# ─────────────────────────────────────────────
++# 自己チェック
++# ─────────────────────────────────────────────
++if __name__ == "__main__":
++    ev = normalize_events(sample_events())
++    assert set(ev["できごと"]) <= set(STEPS)
++    assert quality_report(ev).empty, quality_report(ev).head()
++
++    bad = ev.head(3).copy()
++    bad.loc[0, "経路"] = "テレビ"
++    bad.loc[1, "金額"] = 500
++    bad = pd.concat([bad, bad.iloc[[2]]], ignore_index=True)
++    q = quality_report(bad)
++    assert {"経路", "金額", "行全体"} <= set(q["列"]), q
++
++    kt = kpi_tree(ev)
++    assert np.allclose(kt["来訪数"] * kt["購入率"] * kt["客単価"], kt["売上"])
++    dc = decompose_change(kt.iloc[1], kt.iloc[2])
++    assert abs(dc["売上の差への寄与（円）"].sum() - (kt.iloc[2]["売上"] - kt.iloc[1]["売上"])) < 1e-6
++
++    fu = funnel(ev)
++    assert fu["人数"].is_monotonic_decreasing and fu["人数"].iloc[0] == len(visits(ev))
++
++    rt = retention(ev)
++    assert (rt["0か月後"] == 1).all()
++
++    al = alerts(pd.Series([10, 11, 10, 11, 30, 10]), window=3, k=2)
++    assert al["アラート"].tolist() == [False, False, False, False, True, False]
++
++    vf = visitor_features(ev)
++    X = vf[FEATURES].to_numpy(float)
++    sc, var, load = pca(X)
++    assert sc.shape == (len(vf), 2) and 0 < var.sum() <= 1 + 1e-9
++    lab, sse = kmeans(X, 3)
++    assert set(lab) == {0, 1, 2}
++    el = elbow(X, 4)
++    assert el["群内平方和"].is_monotonic_decreasing
++
++    # 並べ替え検定：差のないデータでは p が大きい、明らかな差では小さい
++    rng = np.random.default_rng(1)
++    g = np.r_[np.zeros(50), np.ones(50)]
++    assert permutation_test(rng.normal(0, 1, 100), g, 2000)[1] > 0.01
++    assert permutation_test(np.r_[np.zeros(50), np.ones(50)], g, 2000)[1] < 0.01
++
++    pb, _, _ = prob_b_beats_a(30, 100, 45, 100)
++    assert pb > 0.95
++    assert 300 < sample_size_per_group(0.30, 0.10) < 400  # 教科書的な値（約356）
++
++    bs = bandit_sim([0.3, 0.5, 0.7], 500, seed=3)
++    assert bs["トンプソン抽出"].iloc[-1] < bs["均等配分"].iloc[-1]
++
++    ab = ab_table(ev)
++    print("ok", len(ev), "行 /", len(vf), "人 / A/B:", ab["割合"].round(2).to_dict())
+diff --git a/home.py b/home.py
+index 4dd46fe..d8a1890 100644
+--- a/home.py
++++ b/home.py
+@@ -48,6 +48,7 @@ SCHOOL_PAGE = page_path("1")  # 学校向け：ルーブリック・活動ログ
+ COMPARE_PAGE = page_path("3")  # 寒締めほうれん草：くじで分けて測る・比べる・グラフ・判断
+ P3D_PAGE = page_path("8")  # 3Dプリンター（学校向けの探究）
+ ROBOT_PAGE = page_path("10")  # AIロボット（学校向けの探究）
++GAME_PAGE = page_path("12")  # 探究コーナー：ゲーム特化型データ分析を軸にした探究（情報Ⅰ）
+ METAVERSE_PAGE = page_path("7")  # 畑・ハウス・パン工房を実寸の3Dワールドに（文系中高生向け）
+ 
+ 
+@@ -71,6 +72,14 @@ def school_banner() -> None:
+         )
+         with b2:
+             safe_page_link(SCHOOL_PAGE, "記録の仕組みを見る", "➡️")
++        g1, g2 = st.columns([3, 1])
++        g1.markdown(
++            "**🎮 探究コーナー：ゲーム運営の目で農園を分析する**　"
++            "ゲーム会社のデータ分析の型（集める→指標→探す→確かめる→試し続ける）で、"
++            "体験会の来訪ログを分析します。情報Ⅰ「データの活用」の90分モデルつき。"
++        )
++        with g2:
++            safe_page_link(GAME_PAGE, "探究コーナーを開く", "➡️")
+ 
+ 
+ st.markdown(
+@@ -101,7 +110,7 @@ with st.sidebar:
+     st.header("🌾 スマートパン屋農家")
+     st.write("麦を育て、数値で判断し、パンを焼く。")
+     sn.buttons("で活動内容を見る", stacked=True)
+-    st.caption("ほかのページは、上のメニューに4つのまとまりで並べています。")
++    st.caption("ほかのページは、上のメニューに5つのまとまりで並べています。")
+     st.divider()
+     st.caption("拠点：広島県三原市西部（ハウス・畑区画）")
+     st.caption(f"圃場面積：約 {FIELD_AREA_M2} ㎡")
+diff --git "a/pages/12_\360\237\216\256_\346\216\242\347\251\266\343\202\263\343\203\274\343\203\212\343\203\274.py" "b/pages/12_\360\237\216\256_\346\216\242\347\251\266\343\202\263\343\203\274\343\203\212\343\203\274.py"
+new file mode 100644
+index 0000000..76cef76
+--- /dev/null
++++ "b/pages/12_\360\237\216\256_\346\216\242\347\251\266\343\202\263\343\203\274\343\203\212\343\203\274.py"
+@@ -0,0 +1,398 @@
++"""
++探究コーナー ─ ゲーム運営の目で、農園の体験会を分析する
++配置先: pages/12_🎮_探究コーナー.py （Streamlit のマルチページ構成）
++
++ピボット（軸）にしたもの：
++  ThinkingData『ゲームデータアナリティクス よりよい開発・運営に向けたデータ分析の教科書』（翔泳社）
++  ゲーム会社が毎日まわしている「集める → 指標にする → 探す → 確かめる → 運営に生かす」を、
++  農園の体験会・直売所に置き換えて、高校「情報Ⅰ（データの活用）」の探究として体験する。
++
++骨格はリポジトリ共通の3段構え：
++  ① 現象を計算する（指標・ファネル・検定）→ ② 数値を可視化する（グラフ・地図）
++  → ③ 自分の条件で判断する（どの施策を、何人分のデータで決めるか）
++
++方針
++  - 計算は game_lab.py（`python game_lab.py` で自己チェック）。
++  - 初期表示はすべて架空データ（実測ではありません）。
++  - アップロードした記録はセッション内だけで使い、サーバーには残さない。氏名は扱わない。
++  - 外部の生成AIは呼び出さない。
++"""
++import numpy as np
++import pandas as pd
++import plotly.express as px
++import plotly.graph_objects as go
++import streamlit as st
++
++import game_lab as gl
++import security_guard as sg
++
++st.set_page_config(page_title="探究コーナー：ゲーム運営の目で見る", page_icon="🎮", layout="wide")
++
++import social as sn  # noqa: E402  SNSのURLは social.py で一括管理
++
++UPDATED = "2026-10-16"
++PAGE = "game_lab"
++BOOK = "ThinkingData『ゲームデータアナリティクス よりよい開発・運営に向けたデータ分析の教科書』（翔泳社）"
++FLYER_COLORS = {gl.FLYERS[0]: "#c98a2b", gl.FLYERS[1]: "#3f7cac"}
++
++if "gl_ev" not in st.session_state:
++    st.session_state.gl_ev = gl.normalize_events(gl.sample_events())
++    st.session_state.gl_is_sample = True
++
++# ─────────────────────────────────────────────
++# サイドバー
++# ─────────────────────────────────────────────
++with st.sidebar:
++    st.header("🎮 探究コーナー")
++    st.caption("来訪ログのCSVを読み込むと、すべてのタブがその記録で計算し直されます。")
++    up = st.file_uploader("来訪ログCSVを読み込む", type="csv", key="up_gl",
++                          help=f"列：{', '.join(gl.EVENT_COLS)}")
++    if up is not None and st.session_state.get("gl_loaded") != up.file_id:
++        _df = sg.read_csv_safely(up, page=PAGE, kind="events")
++        if _df is not None:
++            st.session_state.gl_ev = gl.normalize_events(_df)
++            st.session_state.gl_is_sample = False
++        st.session_state.gl_loaded = up.file_id
++    st.divider()
++    n_vis = st.slider("架空データの来訪者数", 60, 600, 240, 20)
++    seed = st.number_input("くじの番号", 0, 9999, 2026, 1, help="同じ番号なら同じ架空データになります。")
++    if st.button("この条件で架空データを作り直す", width="stretch"):
++        st.session_state.gl_ev = gl.normalize_events(gl.sample_events(int(n_vis), int(seed)))
++        st.session_state.gl_is_sample = True
++    st.divider()
++    sn.buttons("で相談する", stacked=True)
++
++EV: pd.DataFrame = st.session_state.gl_ev.dropna(subset=["日付", "来訪者ID"])
++EV = EV[EV["できごと"].isin(gl.STEPS)]
++
++st.title("🎮 探究コーナー：ゲーム運営の目で、農園を分析する")
++st.caption(f"ピボット：{BOOK}　／　更新 {UPDATED}")
++if st.session_state.gl_is_sample:
++    st.info("いま表示しているのは **架空の来訪ログ** です（実測ではありません）。"
++            "サイドバーで条件を変えて作り直すか、記録CSVを読み込んで切り替えます。")
++if EV.empty:
++    st.warning("計算できる行がありません。「① 集める」タブでデータの形を確かめてください。")
++    st.stop()
++
++tab_flow, tab_c, tab_k, tab_e, tab_t, tab_j = st.tabs([
++    "🧭 この探究の流れ", "📥 ① 集める", "📊 ② 指標にする", "🔍 ③ 探す",
++    "⚖️ ④ 確かめる", "🎯 ⑤ 判断する・試し続ける",
++])
++
++# ═════════════════════════════════════════════
++# 0. 流れ
++# ═════════════════════════════════════════════
++with tab_flow:
++    st.header("🧭 なぜ「ゲーム」を軸にするのか")
++    st.write(
++        "スマホゲームの会社は、毎日たくさんの人の行動ログを集め、**数字で次の一手を決める**仕組みを"
++        "いちばん磨いてきた業界のひとつです。その型を借りると、農園の体験会や直売所でも"
++        "「なんとなく」ではなく「数字で確かめて決める」ことができます。"
++        "これは高校「情報Ⅰ」のデータの活用（収集・整理・分析・可視化）そのものです。"
++    )
++    st.subheader("ゲームの言葉 ↔ 農園の言葉 ↔ 研究の言葉")
++    st.dataframe(pd.DataFrame([
++        ("プレイヤー", "来訪者（匿名ID）", "観測の単位", "① 集める", "4章 収集"),
++        ("チュートリアル突破率", "種まき→収穫→パン焼き の残り具合", "ファネル分析", "② 指標にする", "2・5章"),
++        ("翌日継続率", "翌月にまた来た割合", "コホート別リテンション", "② 指標にする", "6章 改善型"),
++        ("課金率・ARPPU", "購入率・客単価", "KPIツリー（掛け算分解）", "② 指標にする", "5章 指標体系"),
++        ("プレイヤーのタイプ", "来訪の仕方のタイプ", "k-means・主成分分析", "③ 探す", "7.1 探索的分析"),
++        ("A/Bテスト", "案内チラシ2種", "並べ替え検定・ベイズ", "④ 確かめる", "7.2 因果推論とテスト"),
++        ("きめ細やかな運営", "次に勧める体験メニュー", "多腕バンディット（強化学習）", "⑤ 試し続ける", "11章"),
++    ], columns=["ゲーム", "農園", "研究での言い方", "このページのタブ", "書籍の章"]),
++        width="stretch", hide_index=True)
++
++    st.subheader("3段構えとの対応")
++    st.dataframe(pd.DataFrame([
++        ("① 現象を計算する", "指標・残存率・差・確率を出す", "②③④のタブの数字"),
++        ("② 数値を可視化する", "ファネル・ヒートマップ・散布図・分布", "②③④のタブのグラフ"),
++        ("③ 自分の条件で判断する", "定員・期間・目標から「何で決めるか」を選ぶ", "⑤ のワークシート"),
++    ], columns=["段", "やること", "このページのどこ"]), width="stretch", hide_index=True)
++
++    st.subheader("考え方の骨組み：結果（目的変数）と原因（説明変数）")
++    st.markdown(
++        "- **目的変数 y**（結果）：例「パン焼き体験まで進んだか」「買ったか」\n"
++        "- **説明変数 x**（その結果の原因の候補）：例「経路」「受け取ったチラシ」「来た月」\n"
++        "- 探索的分析（③）で **原因の仮説** を立て、確証的分析（④）で **検定して確かめる**。\n"
++        "- ベイズ推定は、結果から原因を逆に読む道具：**P(x | y)**（買った人の中で経路が何か）と"
++        "**P(y | x)**（その経路から来た人が買う確率）を行き来する（③の最後）。"
++    )
++    st.subheader("90分の当日の流れ（例）")
++    st.dataframe(pd.DataFrame([
++        ("0–15分", "好きなゲームの「つい続けてしまう仕掛け」を出し合う", "🧭 流れ"),
++        ("15–30分", "農園で何を記録すれば同じ分析ができるか、データプランを作る", "① 集める"),
++        ("30–55分", "ファネルとリテンションを見て「どこで人が抜けるか」を探す", "② 指標・③ 探す"),
++        ("55–75分", "チラシA/Bの差は偶然か。並べ替え検定とベイズで確かめる", "④ 確かめる"),
++        ("75–90分", "自分が運営者なら次に何を試すか、条件を入れて決めて発表", "⑤ 判断する"),
++    ], columns=["時間", "内容", "タブ"]), width="stretch", hide_index=True)
++    st.caption(f"参考：{BOOK}。本ページの文章・データ・計算はこのアプリ独自のもので、書籍の内容の転載ではありません。")
++
++# ═════════════════════════════════════════════
++# 1. 集める
++# ═════════════════════════════════════════════
++with tab_c:
++    st.header("📥 ① 集める：データプランを先に決める")
++    st.write("ゲームでは「分析したい問い」から逆算して、記録するできごと（イベント）を最初に決めます。"
++             "あとから「その列があれば…」と思っても、過去の分は取り直せないからです。")
++    st.dataframe(pd.DataFrame(gl.DATA_PLAN, columns=["項目", "例", "型", "なぜ要るか", "守ること"]),
++                 width="stretch", hide_index=True)
++
++    st.subheader("記録（1行＝1つのできごと）")
++    show = EV.copy()
++    show["日付"] = show["日付"].dt.strftime("%Y-%m-%d")
++    st.dataframe(show, width="stretch", hide_index=True, height=260)
++    st.download_button("来訪ログをCSVで保存", sg.safe_csv(show), "来訪ログ.csv", "text/csv")
++
++    st.subheader("データ品質のチェック")
++    issues = gl.quality_report(st.session_state.gl_ev.reset_index(drop=True))
++    if issues.empty:
++        st.success(f"{len(EV)} 行：記入漏れ・選択肢外・ありえない金額・重複は見つかりませんでした。")
++    else:
++        st.warning(f"確認が必要な箇所が {len(issues)} 件あります（計算からは自動で除いています）。")
++        st.dataframe(issues, width="stretch", hide_index=True)
++
++    with st.expander("🔒 記録の約束（プライバシーとセキュリティ）"):
++        st.markdown(
++            "- 氏名・連絡先・顔写真はログに入れない。IDと本人の対応表は別の場所に鍵付きで保管する\n"
++            "- 「経路」「できごと」は選択肢から選ぶ。自由記述は入れない（個人が特定される書き込みを防ぐ）\n"
++            "- 保存したCSVは Excel で開いても数式が動かないように処理しています（CSVインジェクション対策）\n"
++            "- 書籍12章の「データセキュリティとプライバシー保護」は、データを集める側の責任です"
++        )
++
++# 以降のタブで共通に使う集計
++KT = gl.kpi_tree(EV)
++FU = gl.funnel(EV)
++VF = gl.visitor_features(EV)
++
++# ═════════════════════════════════════════════
++# 2. 指標にする
++# ═════════════════════════════════════════════
++with tab_k:
++    st.header("📊 ② 指標にする：売上を掛け算に分ける")
++    st.latex(r"\text{売上} = \text{来訪数} \times \text{購入率} \times \text{客単価}")
++    st.write("売上が下がったとき、「人が来なかった」のか「来たけど買わなかった」のか「買った額が小さかった」のかで、"
++             "打つ手がまったく違います。掛け算に分けると、どこが動いたかが見えます。")
++    st.dataframe(KT.style.format({"購入率": "{:.0%}", "客単価": "{:,.0f}円", "売上": "{:,.0f}円"}),
++                 width="stretch", hide_index=True)
++
++    if len(KT) >= 2:
++        months = KT["月"].tolist()
++        c1, c2 = st.columns(2)
++        m0 = c1.selectbox("比べる前の月", months, index=len(months) - 2)
++        m1 = c2.selectbox("比べる後の月", months, index=len(months) - 1)
++        b, a = KT.set_index("月").loc[m0], KT.set_index("月").loc[m1]
++        if min(b["購入数"], a["購入数"]) > 0:
++            dc = gl.decompose_change(b, a)
++            fig = go.Figure(go.Waterfall(
++                x=["前の売上"] + dc["指標"].tolist() + ["後の売上"],
++                measure=["absolute", "relative", "relative", "relative", "total"],
++                y=[b["売上"]] + dc["売上の差への寄与（円）"].tolist() + [0],
++                connector={"line": {"color": "#bbb"}}))
++            fig.update_layout(height=320, margin=dict(l=10, r=10, t=30, b=10),
++                              title=f"{m0} → {m1}：売上の差はどこから来たか")
++            st.plotly_chart(fig, width="stretch")
++            top = dc.loc[dc["売上の差への寄与（円）"].abs().idxmax(), "指標"]
++            st.caption(f"いちばん大きく効いたのは **{top}**。次に手を打つならここから。")
++
++    st.subheader("ファネル：どの段で人が抜けるか（チュートリアル突破率の考え方）")
++    by = st.radio("分ける軸", ["全体", "経路", "チラシ"], horizontal=True)
++    fu = gl.funnel(EV, None if by == "全体" else by)
++    fig = px.funnel(fu, x="人数", y="段", color="グループ" if by != "全体" else None)
++    fig.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10))
++    st.plotly_chart(fig, width="stretch")
++    weak = FU.iloc[1:].loc[FU["前の段からの残存率"].iloc[1:].idxmin()]
++    st.caption(f"全体でいちばん残存率が低いのは **「{weak['段']}」**（前の段から {weak['前の段からの残存率']:.0%}）。"
++               "ゲームなら、まずここのチュートリアルを直します。")
++
++    st.subheader("リテンション：初めて来た月ごとに、何か月後まで来続けたか")
++    rt = gl.retention(EV)
++    heat = rt.drop(columns="人数")
++    fig = px.imshow(heat, text_auto=".0%", color_continuous_scale="Greens", aspect="auto",
++                    labels=dict(x="", y="初めて来た月", color="割合"))
++    fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10))
++    st.plotly_chart(fig, width="stretch")
++    st.caption("右下が空白なのは、まだその月が来ていないからです（0%ではありません）。")
++
++    st.subheader("アラート：いつもと違う月に印をつける")
++    k = st.slider("何σ外れたら知らせるか", 1.0, 3.0, 2.0, 0.5,
++                  help="小さくすると見逃しは減るが、空振り（誤報）が増えます。")
++    al = gl.alerts(KT.set_index("月")["来訪数"], window=3, k=k)
++    fig = go.Figure()
++    fig.add_trace(go.Scatter(x=al.index, y=al["上限"], line=dict(width=0), showlegend=False, hoverinfo="skip"))
++    fig.add_trace(go.Scatter(x=al.index, y=al["下限"], fill="tonexty", line=dict(width=0),
++                             fillcolor="rgba(63,124,172,.15)", name="いつもの幅"))
++    fig.add_trace(go.Scatter(x=al.index, y=al["値"], mode="lines+markers", name="来訪数",
++                             marker=dict(color=np.where(al["アラート"], "#d6453d", "#3f7cac"), size=10)))
++    fig.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10))
++    st.plotly_chart(fig, width="stretch")
++    n_al = int(al["アラート"].sum())
++    st.caption(f"アラート {n_al} 件。アラートは「調べに行け」の合図で、「異常だ」という結論ではありません。"
++               "数字を見てから慌てるのではなく、数字で先に知っておくための仕組みです。")
++
++# ═════════════════════════════════════════════
++# 3. 探す
++# ═════════════════════════════════════════════
++with tab_e:
++    st.header("🔍 ③ 探す：課題を見つけ、原因の仮説を立てる")
++    st.write("探索的分析は「答えを出す」のではなく「確かめる価値のある仮説を見つける」段階です。")
++
++    X = VF[gl.FEATURES].to_numpy(float)
++    st.subheader("指標どうしの相関")
++    corr = VF[gl.FEATURES].corr()
++    fig = px.imshow(corr, text_auto=".2f", color_continuous_scale="RdBu", zmin=-1, zmax=1, aspect="auto")
++    fig.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10))
++    st.plotly_chart(fig, width="stretch")
++    st.caption("来訪回数と合計金額は強く結びつきます。でも「何度も来たから買った」のか"
++               "「買う人だから何度も来た」のかは、相関だけでは分かりません。")
++
++    st.subheader("来訪者のタイプ分け（k-means）と、2次元への要約（主成分分析）")
++    c1, c2 = st.columns([1, 2])
++    with c1:
++        el = gl.elbow(X, 6)
++        fig = px.line(el, x="k", y="群内平方和", markers=True, title="エルボー：折れ曲がる所が目安")
++        fig.update_layout(height=260, margin=dict(l=10, r=10, t=40, b=10))
++        st.plotly_chart(fig, width="stretch")
++        kk = st.slider("タイプの数 k", 2, 6, 3)
++    lab, _ = gl.kmeans(X, kk)
++    sc, var, load = gl.pca(X)
++    VF2 = VF.assign(タイプ=[f"タイプ{i + 1}" for i in lab], 第1主成分=sc[:, 0], 第2主成分=sc[:, 1])
++    with c2:
++        fig = px.scatter(VF2, x="第1主成分", y="第2主成分", color="タイプ", hover_data=gl.FEATURES + ["経路"],
++                         title=f"主成分で見た来訪者（2軸で情報の {var.sum():.0%} を保持）")
++        fig.update_layout(height=380, margin=dict(l=10, r=10, t=40, b=10))
++        st.plotly_chart(fig, width="stretch")
++    prof = VF2.groupby("タイプ")[gl.FEATURES].mean().round(1)
++    prof.insert(0, "人数", VF2.groupby("タイプ").size())
++    st.dataframe(prof, width="stretch")
++    st.caption("タイプ番号は合計金額の小さい順。表を見て、それぞれに名前をつけてみましょう"
++               "（例：「一度きりの見学」「体験は好きだが買わない」「常連」）。")
++    with st.expander("主成分の中身（負荷量）"):
++        st.dataframe(pd.DataFrame(load.T, index=gl.FEATURES, columns=["第1主成分", "第2主成分"]).round(2),
++                     width="stretch")
++
++    st.subheader("ベイズで逆に読む：買った人は、どこから来た人か")
++    buyer = VF["購入回数"] > 0
++    prior = VF["経路"].value_counts(normalize=True).reindex(gl.ROUTES).fillna(0)
++    like = VF.loc[buyer, "経路"].value_counts(normalize=True).reindex(gl.ROUTES).fillna(0)
++    p_buy = buyer.mean()
++    post = (like * p_buy / prior.replace(0, np.nan)).fillna(0)
++    bt = pd.DataFrame({"P(経路)：全体での割合": prior, "P(経路 | 買った)": like, "P(買った | 経路)": post})
++    st.dataframe(bt.style.format("{:.0%}"), width="stretch")
++    st.latex(r"P(\text{買う}\mid\text{経路})=\frac{P(\text{経路}\mid\text{買う})\,P(\text{買う})}{P(\text{経路})}")
++    best_r = post.idxmax()
++    st.caption(f"「{best_r}」から来た人の購入率が最も高い。ただし経路は**くじで決まっていない**ので、"
++               "経路そのものの効果か、そもそも買う気のある人がその経路を通るのかは区別できません。"
++               "→ 原因を確かめるには、くじで配ったもの（チラシ）を ④ で比べます。")
++
++# ═════════════════════════════════════════════
++# 4. 確かめる
++# ═════════════════════════════════════════════
++with tab_t:
++    st.header("⚖️ ④ 確かめる：チラシAとB、差は偶然か")
++    st.write("チラシは来訪者に**くじで**配っています。くじで分けたものの差なら、原因として言える可能性が出てきます。")
++    c1, c2 = st.columns(2)
++    base = c1.selectbox("どの段まで来た人の中で", gl.STEPS[:-1], index=2)
++    step = c2.selectbox("どの段まで進んだ割合を比べるか", gl.STEPS[gl.STEPS.index(base) + 1:], index=0)
++    ab = gl.ab_table(EV, step=step, base=base)
++    st.dataframe(ab.style.format({"割合": "{:.0%}", "人数": "{:.0f}", "成功": "{:.0f}"}), width="stretch")
++
++    na, sa = int(ab.loc[gl.FLYERS[0], "人数"]), int(ab.loc[gl.FLYERS[0], "成功"])
++    nb, sb = int(ab.loc[gl.FLYERS[1], "人数"]), int(ab.loc[gl.FLYERS[1], "成功"])
++    if min(na, nb) < 5:
++        st.warning("どちらかのチラシの人数が少なすぎて比べられません。")
++    else:
++        y = np.r_[np.ones(sa), np.zeros(na - sa), np.ones(sb), np.zeros(nb - sb)]
++        g = np.r_[np.zeros(na), np.ones(nb)]
++        obs, pval, null = gl.permutation_test(y, g, 5000)
++        prob, pa, pb = gl.prob_b_beats_a(sa, na, sb, nb)
++
++        m1, m2, m3 = st.columns(3)
++        m1.metric("差（B − A）", f"{obs:+.0%}")
++        m2.metric("くじを引き直して同じくらいの差が出る割合（p）", f"{pval:.3f}")
++        m3.metric("BのほうがAより良い確率（ベイズ）", f"{prob:.0%}")
++
++        c1, c2 = st.columns(2)
++        with c1:
++            fig = px.histogram(x=null, nbins=40, title="① 頻度論：チラシを配り直した5000回の差")
++            fig.add_vline(x=obs, line_color="#d6453d", annotation_text="実際の差")
++            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), showlegend=False,
++                              xaxis_title="差", yaxis_title="回数")
++            st.plotly_chart(fig, width="stretch")
++        with c2:
++            fig = go.Figure()
++            for name, smp in [(gl.FLYERS[0], pa), (gl.FLYERS[1], pb)]:
++                fig.add_trace(go.Histogram(x=smp, nbinsx=60, name=name, opacity=.6,
++                                           marker_color=FLYER_COLORS[name], histnorm="probability density"))
++            fig.update_layout(barmode="overlay", height=300, margin=dict(l=10, r=10, t=40, b=10),
++                              title="② ベイズ：本当の割合がどこにありそうか", xaxis_title="割合")
++            st.plotly_chart(fig, width="stretch")
++        st.caption("p が小さいほど「偶然だけでは出にくい差」。ベイズの確率は「Bが上である」ことへの確信の度合い。"
++                   "二つは問いが違うので、両方を読み比べてみましょう。")
++
++    with st.expander("この比べ方の限界"):
++        st.markdown(
++            "- 同じ人が何度来ても、1人1回として数えています（同じ人の回を独立に数えない）\n"
++            "- いろいろな段の組み合わせを試していくと、偶然の差を「発見」しやすくなります（多重比較）。"
++            "**どこを比べるかは、データを見る前に決めておく**のが原則です\n"
++            "- くじで配っていない「経路」の差は、ここでは原因として扱いません（③の注意）"
++        )
++
++# ═════════════════════════════════════════════
++# 5. 判断する・試し続ける
++# ═════════════════════════════════════════════
++with tab_j:
++    st.header("🎯 ⑤ 判断する・試し続ける")
++    st.subheader("A/Bテストで決めるか、試しながら寄せていくか")
++    st.write("A/Bテストは「全部を同じだけ試してから決める」方法。ゲームのきめ細やかな運営では、"
++             "**良さそうなものに少しずつ寄せながら試し続ける**方法（多腕バンディット）もよく使われます。"
++             "これは強化学習のいちばん小さな形で、中身はベイズ推論です。")
++    menus = ["パン焼き", "収穫", "土づくり"]
++    cols = st.columns(3)
++    true_p = [cols[i].slider(f"「{m}」体験の本当の満足率（仮定）", 0.05, 0.95, v, 0.05)
++              for i, (m, v) in enumerate(zip(menus, [0.70, 0.55, 0.40]))]
++    rounds = st.slider("勧める回数", 50, 1000, 300, 50)
++    bs = gl.bandit_sim(true_p, rounds, seed=7)
++    c1, c2 = st.columns(2)
++    with c1:
++        fig = px.line(bs, x="回", y=["トンプソン抽出", "均等配分"],
++                      title="取りこぼした満足の累計（小さいほど良い）")
++        fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), legend_title="")
++        st.plotly_chart(fig, width="stretch")
++    with c2:
++        share = (pd.Series(bs["選んだメニュー"]).map(dict(enumerate(menus)))
++                 .groupby(pd.cut(bs["回"], 5)).value_counts(normalize=True).unstack(fill_value=0))
++        share.index = [f"{int(i.left) + 1}–{int(i.right)}回" for i in share.index]
++        fig = px.bar(share, title="トンプソン抽出が勧めたメニューの割合の移り変わり")
++        fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), legend_title="", yaxis_title="割合")
++        st.plotly_chart(fig, width="stretch")
++    st.caption("最初はばらばらに試し、だんだん満足率の高いメニューに寄っていきます。"
++               "ただし「本当の満足率」が季節で変わるなら、寄せすぎは危険です（畑はゲームより変化が大きい）。")
++
++    st.divider()
++    st.subheader("📝 マイ判断シート：自分の条件で決める")
++    st.write("答えは人によって違ってよい。自分の農園・自分の体験会の条件を入れてください。")
++    c1, c2, c3 = st.columns(3)
++    cap = c1.number_input("1回の体験会の定員（人）", 5, 200, 20, 5)
++    per_month = c2.number_input("1か月の体験会の回数", 1, 20, 2, 1)
++    months_ok = c3.number_input("結論を出すまで待てる月数", 1, 24, 6, 1)
++    c4, c5 = st.columns(2)
++    _now = FU.loc[3, "前の段からの残存率"] if len(FU) > 3 else np.nan  # 収穫→パン焼き の残存率
++    _now = round(float(np.clip(_now, 0.05, 0.95)) * 20) / 20 if pd.notna(_now) else 0.60
++    p0 = c4.slider("今の割合（例：収穫からパン焼きまで進む割合）", 0.05, 0.95, _now, 0.05)
++    lift = c5.slider("見つけたい改善の大きさ（ポイント）", 0.02, 0.30, 0.10, 0.01)
++    need = gl.sample_size_per_group(p0, lift) * 2
++    have = int(cap * per_month * months_ok)
++    m1, m2, m3 = st.columns(3)
++    m1.metric("A/Bテストに要る人数（2群合計）", f"{need:,} 人")
++    m2.metric("待てる期間に集まる人数", f"{have:,} 人")
++    m3.metric("足りるまでの月数", f"{need / (cap * per_month):.1f} か月")
++    if have >= need:
++        st.success("期間内にA/Bテストで決着がつきそうです。比べる段と判定の基準を、データを見る前に書き残しましょう。")
++    else:
++        st.warning("この条件ではA/Bテストで決着がつく前に期間が終わります。"
++                   "①見つけたい差を大きくする（小さな改善は狙わない）②期間を延ばす"
++                   "③バンディットで寄せながら運営する、のどれを選ぶかを書いてください。")
++    st.text_area("自分の判断と、その理由（数字を1つ以上入れる）", key="gl_note", height=120,
++                 placeholder="例：定員20人×月2回だと12か月かかる。小さな改善を確かめるより、"
++                             "差が大きそうな「チラシの写真」だけを6か月で試す。")
++    st.caption("この欄の文章はサーバーに保存されません。必要ならコピーして手元に残してください。")
+-- 
+2.43.0
+
