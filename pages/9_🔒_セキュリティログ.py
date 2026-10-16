@@ -3,11 +3,13 @@
 
 Streamlit Community Cloud の「Settings → Secrets」に ADMIN_TOKEN（16文字以上のランダムな文字列）を
 登録したときだけ使えます。未登録なら誰も開けません。
+所有者（OWNER_EMAILS）として Google ログイン中なら、トークンなしで開けます（owner_gate.py と共通）。
 """
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+import owner_gate as og
 import security_guard as sg
 
 st.set_page_config(page_title="セキュリティログ", page_icon="🔒", layout="wide")
@@ -18,7 +20,13 @@ if fails >= 5:
     st.error("認証の失敗が続いたため、このセッションではロックしました。ページを開き直してください。")
     st.stop()
 
+if not st.session_state.get("_admin_ok") and og.is_owner():  # 所有者のGoogleログインでも開ける
+    st.session_state._admin_ok = True
+    sg.log_event("admin_login", "INFO", page="security_log", via="owner_google")
+
 if not st.session_state.get("_admin_ok"):
+    if og.auth_configured() and og.owner_emails():
+        st.button("所有者はGoogleでログイン", on_click=st.login, key="login_security_log")
     token = st.text_input("管理者トークン", type="password")
     if not token:
         st.caption("ADMIN_TOKEN が Secrets に未登録の場合、このページは使えません。")
