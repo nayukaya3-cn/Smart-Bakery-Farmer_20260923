@@ -232,7 +232,7 @@ def ai_quota_ok(page: str) -> bool:
             total = s["ai_count"]
     if capped:
         log_event("ai_daily_cap_reached", "CRITICAL", page=page, cap=AI_CALLS_PER_DAY)
-        st.warning("本日の生成AI利用枠に達しました。手動で雑草を選んでください。")
+        st.warning("本日の生成AI利用枠に達しました。生成AIを使わない方法で続けてください。")
         return False
     st.session_state._sec_ai_used = used + 1
     log_event("ai_call", "INFO", page=page, today_total=total)
