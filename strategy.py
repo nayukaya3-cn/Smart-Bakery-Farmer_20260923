@@ -5,7 +5,7 @@
 各フェーズの終わりに「判断ゲート」を置き、数字で「進む／縮める」を決める。
 
 更新のしかた（ここだけ書きかえれば画面に反映されます）
-  - GATE_INPUTS   … 有償契約の数・収支など、ゲート判定に使う実績値
+  - GATE_INPUTS   … ゲート判定に使う実績値の初期値（実額は Secrets の [gate] に書く）
   - CHECKLIST     … フェーズごとに必ず整えるもの（保険・開業届・許可確認など）の状況
   - PHASES        … 期間・仕事・小冊子の役割・ゲートの基準（戦略そのものを見直すとき）
 """
@@ -20,6 +20,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
+import owner_gate as og
 
 STRATEGY_UPDATED = "2026-10-10"
 
@@ -80,6 +82,25 @@ GATE_INPUTS = {
     "年間支出(円)": 0,
     "自分抜きで回った月数": 0,      # フェーズ3：基準 12か月
 }
+# 実績値はコードに書かず、Secrets の [gate] で上書きする（公開リポジトリに収支を残さないため）
+_GATE_SECRET_KEYS = {
+    "paid_schools": "有償契約の学校数",
+    "keep_schools": "継続意向ありの学校数",
+    "income_yen": "年間収入(円)",
+    "expense_yen": "年間支出(円)",
+    "months_without_me": "自分抜きで回った月数",
+}
+
+
+def gate_inputs() -> dict:
+    d = dict(GATE_INPUTS)
+    try:
+        for k, v in st.secrets.get("gate", {}).items():
+            if k in _GATE_SECRET_KEYS:
+                d[_GATE_SECRET_KEYS[k]] = int(v)
+    except Exception:  # noqa: BLE001  secrets.toml が無い環境
+        pass
+    return d
 
 # フェーズごとに必ず整えるもの：(フェーズ, 項目, 状況, 確認先・メモ)
 # 状況は「済」「進行中」「未着手」のいずれか
@@ -177,6 +198,7 @@ def show_verdict(phase: Phase, ok: list[bool], today: date, label: str = "③ �
 def render(log: pd.DataFrame, assets: Path, today: date | None = None) -> None:
     today = today or date.today()
     cur = current_phase(today)
+    GI = gate_inputs()
 
     st.header("🧭 10年戦略（2026〜2036）")
     st.write(
@@ -220,7 +242,7 @@ def render(log: pd.DataFrame, assets: Path, today: date | None = None) -> None:
 
     # ── 判断ゲート ──
     st.subheader("判断ゲート")
-    st.caption("フェーズ0は活動ログから自動で計算します。フェーズ1〜3は、実績が出たら `strategy.py` の `GATE_INPUTS` を書きかえます。")
+    st.caption("フェーズ0は活動ログから自動で計算します。フェーズ1〜3は、実績が出たら Secrets の `[gate]` に書きます（収支のゲート2は所有者のみ表示）。")
     g0, g1, g2, g3 = st.tabs([f"ゲート{p.no}：{p.gate}" for p in PHASES])
 
     with g0:
@@ -250,7 +272,7 @@ def render(log: pd.DataFrame, assets: Path, today: date | None = None) -> None:
                    "今月は途中なので、まだ記録がなくても途切れた扱いにしません。")
 
     with g1:
-        paid, keep = GATE_INPUTS["有償契約の学校数"], GATE_INPUTS["継続意向ありの学校数"]
+        paid, keep = GI["有償契約の学校数"], GI["継続意向ありの学校数"]
         a, b = st.columns(2)
         a.metric("有償契約の学校数", f"{paid} 校", help="基準：2校以上")
         b.metric("継続意向ありの学校数", f"{keep} 校", help="基準：1校以上")
@@ -259,26 +281,29 @@ def render(log: pd.DataFrame, assets: Path, today: date | None = None) -> None:
         st.caption("想定する相手：開校1〜2年目で外部フィールドを探している学校、特別支援学校の現場実習、総合型選抜の探究。")
 
     with g2:
-        st.markdown("**③ 自分の条件で判断する**：収支は数字で、体力と時間は自分の感覚で入れてください（保存はされません）。")
-        inc = st.number_input("年間収入（円）", min_value=0, step=10000, value=int(GATE_INPUTS["年間収入(円)"]))
-        exp = st.number_input("年間支出（円）", min_value=0, step=10000, value=int(GATE_INPUTS["年間支出(円)"]))
-        hrs = st.slider("この事業に使っている時間（週あたり・時間）", 0, 60, 15)
-        cap = st.slider("無理なく使える時間（週あたり・時間）", 0, 60, 20)
-        body = st.select_slider("体力の余裕", ["きつい", "ややきつい", "ふつう", "余裕あり"], value="ふつう")
-        bal = inc - exp
-        a, b = st.columns(2)
-        a.metric("① 年間収支", f"{bal:,} 円", delta="黒字" if bal >= 0 else "赤字",
-                 delta_color="normal" if bal >= 0 else "inverse")
-        b.metric("① 時間の余裕", f"{cap - hrs:+d} 時間/週")
-        verdict, kind = judge([bal >= 0, hrs <= cap, body in ("ふつう", "余裕あり")])
-        getattr(st, kind)(f"③ 判断（入力した条件なら）：**{verdict}**")
-        if today < PHASES[2].start:
-            st.caption(f"正式な判定はフェーズ2の終わり（{PHASES[2].end:%Y年%m月}）。いまは自分の条件を試しに入れてみる段階です。")
-        st.caption("週2日の店舗は、仕込み・衛生管理・在庫で体力を固定的に使うため、この段階では選びません。"
-                   "パンは探究の1単元（栽培→製粉→発酵の科学→焼成）と、予約・イベント限定にとどめます。")
+        # 収支は個人の家計・事業の数字なので所有者専用（owner_gate.py：収入構造ページと共通のロック）
+        st.caption("このゲートは「収支が赤字でないか」を判定するため、所有者のみ表示します。")
+        if og.owner_block("strategy_gate2"):
+            st.markdown("**③ 自分の条件で判断する**：収支は数字で、体力と時間は自分の感覚で入れてください（保存はされません）。")
+            inc = st.number_input("年間収入（円）", min_value=0, step=10000, value=int(GI["年間収入(円)"]))
+            exp = st.number_input("年間支出（円）", min_value=0, step=10000, value=int(GI["年間支出(円)"]))
+            hrs = st.slider("この事業に使っている時間（週あたり・時間）", 0, 60, 15)
+            cap = st.slider("無理なく使える時間（週あたり・時間）", 0, 60, 20)
+            body = st.select_slider("体力の余裕", ["きつい", "ややきつい", "ふつう", "余裕あり"], value="ふつう")
+            bal = inc - exp
+            a, b = st.columns(2)
+            a.metric("① 年間収支", f"{bal:,} 円", delta="黒字" if bal >= 0 else "赤字",
+                     delta_color="normal" if bal >= 0 else "inverse")
+            b.metric("① 時間の余裕", f"{cap - hrs:+d} 時間/週")
+            verdict, kind = judge([bal >= 0, hrs <= cap, body in ("ふつう", "余裕あり")])
+            getattr(st, kind)(f"③ 判断（入力した条件なら）：**{verdict}**")
+            if today < PHASES[2].start:
+                st.caption(f"正式な判定はフェーズ2の終わり（{PHASES[2].end:%Y年%m月}）。いまは自分の条件を試しに入れてみる段階です。")
+            st.caption("週2日の店舗は、仕込み・衛生管理・在庫で体力を固定的に使うため、この段階では選びません。"
+                       "パンは探究の1単元（栽培→製粉→発酵の科学→焼成）と、予約・イベント限定にとどめます。")
 
     with g3:
-        months = GATE_INPUTS["自分抜きで回った月数"]
+        months = GI["自分抜きで回った月数"]
         st.metric("自分抜きで回った月数", f"{months} / 12 か月")
         st.progress(min(months / 12, 1.0))
         handover = pd.DataFrame([
