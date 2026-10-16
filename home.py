@@ -464,6 +464,8 @@ with T["📡 圃場モニター"]:
     daily_mean = sdf.set_index("timestamp")["air_temp"].resample("D").mean()
     gdd = np.clip(daily_mean - 0, 0, None).cumsum()
     st.metric("積算温度（基準0℃, 期間累計）", f"{gdd.iloc[-1]:.0f} ℃・日")
+    st.caption("ハウスの「いつもと違う」（換気の故障・センサーの固着）を見つける方法は、"
+               "探究コーナー「🚨 異常検知の実践知」の 🌡️・📈 のデータで体験できます。")
 
 # ═════════════════════════════════════════════
 # 4. 原料レジリエンス（計算 → 可視化 → 判断）
