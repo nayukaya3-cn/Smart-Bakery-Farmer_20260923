@@ -5,15 +5,21 @@
 保存について:
   Streamlit Community Cloud ではサーバー上のファイルが再起動で消えるため、
   記録は「CSVをダウンロード」で手元に保存し、次回「CSVを読み込む」で復元します。
+
+閲覧ロック:
+  家計（収穫の金額換算・現金支出・暮らし方の目標）は本人の家計情報なので、所有者専用にする。
+  ロックの本体は owner_gate.py（収入構造ページと共通。Googleログイン × OWNER_EMAILS）。
 """
 import datetime as dt
 
 import pandas as pd
 import streamlit as st
 
+import owner_gate as og
 import security_guard as sg
 
-st.set_page_config(page_title="自給家計簿", page_icon="🌾", layout="wide")
+st.set_page_config(page_title="自給家計簿（本人のみ）", page_icon="🌾", layout="wide")
+og.require_owner("kakeibo")  # 所有者でなければここで止まる
 
 # ------------------------------------------------------------
 # 初期データ（価格はすべて仮置き。地域の直売所価格などに置き換える）
@@ -63,7 +69,12 @@ with st.sidebar:
 
     st.divider()
     year = st.number_input("集計する年", 2026, 2040, dt.date.today().year)
-    pension_note = st.text_input("ひとこと目標", "年金＋細い現金収入＋自給で暮らす")
+    # 目標の文言は公開リポジトリに残さない（Secrets の KAKEIBO_GOAL で初期値を入れられる）
+    try:
+        _goal = str(st.secrets.get("KAKEIBO_GOAL", ""))
+    except Exception:  # noqa: BLE001
+        _goal = ""
+    pension_note = st.text_input("ひとこと目標", _goal, placeholder="例：自給で暮らしを支える")
 
 # ------------------------------------------------------------
 # 本体：入力（記録する）
@@ -171,3 +182,4 @@ st.caption(
     "数字は市場価格への換算で、実際の家計の黒字を示すものではありません。"
     "医療・燃料・通信などの現金支出は別に確保してください。"
 )
+
