@@ -48,6 +48,7 @@ SCHOOL_PAGE = page_path("1")  # 学校向け：ルーブリック・活動ログ
 COMPARE_PAGE = page_path("3")  # 寒締めほうれん草：くじで分けて測る・比べる・グラフ・判断
 P3D_PAGE = page_path("8")  # 3Dプリンター（学校向けの探究）
 ROBOT_PAGE = page_path("10")  # AIロボット（学校向けの探究）
+GAME_PAGE = page_path("12")  # 探究コーナー：ゲーム特化型データ分析を軸にした探究（情報Ⅰ）
 METAVERSE_PAGE = page_path("7")  # 畑・ハウス・パン工房を実寸の3Dワールドに（文系中高生向け）
 
 
@@ -71,6 +72,14 @@ def school_banner() -> None:
         )
         with b2:
             safe_page_link(SCHOOL_PAGE, "記録の仕組みを見る", "➡️")
+        g1, g2 = st.columns([3, 1])
+        g1.markdown(
+            "**🎮 探究コーナー：ゲーム運営の目で農園を分析する**　"
+            "ゲーム会社のデータ分析の型（集める→指標→探す→確かめる→試し続ける）で、"
+            "体験会の来訪ログを分析します。情報Ⅰ「データの活用」の90分モデルつき。"
+        )
+        with g2:
+            safe_page_link(GAME_PAGE, "探究コーナーを開く", "➡️")
 
 
 st.markdown(
@@ -101,7 +110,7 @@ with st.sidebar:
     st.header("🌾 スマートパン屋農家")
     st.write("麦を育て、数値で判断し、パンを焼く。")
     sn.buttons("で活動内容を見る", stacked=True)
-    st.caption("ほかのページは、上のメニューに4つのまとまりで並べています。")
+    st.caption("ほかのページは、上のメニューに5つのまとまりで並べています。")
     st.divider()
     st.caption("拠点：広島県三原市西部（ハウス・畑区画）")
     st.caption(f"圃場面積：約 {FIELD_AREA_M2} ㎡")
