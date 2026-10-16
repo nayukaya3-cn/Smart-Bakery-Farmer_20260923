@@ -49,6 +49,7 @@ COMPARE_PAGE = page_path("3")  # 寒締めほうれん草：くじで分けて�
 P3D_PAGE = page_path("8")  # 3Dプリンター（学校向けの探究）
 ROBOT_PAGE = page_path("10")  # AIロボット（学校向けの探究）
 GAME_PAGE = page_path("12")  # 探究コーナー：ゲーム特化型データ分析を軸にした探究（情報Ⅰ）
+SAT_PAGE = page_path("14")  # 探究コーナー：衛星データ解析（Python実装）
 METAVERSE_PAGE = page_path("7")  # 畑・ハウス・パン工房を実寸の3Dワールドに（文系中高生向け）
 
 
@@ -80,6 +81,14 @@ def school_banner() -> None:
         )
         with g2:
             safe_page_link(GAME_PAGE, "探究コーナーを開く", "➡️")
+        h1, h2 = st.columns([3, 1])
+        h1.markdown(
+            "**🛰️ 探究コーナー：衛星データ解析（Python実装）**　"
+            "光学（NDVI）とSAR（雲の下・浸水）で、畑と川を宇宙から数値で見ます。"
+            "自分の圃場が何％浸かったら行動するか、までを判断します。"
+        )
+        with h2:
+            safe_page_link(SAT_PAGE, "衛星データ解析を開く", "➡️")
 
 
 st.markdown(
