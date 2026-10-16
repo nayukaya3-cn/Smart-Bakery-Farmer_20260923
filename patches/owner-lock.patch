@@ -1,0 +1,468 @@
+From efccb1da28ce27744e39338eec6539ad602f3157 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 16 Oct 2026 15:57:41 +0900
+Subject: [PATCH] =?UTF-8?q?=E6=89=80=E6=9C=89=E8=80=85=E5=B0=82=E7=94=A8?=
+ =?UTF-8?q?=E3=83=AD=E3=83=83=E3=82=AF=E3=82=92=E5=85=B1=E9=80=9A=E5=8C=96?=
+ =?UTF-8?q?=E3=81=97=E3=80=81=E8=87=AA=E7=B5=A6=E5=AE=B6=E8=A8=88=E7=B0=BF?=
+ =?UTF-8?q?=E3=81=A810=E5=B9=B4=E6=88=A6=E7=95=A5=E3=82=B2=E3=83=BC?=
+ =?UTF-8?q?=E3=83=882(=E5=8F=8E=E6=94=AF)=E3=82=92=E3=83=AD=E3=83=83?=
+ =?UTF-8?q?=E3=82=AF?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01S9hcXgDW6JjUgmZkk3Kk6A
+---
+ app.py                                        |   2 +-
+ owner_gate.py                                 | 114 ++++++++++++++++++
+ ...16\345\205\245\346\247\213\351\200\240.py" |  55 +--------
+ ...46\345\256\266\350\250\210\347\260\277.py" |  15 ++-
+ ...43\343\203\255\343\202\257\343\202\231.py" |   8 ++
+ secrets.toml.example                          |  14 ++-
+ strategy.py                                   |  67 ++++++----
+ 7 files changed, 198 insertions(+), 77 deletions(-)
+ create mode 100644 owner_gate.py
+
+diff --git a/app.py b/app.py
+index 9a3f67d..22d1ee8 100644
+--- a/app.py
++++ b/app.py
+@@ -35,11 +35,11 @@ NAV = {
+     "🔬 研究・実証": [
+         ("5", "作業日誌テキスト分析", "🔤"),
+         ("2", "地元の農業法人での農作業", "🌾"),
+-        ("4", "自給家計簿", "🌾"),
+     ],
+     "🔒 管理": [
+         ("9", "セキュリティログ", "🔒"),
+         ("11", "収入構造（本人のみ）", "💴"),
++        ("4", "自給家計簿（本人のみ）", "🌾"),
+     ],
+ }
+ 
+diff --git a/owner_gate.py b/owner_gate.py
+new file mode 100644
+index 0000000..8a2a7be
+--- /dev/null
++++ b/owner_gate.py
+@@ -0,0 +1,114 @@
++"""
++owner_gate.py ─ 所有者専用ページ・所有者専用ブロックの閲覧ロック（共通部品）
++
++守り方（pages/11_収入構造.py から切り出して共通化）:
++  ① Googleアカウントでログイン（OpenID Connect）。Google側の2段階認証がそのまま効く。
++  ② ログインしたメールアドレスが Secrets の OWNER_EMAILS にあり、Google が確認済み
++     （email_verified）のときだけ表示する。
++  ③ 認証の設定が無いときは、誰にも表示しない（設定漏れで公開されないように「閉じる側」に倒す）。
++
++使い方:
++  ページ全体をロック   … require_owner("kakeibo")          # 所有者でなければ st.stop()
++  ページの一部だけロック … if owner_block("strategy_gate2"): ...  # 所有者なら True、違えば案内を出して False
++
++必要な Secrets は secrets.toml.example を参照。
++"""
++from __future__ import annotations
++
++import streamlit as st
++
++import security_guard as sg
++
++_AUTH_KEYS = ("redirect_uri", "cookie_secret", "client_id", "client_secret", "server_metadata_url")
++
++
++def owner_emails() -> set[str]:
++    try:
++        raw = st.secrets.get("OWNER_EMAILS", [])
++    except Exception:  # noqa: BLE001  secrets.toml が無い環境
++        return set()
++    if isinstance(raw, str):
++        raw = [raw]
++    return {str(e).strip().lower() for e in raw if e and "@" in str(e)}
++
++
++def auth_configured() -> bool:
++    try:
++        auth = st.secrets.get("auth", {})
++    except Exception:  # noqa: BLE001
++        return False
++    return all(auth.get(k) for k in _AUTH_KEYS)
++
++
++def _logged_in() -> bool:
++    try:
++        return bool(st.user.get("is_logged_in", False))
++    except Exception:  # noqa: BLE001  古いStreamlit・認証未設定
++        return False
++
++
++def is_owner() -> bool:
++    """画面には何も出さずに、所有者としてログイン中かだけを返す。"""
++    owners = owner_emails()
++    if not owners or not auth_configured() or not _logged_in():
++        return False
++    email = str(st.user.get("email", "")).strip().lower()
++    return email in owners and bool(st.user.get("email_verified", False))
++
++
++def _denied_help() -> None:
++    """閲覧できないとき、ログイン中の本人にだけ原因の手がかりを出す（他人の情報は出さない）。"""
++    email = str(st.user.get("email", ""))
++    verified = bool(st.user.get("email_verified", False))
++    st.caption(f"いまログインしているアカウント：{email or '（取得できませんでした）'}")
++    with st.expander("所有者なのに開けないとき"):
++        st.markdown(
++            "- Secrets の `OWNER_EMAILS` に、**上と同じアドレス**が入っているか確かめてください"
++            "（全角・前後の空白・別のGoogleアカウントでのログインに注意）。\n"
++            f"- Google の確認済みフラグ（email_verified）：**{'あり' if verified else 'なし'}**。"
++            "「なし」なら Googleアカウント側でメールアドレスの確認を済ませてください。\n"
++            "- Secrets を直したら、Manage app → Reboot app で再起動します。"
++        )
++
++
++def _gate(page: str, *, stop: bool) -> bool:
++    if is_owner():
++        key = f"_owner_logged_{page}"
++        if not st.session_state.get(key):
++            sg.log_event("owner_login", "INFO", page=page)
++            st.session_state[key] = True
++        return True
++
++    halt = st.stop if stop else (lambda: None)
++    if not owner_emails() or not auth_configured():
++        st.error("この内容は所有者専用です（認証の設定がまだ無いため、誰にも表示しません）。")
++        halt()
++        return False
++
++    if not _logged_in():
++        st.info("🔒 所有者専用です。Googleアカウントでログインしてください。")
++        st.button("Googleでログイン", on_click=st.login, type="primary", key=f"login_{page}")
++        halt()
++        return False
++
++    if not st.session_state.get(f"_owner_denied_{page}"):  # 再描画のたびに警告を重ねない
++        sg.log_event("owner_page_denied", "WARNING", page=page)  # メールアドレスは残さない
++        st.session_state[f"_owner_denied_{page}"] = True
++    st.error("このアカウントでは閲覧できません。")
++    _denied_help()
++    st.button("ログアウト", on_click=st.logout, key=f"logout_{page}")
++    halt()
++    return False
++
++
++def require_owner(page: str) -> None:
++    """ページ全体をロックする。所有者でなければ st.stop() で止める。"""
++    _gate(page, stop=True)
++    top = st.columns([6, 1])
++    top[0].caption(f"🔒 所有者専用ページ｜ログイン中: {st.user.get('email')}")
++    top[1].button("ログアウト", on_click=st.logout, key=f"logout_top_{page}")
++
++
++def owner_block(page: str) -> bool:
++    """ページの一部だけをロックする。所有者なら True。違えば案内を出して False（ページは止めない）。"""
++    return _gate(page, stop=False)
+diff --git "a/pages/11_\345\217\216\345\205\245\346\247\213\351\200\240.py" "b/pages/11_\345\217\216\345\205\245\346\247\213\351\200\240.py"
+index 13711e8..aa98499 100644
+--- "a/pages/11_\345\217\216\345\205\245\346\247\213\351\200\240.py"
++++ "b/pages/11_\345\217\216\345\205\245\346\247\213\351\200\240.py"
+@@ -9,7 +9,7 @@
+   ③ 認証の設定が無いときは、誰にも表示しない（設定漏れで公開されないように「閉じる側」に倒す）。
+ 
+ 必要な Secrets（Streamlit Community Cloud → アプリ → Settings → Secrets）は
+-secrets.toml.example を参照。
++secrets.toml.example を参照。ロックの本体は owner_gate.py（他のページと共通）。
+ """
+ import sys
+ from pathlib import Path
+@@ -22,60 +22,11 @@ _HERE = str(Path(__file__).resolve().parent)
+ if _HERE not in sys.path:
+     sys.path.append(_HERE)
+ 
+-import security_guard as sg  # noqa: E402
++import owner_gate as og  # noqa: E402
+ from income_structure_tab import render_income_structure_tab  # noqa: E402
+ 
+ st.set_page_config(page_title="収入構造（本人のみ）", page_icon="💴", layout="wide")
+ 
+-
+-def _owner_emails() -> set[str]:
+-    try:
+-        raw = st.secrets.get("OWNER_EMAILS", [])
+-    except Exception:  # noqa: BLE001  secrets.toml が無い環境
+-        return set()
+-    if isinstance(raw, str):
+-        raw = [raw]
+-    return {e.strip().lower() for e in raw if e and "@" in e}
+-
+-
+-def _auth_configured() -> bool:
+-    try:
+-        auth = st.secrets.get("auth", {})
+-    except Exception:  # noqa: BLE001
+-        return False
+-    need = ("redirect_uri", "cookie_secret", "client_id", "client_secret", "server_metadata_url")
+-    return all(auth.get(k) for k in need)
+-
+-
+-def owner_gate() -> None:
+-    """所有者でなければ st.stop() で止める。"""
+-    owners = _owner_emails()
+-    if not owners or not _auth_configured():
+-        st.error("このページは所有者専用です（認証の設定がまだ無いため、誰にも表示しません）。")
+-        st.stop()
+-
+-    if not st.user.get("is_logged_in", False):  # 値が無いときは「未ログイン」扱い
+-        st.info("所有者専用のページです。Googleアカウントでログインしてください。")
+-        st.button("Googleでログイン", on_click=st.login, type="primary")
+-        st.stop()
+-
+-    email = str(st.user.get("email", "")).lower()
+-    verified = bool(st.user.get("email_verified", False))
+-    if email not in owners or not verified:
+-        sg.log_event("owner_page_denied", "WARNING", page="income")  # メールアドレスは残さない
+-        st.error("このアカウントでは閲覧できません。")
+-        st.button("ログアウト", on_click=st.logout)
+-        st.stop()
+-
+-
+-owner_gate()
+-
+-if not st.session_state.get("_owner_logged"):
+-    sg.log_event("owner_login", "INFO", page="income")
+-    st.session_state._owner_logged = True
+-
+-top = st.columns([6, 1])
+-top[0].caption(f"ログイン中: {st.user.get('email')}")
+-top[1].button("ログアウト", on_click=st.logout)
++og.require_owner("income")
+ 
+ render_income_structure_tab()
+diff --git "a/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py" "b/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py"
+index f776f20..9f759a0 100644
+--- "a/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py"
++++ "b/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py"
+@@ -5,15 +5,21 @@
+ 保存について:
+   Streamlit Community Cloud ではサーバー上のファイルが再起動で消えるため、
+   記録は「CSVをダウンロード」で手元に保存し、次回「CSVを読み込む」で復元します。
++
++閲覧ロック:
++  家計（収穫の金額換算・現金支出・暮らし方の目標）は本人の家計情報なので、所有者専用にする。
++  ロックの本体は owner_gate.py（収入構造ページと共通。Googleログイン × OWNER_EMAILS）。
+ """
+ import datetime as dt
+ 
+ import pandas as pd
+ import streamlit as st
+ 
++import owner_gate as og
+ import security_guard as sg
+ 
+-st.set_page_config(page_title="自給家計簿", page_icon="🌾", layout="wide")
++st.set_page_config(page_title="自給家計簿（本人のみ）", page_icon="🌾", layout="wide")
++og.require_owner("kakeibo")  # 所有者でなければここで止まる
+ 
+ # ------------------------------------------------------------
+ # 初期データ（価格はすべて仮置き。地域の直売所価格などに置き換える）
+@@ -63,7 +69,12 @@ with st.sidebar:
+ 
+     st.divider()
+     year = st.number_input("集計する年", 2026, 2040, dt.date.today().year)
+-    pension_note = st.text_input("ひとこと目標", "年金＋細い現金収入＋自給で暮らす")
++    # 目標の文言は公開リポジトリに残さない（Secrets の KAKEIBO_GOAL で初期値を入れられる）
++    try:
++        _goal = str(st.secrets.get("KAKEIBO_GOAL", ""))
++    except Exception:  # noqa: BLE001
++        _goal = ""
++    pension_note = st.text_input("ひとこと目標", _goal, placeholder="例：自給で暮らしを支える")
+ 
+ # ------------------------------------------------------------
+ # 本体：入力（記録する）
+diff --git "a/pages/9_\360\237\224\222_\343\202\273\343\202\255\343\203\245\343\203\252\343\203\206\343\202\243\343\203\255\343\202\257\343\202\231.py" "b/pages/9_\360\237\224\222_\343\202\273\343\202\255\343\203\245\343\203\252\343\203\206\343\202\243\343\203\255\343\202\257\343\202\231.py"
+index ac76402..a19f682 100644
+--- "a/pages/9_\360\237\224\222_\343\202\273\343\202\255\343\203\245\343\203\252\343\203\206\343\202\243\343\203\255\343\202\257\343\202\231.py"
++++ "b/pages/9_\360\237\224\222_\343\202\273\343\202\255\343\203\245\343\203\252\343\203\206\343\202\243\343\203\255\343\202\257\343\202\231.py"
+@@ -3,11 +3,13 @@
+ 
+ Streamlit Community Cloud の「Settings → Secrets」に ADMIN_TOKEN（16文字以上のランダムな文字列）を
+ 登録したときだけ使えます。未登録なら誰も開けません。
++所有者（OWNER_EMAILS）として Google ログイン中なら、トークンなしで開けます（owner_gate.py と共通）。
+ """
+ import pandas as pd
+ import plotly.express as px
+ import streamlit as st
+ 
++import owner_gate as og
+ import security_guard as sg
+ 
+ st.set_page_config(page_title="セキュリティログ", page_icon="🔒", layout="wide")
+@@ -18,7 +20,13 @@ if fails >= 5:
+     st.error("認証の失敗が続いたため、このセッションではロックしました。ページを開き直してください。")
+     st.stop()
+ 
++if not st.session_state.get("_admin_ok") and og.is_owner():  # 所有者のGoogleログインでも開ける
++    st.session_state._admin_ok = True
++    sg.log_event("admin_login", "INFO", page="security_log", via="owner_google")
++
+ if not st.session_state.get("_admin_ok"):
++    if og.auth_configured() and og.owner_emails():
++        st.button("所有者はGoogleでログイン", on_click=st.login, key="login_security_log")
+     token = st.text_input("管理者トークン", type="password")
+     if not token:
+         st.caption("ADMIN_TOKEN が Secrets に未登録の場合、このページは使えません。")
+diff --git a/secrets.toml.example b/secrets.toml.example
+index 3a1d3d2..32816f9 100644
+--- a/secrets.toml.example
++++ b/secrets.toml.example
+@@ -3,9 +3,13 @@
+ # ※ このファイル自体には本物の値を書かない。本物は Secrets 画面だけに入れる。
+ # ─────────────────────────────────────────────────────────────
+ 
+-# 収入構造ページを開けるGoogleアカウント（複数可）
++# 所有者専用（🔒）の内容を開けるGoogleアカウント（複数可）
++#   収入構造・自給家計簿・10年戦略のゲート2（収支）・セキュリティログ（トークンの代わり）
+ OWNER_EMAILS = ["you@gmail.com"]
+ 
++# 自給家計簿の「ひとこと目標」の初期値（任意）
++KAKEIBO_GOAL = ""
++
+ # Googleログイン（OpenID Connect）
+ [auth]
+ redirect_uri = "https://smart-bakery-farm.streamlit.app/oauth2callback"
+@@ -26,3 +30,11 @@ dev_cost = 400000
+ revise_cost = 30000
+ saving_step = 40000
+ saving_cap = 240000
++
++# 10年戦略の判断ゲートの実績値（コードには0だけを残す）。書いた項目だけ上書きされる
++[gate]
++paid_schools = 0          # 有償契約の学校数
++keep_schools = 0          # 継続意向ありの学校数
++income_yen = 0            # 年間収入（円）※ゲート2は所有者のみ表示
++expense_yen = 0           # 年間支出（円）
++months_without_me = 0     # 自分抜きで回った月数
+diff --git a/strategy.py b/strategy.py
+index bc46a91..b85e64a 100644
+--- a/strategy.py
++++ b/strategy.py
+@@ -5,7 +5,7 @@
+ 各フェーズの終わりに「判断ゲート」を置き、数字で「進む／縮める」を決める。
+ 
+ 更新のしかた（ここだけ書きかえれば画面に反映されます）
+-  - GATE_INPUTS   … 有償契約の数・収支など、ゲート判定に使う実績値
++  - GATE_INPUTS   … ゲート判定に使う実績値の初期値（実額は Secrets の [gate] に書く）
+   - CHECKLIST     … フェーズごとに必ず整えるもの（保険・開業届・許可確認など）の状況
+   - PHASES        … 期間・仕事・小冊子の役割・ゲートの基準（戦略そのものを見直すとき）
+ """
+@@ -21,6 +21,8 @@ import plotly.express as px
+ import plotly.graph_objects as go
+ import streamlit as st
+ 
++import owner_gate as og
++
+ STRATEGY_UPDATED = "2026-10-10"
+ 
+ 
+@@ -80,6 +82,25 @@ GATE_INPUTS = {
+     "年間支出(円)": 0,
+     "自分抜きで回った月数": 0,      # フェーズ3：基準 12か月
+ }
++# 実績値はコードに書かず、Secrets の [gate] で上書きする（公開リポジトリに収支を残さないため）
++_GATE_SECRET_KEYS = {
++    "paid_schools": "有償契約の学校数",
++    "keep_schools": "継続意向ありの学校数",
++    "income_yen": "年間収入(円)",
++    "expense_yen": "年間支出(円)",
++    "months_without_me": "自分抜きで回った月数",
++}
++
++
++def gate_inputs() -> dict:
++    d = dict(GATE_INPUTS)
++    try:
++        for k, v in st.secrets.get("gate", {}).items():
++            if k in _GATE_SECRET_KEYS:
++                d[_GATE_SECRET_KEYS[k]] = int(v)
++    except Exception:  # noqa: BLE001  secrets.toml が無い環境
++        pass
++    return d
+ 
+ # フェーズごとに必ず整えるもの：(フェーズ, 項目, 状況, 確認先・メモ)
+ # 状況は「済」「進行中」「未着手」のいずれか
+@@ -177,6 +198,7 @@ def show_verdict(phase: Phase, ok: list[bool], today: date, label: str = "③ 
+ def render(log: pd.DataFrame, assets: Path, today: date | None = None) -> None:
+     today = today or date.today()
+     cur = current_phase(today)
++    GI = gate_inputs()
+ 
+     st.header("🧭 10年戦略（2026〜2036）")
+     st.write(
+@@ -220,7 +242,7 @@ def render(log: pd.DataFrame, assets: Path, today: date | None = None) -> None:
+ 
+     # ── 判断ゲート ──
+     st.subheader("判断ゲート")
+-    st.caption("フェーズ0は活動ログから自動で計算します。フェーズ1〜3は、実績が出たら `strategy.py` の `GATE_INPUTS` を書きかえます。")
++    st.caption("フェーズ0は活動ログから自動で計算します。フェーズ1〜3は、実績が出たら Secrets の `[gate]` に書きます（収支のゲート2は所有者のみ表示）。")
+     g0, g1, g2, g3 = st.tabs([f"ゲート{p.no}：{p.gate}" for p in PHASES])
+ 
+     with g0:
+@@ -250,7 +272,7 @@ def render(log: pd.DataFrame, assets: Path, today: date | None = None) -> None:
+                    "今月は途中なので、まだ記録がなくても途切れた扱いにしません。")
+ 
+     with g1:
+-        paid, keep = GATE_INPUTS["有償契約の学校数"], GATE_INPUTS["継続意向ありの学校数"]
++        paid, keep = GI["有償契約の学校数"], GI["継続意向ありの学校数"]
+         a, b = st.columns(2)
+         a.metric("有償契約の学校数", f"{paid} 校", help="基準：2校以上")
+         b.metric("継続意向ありの学校数", f"{keep} 校", help="基準：1校以上")
+@@ -259,26 +281,29 @@ def render(log: pd.DataFrame, assets: Path, today: date | None = None) -> None:
+         st.caption("想定する相手：開校1〜2年目で外部フィールドを探している学校、特別支援学校の現場実習、総合型選抜の探究。")
+ 
+     with g2:
+-        st.markdown("**③ 自分の条件で判断する**：収支は数字で、体力と時間は自分の感覚で入れてください（保存はされません）。")
+-        inc = st.number_input("年間収入（円）", min_value=0, step=10000, value=int(GATE_INPUTS["年間収入(円)"]))
+-        exp = st.number_input("年間支出（円）", min_value=0, step=10000, value=int(GATE_INPUTS["年間支出(円)"]))
+-        hrs = st.slider("この事業に使っている時間（週あたり・時間）", 0, 60, 15)
+-        cap = st.slider("無理なく使える時間（週あたり・時間）", 0, 60, 20)
+-        body = st.select_slider("体力の余裕", ["きつい", "ややきつい", "ふつう", "余裕あり"], value="ふつう")
+-        bal = inc - exp
+-        a, b = st.columns(2)
+-        a.metric("① 年間収支", f"{bal:,} 円", delta="黒字" if bal >= 0 else "赤字",
+-                 delta_color="normal" if bal >= 0 else "inverse")
+-        b.metric("① 時間の余裕", f"{cap - hrs:+d} 時間/週")
+-        verdict, kind = judge([bal >= 0, hrs <= cap, body in ("ふつう", "余裕あり")])
+-        getattr(st, kind)(f"③ 判断（入力した条件なら）：**{verdict}**")
+-        if today < PHASES[2].start:
+-            st.caption(f"正式な判定はフェーズ2の終わり（{PHASES[2].end:%Y年%m月}）。いまは自分の条件を試しに入れてみる段階です。")
+-        st.caption("週2日の店舗は、仕込み・衛生管理・在庫で体力を固定的に使うため、この段階では選びません。"
+-                   "パンは探究の1単元（栽培→製粉→発酵の科学→焼成）と、予約・イベント限定にとどめます。")
++        # 収支は個人の家計・事業の数字なので所有者専用（owner_gate.py：収入構造ページと共通のロック）
++        st.caption("このゲートは「収支が赤字でないか」を判定するため、所有者のみ表示します。")
++        if og.owner_block("strategy_gate2"):
++            st.markdown("**③ 自分の条件で判断する**：収支は数字で、体力と時間は自分の感覚で入れてください（保存はされません）。")
++            inc = st.number_input("年間収入（円）", min_value=0, step=10000, value=int(GI["年間収入(円)"]))
++            exp = st.number_input("年間支出（円）", min_value=0, step=10000, value=int(GI["年間支出(円)"]))
++            hrs = st.slider("この事業に使っている時間（週あたり・時間）", 0, 60, 15)
++            cap = st.slider("無理なく使える時間（週あたり・時間）", 0, 60, 20)
++            body = st.select_slider("体力の余裕", ["きつい", "ややきつい", "ふつう", "余裕あり"], value="ふつう")
++            bal = inc - exp
++            a, b = st.columns(2)
++            a.metric("① 年間収支", f"{bal:,} 円", delta="黒字" if bal >= 0 else "赤字",
++                     delta_color="normal" if bal >= 0 else "inverse")
++            b.metric("① 時間の余裕", f"{cap - hrs:+d} 時間/週")
++            verdict, kind = judge([bal >= 0, hrs <= cap, body in ("ふつう", "余裕あり")])
++            getattr(st, kind)(f"③ 判断（入力した条件なら）：**{verdict}**")
++            if today < PHASES[2].start:
++                st.caption(f"正式な判定はフェーズ2の終わり（{PHASES[2].end:%Y年%m月}）。いまは自分の条件を試しに入れてみる段階です。")
++            st.caption("週2日の店舗は、仕込み・衛生管理・在庫で体力を固定的に使うため、この段階では選びません。"
++                       "パンは探究の1単元（栽培→製粉→発酵の科学→焼成）と、予約・イベント限定にとどめます。")
+ 
+     with g3:
+-        months = GATE_INPUTS["自分抜きで回った月数"]
++        months = GI["自分抜きで回った月数"]
+         st.metric("自分抜きで回った月数", f"{months} / 12 か月")
+         st.progress(min(months / 12, 1.0))
+         handover = pd.DataFrame([
+-- 
+2.43.0
+
