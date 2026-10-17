@@ -1,0 +1,838 @@
+From f10f7da286c5eaa84060d8c266c5763e0fd25857 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 18 Oct 2026 04:17:07 +0900
+Subject: [PATCH] =?UTF-8?q?=E8=87=AA=E7=B5=A6=E3=81=A8=E9=98=B2=E7=81=BD?=
+ =?UTF-8?q?=E3=81=AE=E7=95=91=E3=82=B7=E3=83=9F=E3=83=A5=E3=83=AC=E3=83=BC?=
+ =?UTF-8?q?=E3=82=BF=E3=83=BC=E3=82=92=E8=BF=BD=E5=8A=A0=E3=81=97=E3=80=81?=
+ =?UTF-8?q?=E8=87=AA=E7=B5=A6=E5=AE=B6=E8=A8=88=E7=B0=BF=E3=83=BB=E5=8F=8E?=
+ =?UTF-8?q?=E5=85=A5=E6=A7=8B=E9=80=A0=E3=81=A8=E9=80=A3=E5=8B=95?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- jikyu_lab.py: 畑の配分4案の比較、月別の調達経路、停電断水（かまど・石窯）、実測CSVでの係数置き換え
+- pages/15_自給シミュレーター.py: 5タブ構成（探究フィールドワークの叩き台を含む）
+- 自給家計簿に「計画と比べる」タブ、収入構造の C 自給の初期値を連動
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01UbBN2XS3jkEdoKTQ6S6y6J
+---
+ README.md                                     |  18 +-
+ app.py                                        |   1 +
+ jikyu_lab.py                                  | 384 ++++++++++++++++++
+ ...54\343\203\274\343\202\277\343\203\274.py" | 276 +++++++++++++
+ ...46\345\256\266\350\250\210\347\260\277.py" |  33 +-
+ pages/income_structure_tab.py                 |   6 +
+ 6 files changed, 715 insertions(+), 3 deletions(-)
+ create mode 100644 jikyu_lab.py
+ create mode 100644 "pages/15_\350\207\252\347\265\246\343\202\267\343\203\237\343\203\245\343\203\254\343\203\274\343\202\277\343\203\274.py"
+
+diff --git a/README.md b/README.md
+index 5151b5b..75b5398 100644
+--- a/README.md
++++ b/README.md
+@@ -25,7 +25,7 @@ conda create が "Solving environment" のまま長時間止まる場合は、An
+ |---|---|
+ | 🌾 スマートパン屋農家 | ホーム |
+ | 🎓 学校向けの探究 | 記録が残る探究／比べて確かめる探究／中学理科 量の計算／メタバース工房 |
+-| 🎮 探究コーナー | ゲーム運営の目で見る（ゲーム特化型データ分析を軸にした探究）／異常検知の実践知／衛星データ解析（Python実装） |
++| 🎮 探究コーナー | ゲーム運営の目で見る（ゲーム特化型データ分析を軸にした探究）／異常検知の実践知／衛星データ解析（Python実装）／自給と防災の畑（二毛作の比較・停電断水時のかまど・石窯） |
+ | 🔬 研究・実証 | 作業日誌テキスト分析／地元の農業法人での農作業（ファイルを置くと出る）／自給家計簿 |
+ | 🔒 管理 | セキュリティログ（管理者専用） |
+ 
+@@ -53,6 +53,7 @@ conda create が "Solving environment" のまま長時間止まる場合は、An
+ | anomaly_lab.py | 探究コーナー「異常検知の実践知」の計算（5種の架空データ・診断カード・手法の選び方・ホテリングT²／MT法／ポアソン／k近傍／回帰の残差／時系列の残差／固着ルール／教師あり・閾値・ROC/PR・ベイズ）。`python anomaly_lab.py` で自己チェック |
+ | game_lab.py | 探究コーナーの計算（来訪ログの品質チェック・KPIツリー・ファネル・リテンション・アラート・k-means・PCA・並べ替え検定・ベイズA/B・トンプソン抽出）。`python game_lab.py` で自己チェック |
+ | satellite_lab.py | 探究コーナー「衛星データ解析」の計算（架空の地図・NDVI/NDWI・dB・スペックル・Leeフィルタ・2段階の大津の方法・前後差の浸水検出・ナイーブベイズ／k-means・CFAR船舶検出・乖離指標D・3層の観測のベイズ統合）。`python satellite_lab.py` で自己チェック |
++| jikyu_lab.py | 探究コーナー「自給と防災の畑」の計算（畑の配分4案の比較・月別の調達経路・停電断水の日ごとの水と薪・実測CSVでの係数置き換え・自給家計簿と収入構造への連動）。`python jikyu_lab.py` で自己チェック |
+ | compare_lab.py | 比べて確かめる探究の計算（くじ・列単位の比較・並べ替え検定・ブートストラップ・差の差） |
+ | docs/ | 表紙ページ（GitHub Pages）、研究メモ、画面の写真（`docs/img/`） |
+ | media_gallery.py | 画像・動画・PDF・テキスト・ノートブックの表示部品、Colab リンク |
+@@ -322,3 +323,18 @@ ThinkingData『ゲームデータアナリティクス よりよい開発・運
+ 
+ - 地図はすべて架空（三原の小麦畑と川沿いを想定、1画素＝10m×10m）。numpy と pandas だけで動き、外部の生成AIは呼び出しません。
+ - `notebooks/satellite_analysis_practice.ipynb`：同じ計算を手で動かす練習ノートブック。最後の節（任意）は Sentinel-2 の公開データで自分の地域のNDVIを計算する例です（ネット接続が必要。未接続の環境では動作未確認）。
++
++## 10. 🍞 探究コーナー：自給と防災の畑
++問い「小麦と大豆の二毛作を主体に、ハウスで野菜」は畑100㎡で最適な自給態勢か、水・電気が止まったら何日しのげるか、を扱うページです（`pages/15_自給シミュレーター.py`、計算は `jikyu_lab.py`）。
++
++| タブ | 中身 |
++|---|---|
++| ① 畑の配分を比べる | 二毛作主体・野菜中心・小麦→サツマイモ・折衷の4案を、重量／カロリー／たんぱく質／乾燥備蓄の日数／費用／作業時間で比較。二毛作の季節制約（夏作の収穫と小麦の最適播種日10/20頃のぶつかり）も計算 |
++| ② 月ごとの調達 | 不足分を「自家産（とれたて／保存）・下味冷凍・常備品・現地で買う」の5経路に分ける |
++| ③ 停電・断水 | 冷凍庫の保冷時間、雨水の集水量（1mm×1㎡＝1L）、かまど・石窯の薪の量を1日ずつ追う |
++| ④ 探究フィールドワーク | 「科学と人間生活」の単元との対応、半日プログラムの叩き台、実測CSVで収量の係数を置き換える |
++| ⑤ 家計簿・収入構造とつなぐ | 計画値を自給家計簿の「収穫」と同じ列で出力し、収入構造の「C 自給」に削減額を渡す |
++
++連動のしくみ：同じブラウザのセッション内では `st.session_state` の `jikyu_plan`（計画値）と `jikyu_link`（削減額）で自動的に渡ります。
++別の日は⑤タブのCSVを、自給家計簿の「計画と比べる」タブで読み込みます。家計の実額はこのページでは扱いません（公開ページのため）。
++数値はすべて目安の初期値です。実測値で置き換えていく前提です。
+diff --git a/app.py b/app.py
+index 07fb94d..630e75f 100644
+--- a/app.py
++++ b/app.py
+@@ -36,6 +36,7 @@ NAV = {
+         ("12", "ゲーム運営の目で見る", "🎮"),
+         ("13", "異常検知の実践知", "🚨"),
+         ("14", "衛星データ解析", "🛰️"),
++        ("15", "自給と防災の畑", "🍞"),
+     ],
+     "🔬 研究・実証": [
+         ("5", "作業日誌テキスト分析", "🔤"),
+diff --git a/jikyu_lab.py b/jikyu_lab.py
+new file mode 100644
+index 0000000..652620c
+--- /dev/null
++++ b/jikyu_lab.py
+@@ -0,0 +1,384 @@
++"""
++jikyu_lab.py ─ 自給と防災の畑シミュレーター（計算部）
++
++ページ pages/15_自給シミュレーター.py から呼び出します。単体で `python jikyu_lab.py` を
++実行すると、プリセット4案の比較表と自己チェックを表示します。
++
++骨格はリポジトリ共通の3段構え：
++  ① 計算する … 畑の配分（二毛作など）から、月ごとの自給量・不足分の調達経路・費用を出す
++  ② 可視化する … ページ側で plotly に渡す縦長（long）形式の DataFrame を返す
++  ③ 判断する … 二毛作の季節制約・停電断水時の持ちこたえ日数など、判断材料を返す
++
++連動するデータ構造:
++  - plan_to_kakeibo() … 自給家計簿の「収穫」と同じ列（日付・品目・数量・単位・単価(円)）で計画値を返す
++  - income_link()     … 収入構造シミュレーターの「C 自給」に渡す削減額（saving_step / saving_cap）
++
++数値はすべて目安の初期値です。実測CSV（coef_from_measurements）で自分の畑の値に置き換えていく前提です。
++"""
++from __future__ import annotations
++
++from dataclasses import dataclass, field, replace
++from datetime import date
++
++import numpy as np
++import pandas as pd
++
++FIELD_M2 = 100  # 畑の面積（ハウスは別）
++
++# ── 月ごとの分布（合計1）。露地は夏に多く、ハウスは冬の端境期を埋める ──
++VEG_OPEN = np.array([4, 3, 4, 6, 9, 12, 14, 13, 10, 9, 9, 7]) / 100
++VEG_HOUSE = np.array([10, 10, 11, 9, 7, 6, 5, 5, 7, 9, 10, 11]) / 100
++KAKI = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 40, 60, 0]) / 100
++FIG = np.array([0, 0, 0, 0, 0, 0, 0, 30, 45, 25, 0, 0]) / 100
++KURI = np.array([0, 0, 0, 0, 0, 0, 0, 0, 60, 40, 0, 0]) / 100
++# 三原周辺の月降水量の目安（mm）。気象庁の平年値（三原・福山など近い地点）で置き換える
++RAIN_MM = np.array([40, 55, 90, 110, 140, 200, 180, 100, 170, 110, 65, 40])
++
++
++@dataclass(frozen=True)
++class Coef:
++    yield_kg_m2: float   # 年間収量（kg/㎡）
++    kcal_per_kg: float
++    labor_h_m2: float    # 年間作業時間（時間/㎡）
++    cost_yen_m2: float   # 種苗・肥料・資材（円/㎡・年）
++    price_yen_kg: float  # 同じものを買った場合の単価（家計簿の換算に使う）
++
++
++COEF: dict[str, Coef] = {
++    "小麦": Coef(0.30, 3300, 0.3, 30, 400),      # 300kg/10a。小面積は鳥害を見込んで控えめ
++    "大豆": Coef(0.20, 3700, 0.4, 20, 1000),     # 乾燥豆
++    "サツマイモ": Coef(2.5, 1300, 0.5, 60, 400),
++    "露地野菜": Coef(4.0, 300, 1.5, 150, 450),
++    "ハウス野菜": Coef(6.0, 300, 2.0, 200, 450),
++}
++
++# 1人1か月の必要量（kg）と単価
++DEMAND = {"主食": 5.0, "野菜": 9.0, "果物": 4.5, "たんぱく質": 3.0}
++KCAL = {"主食": 3420, "野菜": 300, "果物": 600, "たんぱく質": 2000}  # 主食は米換算、たんぱく質は肉換算
++PRICE = {"米": 750, "小麦粉": 450, "野菜": 450, "冷凍野菜・乾物": 550, "果物": 700,
++         "下味冷凍": 1400, "缶詰": 1500}
++KCAL_PER_DAY = 2000
++SOY_MEAT_EQ = 1.7  # 乾燥大豆1kg ≒ 肉1.7kg分のたんぱく質（目安）
++SEED_G_M2 = 10     # 小麦の播種量（条まき）
++
++CHANNELS = ["自家産（とれたて）", "自家産（保存・貯蔵）", "下味冷凍", "常備品", "現地で買う"]
++CATEGORIES = list(DEMAND)
++
++STAGES = {"現在：隔週帰省で管理": 0.4, "移住1年目": 0.7, "移住3年目以降": 1.0}
++
++PRESETS: dict[str, tuple[int, int]] = {  # (小麦→大豆の面積, 小麦→サツマイモの面積)
++    "A 二毛作主体（小麦→大豆 70㎡）": (70, 0),
++    "B 野菜中心（小麦なし）": (0, 0),
++    "C 小麦→サツマイモ 70㎡": (0, 70),
++    "D 折衷（小麦→大豆 50㎡・小麦→サツマイモ 20㎡）": (50, 20),
++}
++
++
++@dataclass
++class Conditions:
++    persons: int = 2
++    stage: float = 0.7
++    house_m2: float = 20
++    bread_share: float = 0.25   # 主食のうちパンの割合
++    keep_rate: float = 0.5      # 余剰を保存に回せる割合
++    kuri_vigor: float = 0.4     # 栗の樹勢（盛りの木=1）
++    rice_own: bool = False      # 米を委託中の水田から現物で受け取る（想定）
++    a_soy: float = 70           # 小麦→大豆の面積
++    a_imo: float = 0            # 小麦→サツマイモの面積
++    coef: dict[str, Coef] = field(default_factory=lambda: dict(COEF))
++
++    @property
++    def a_wheat(self) -> float:
++        return self.a_soy + self.a_imo
++
++    @property
++    def a_veg(self) -> float:
++        return max(0.0, FIELD_M2 - self.a_wheat)
++
++
++# ───────────────────────── ① 計算する ─────────────────────────
++def _carry_over(dem: np.ndarray, prod: np.ndarray, keep: float, decay: float = 0.05):
++    """月ごとに「とれたて → 保存分 → 不足」の順に充てる。2年回して2年目を返す（持ち越しを反映）。"""
++    stock = 0.0
++    for _ in range(2):
++        fresh, stored, rem = np.zeros(12), np.zeros(12), np.zeros(12)
++        for m in range(12):
++            stock *= 1 - decay
++            fresh[m] = min(prod[m], dem[m])
++            r = dem[m] - fresh[m]
++            stored[m] = min(stock, r)
++            stock -= stored[m]
++            rem[m] = r - stored[m]
++            stock += (prod[m] - fresh[m]) * keep
++    return fresh, stored, rem
++
++
++def production(c: Conditions) -> dict[str, np.ndarray]:
++    """月ごとの生産量（kg）。小麦は6月、大豆・サツマイモは10月に収穫。"""
++    k, s = c.coef, c.stage
++    z = np.zeros(12)
++    wheat = z.copy()
++    wheat[5] = max(0.0, c.a_wheat * k["小麦"].yield_kg_m2 * s - c.a_wheat * SEED_G_M2 / 1000)
++    soy = z.copy()
++    soy[9] = c.a_soy * k["大豆"].yield_kg_m2 * s
++    imo = z.copy()
++    imo[9] = c.a_imo * k["サツマイモ"].yield_kg_m2 * s
++    veg = (c.a_veg * k["露地野菜"].yield_kg_m2 * s * VEG_OPEN
++           + c.house_m2 * k["ハウス野菜"].yield_kg_m2 * s * VEG_HOUSE)
++    fruit = (40 * max(s, 0.7) * KAKI + 2 * 8 * s * FIG
++             + 5 * 5 * c.kuri_vigor * max(s, 0.6) * KURI)
++    return {"小麦": wheat, "大豆": soy, "サツマイモ": imo, "野菜": veg, "果物": fruit}
++
++
++def simulate(c: Conditions) -> tuple[pd.DataFrame, dict]:
++    """月×品目×調達経路の量（kg）を縦長の表で返し、年間の要約を dict で返す。"""
++    P = c.persons
++    prod = production(c)
++    flour = prod["小麦"].sum() * 0.9                 # 製粉歩留まり90%。通年で少しずつ使う
++    imo_eq = np.zeros(12)                             # サツマイモは10〜2月に食べる（米換算）
++    for m in (9, 10, 11, 0, 1):
++        imo_eq[m] = prod["サツマイモ"].sum() * 0.9 / 5 * KCAL_PER_KG_IMO_TO_RICE
++    rows = []
++
++    def add(cat, arr_by_ch):
++        for ch, arr in arr_by_ch.items():
++            for m in range(12):
++                rows.append((m + 1, cat, ch, float(arr[m])))
++
++    # 主食（乾燥穀物・芋はすべて「保存・貯蔵」）
++    dem = np.full(12, P * DEMAND["主食"])
++    rice_part = dem * (1 - c.bread_share) if c.rice_own else 0
++    own = np.minimum(dem, flour / 12 + imo_eq + rice_part)
++    add("主食", {"自家産（保存・貯蔵）": own, "常備品": dem - own})
++
++    # 野菜
++    dem = np.full(12, P * DEMAND["野菜"])
++    f, st, rem = _carry_over(dem, prod["野菜"], c.keep_rate)
++    add("野菜", {"自家産（とれたて）": f, "自家産（保存・貯蔵）": st,
++                 "常備品": rem * 0.2, "現地で買う": rem * 0.8})
++
++    # 果物
++    dem = np.full(12, P * DEMAND["果物"])
++    f, st, rem = _carry_over(dem, prod["果物"], c.keep_rate)
++    add("果物", {"自家産（とれたて）": f, "自家産（保存・貯蔵）": st, "現地で買う": rem})
++
++    # たんぱく質（大豆は味噌・煮豆にして通年で使う）
++    dem = np.full(12, P * DEMAND["たんぱく質"])
++    own = np.minimum(dem, prod["大豆"].sum() * SOY_MEAT_EQ / 12)
++    rem = dem - own
++    add("たんぱく質", {"自家産（保存・貯蔵）": own, "下味冷凍": rem * 0.7, "常備品": rem * 0.3})
++
++    df = pd.DataFrame(rows, columns=["月", "品目", "経路", "kg"])
++    return df, summarize(c, df, prod)
++
++
++KCAL_PER_KG_IMO_TO_RICE = COEF["サツマイモ"].kcal_per_kg / KCAL["主食"]
++
++
++def summarize(c: Conditions, df: pd.DataFrame, prod: dict) -> dict:
++    P = c.persons
++    by = df.groupby(["品目", "経路"])["kg"].sum()
++    dem = {k: P * v * 12 for k, v in DEMAND.items()}
++    own = {k: by.get((k, "自家産（とれたて）"), 0) + by.get((k, "自家産（保存・貯蔵）"), 0) for k in CATEGORIES}
++    rate = {k: own[k] / dem[k] for k in CATEGORIES}
++
++    staple_price = PRICE["米"] * (1 - c.bread_share) + PRICE["小麦粉"] * c.bread_share
++    buy = (by.get(("主食", "常備品"), 0) * staple_price
++           + by.get(("野菜", "現地で買う"), 0) * PRICE["野菜"]
++           + by.get(("野菜", "常備品"), 0) * PRICE["冷凍野菜・乾物"]
++           + by.get(("果物", "現地で買う"), 0) * PRICE["果物"]
++           + by.get(("たんぱく質", "下味冷凍"), 0) * PRICE["下味冷凍"]
++           + by.get(("たんぱく質", "常備品"), 0) * PRICE["缶詰"])
++    base = (dem["主食"] * staple_price + dem["野菜"] * PRICE["野菜"]
++            + dem["果物"] * PRICE["果物"] + dem["たんぱく質"] * PRICE["下味冷凍"])
++    k = c.coef
++    material = (c.a_wheat * k["小麦"].cost_yen_m2 + c.a_soy * k["大豆"].cost_yen_m2
++                + c.a_imo * k["サツマイモ"].cost_yen_m2 + c.a_veg * k["露地野菜"].cost_yen_m2
++                + c.house_m2 * k["ハウス野菜"].cost_yen_m2)
++    labor = (c.a_wheat * k["小麦"].labor_h_m2 + c.a_soy * k["大豆"].labor_h_m2
++             + c.a_imo * k["サツマイモ"].labor_h_m2 + c.a_veg * k["露地野菜"].labor_h_m2
++             + c.house_m2 * k["ハウス野菜"].labor_h_m2 + 20)  # 果樹の手入れ・収穫 20時間
++    own_kcal = (own["主食"] * KCAL["主食"] + own["野菜"] * KCAL["野菜"] + own["果物"] * KCAL["果物"]
++                + own["たんぱく質"] / SOY_MEAT_EQ * k["大豆"].kcal_per_kg)
++    # 電気がなくても傷まない乾燥備蓄（小麦粉・大豆・芋）の年平均在庫で、何日分のカロリーになるか
++    dry_kcal = (prod["小麦"].sum() * 0.9 * k["小麦"].kcal_per_kg
++                + prod["大豆"].sum() * k["大豆"].kcal_per_kg
++                + prod["サツマイモ"].sum() * 0.9 * k["サツマイモ"].kcal_per_kg * 5 / 12)
++    return dict(
++        demand=dem, own=own, rate=rate,
++        weight_rate=sum(own.values()) / sum(dem.values()),
++        kcal_rate=own_kcal / (P * KCAL_PER_DAY * 365),
++        buy=buy, base=base, material=material, net=base - buy - material, labor_h=labor,
++        dry_days=0.5 * dry_kcal / (P * KCAL_PER_DAY),
++        veg_surplus=max(0.0, prod["野菜"].sum() - own["野菜"]),
++        kcal_per_m2=kcal_per_m2(c),
++        double_crop=sowing_tradeoff(c),
++    )
++
++
++def kcal_per_m2(c: Conditions) -> dict[str, float]:
++    k = c.coef
++    return {
++        "小麦→大豆": k["小麦"].yield_kg_m2 * k["小麦"].kcal_per_kg + k["大豆"].yield_kg_m2 * k["大豆"].kcal_per_kg,
++        "小麦→サツマイモ": k["小麦"].yield_kg_m2 * k["小麦"].kcal_per_kg
++        + k["サツマイモ"].yield_kg_m2 * k["サツマイモ"].kcal_per_kg,
++        "露地野菜": k["露地野菜"].yield_kg_m2 * k["露地野菜"].kcal_per_kg,
++    }
++
++
++def sowing_tradeoff(c: Conditions, peak: float = 0.90, decay_per_day: float = 0.005,
++                    target_plants: int = 200, tkw_g: float = 40.0) -> dict | None:
++    """二毛作の季節制約：夏作の収穫（10月中下旬）と小麦の最適播種日（10/20頃）がぶつかる。
++    播種が11/5にずれた場合の、発芽率と必要な種子量（g/㎡）を、ホームの播種モデルと同じ式で出す。"""
++    if c.a_wheat <= 0 or (c.a_soy + c.a_imo) <= 0:
++        return None
++    delay = 16  # 10/20 → 11/05
++    g0, g1 = peak, max(0.3, peak - decay_per_day * delay)
++    seed = lambda g: target_plants * tkw_g / 1000 / g  # noqa: E731
++    return dict(delay_days=delay, germ_opt=g0, germ_late=g1,
++                seed_opt_g_m2=seed(g0), seed_late_g_m2=seed(g1),
++                seed_late_total_kg=seed(g1) * c.a_wheat / 1000)
++
++
++def compare_presets(base: Conditions) -> pd.DataFrame:
++    """プリセット4案を同じ条件で比べる。"""
++    out = []
++    for name, (soy, imo) in PRESETS.items():
++        _, s = simulate(replace(base, a_soy=soy, a_imo=imo))
++        out.append({
++            "案": name,
++            "重量の自給率": s["weight_rate"], "カロリー自給率": s["kcal_rate"],
++            "主食": s["rate"]["主食"], "野菜": s["rate"]["野菜"], "たんぱく質": s["rate"]["たんぱく質"],
++            "停電でも食べられる備蓄(日)": s["dry_days"], "野菜の余り(kg/年)": s["veg_surplus"],
++            "全部買う場合との差(円/年)": s["net"], "作業時間(時間/年)": s["labor_h"],
++        })
++    return pd.DataFrame(out)
++
++
++# ──────────────── 停電・断水（かまど・石窯） ────────────────
++WATER_L_PER_PERSON = 3.0      # 飲料・調理（1人1日3Lの目安）
++WOOD_COOK_KG = 3.0            # かまど炊飯・煮炊き（1日・世帯）
++WOOD_PER_L_BOIL = 0.25        # 雨水を煮沸する薪（kg/L）
++WOOD_OVEN_BAKE = 15.0         # 小型石窯1回の焼成（予熱込み）
++OVEN_EVERY_DAYS = 4
++
++
++def outage(c: Conditions, summary: dict, *, days: int, month: int, tank_l: float,
++           freezer_full: bool, rice_kg: float, jobi_days: float, roof_m2: float | None = None
++           ) -> tuple[pd.DataFrame, dict]:
++    """停電・断水が days 日続いたときの、食べ物・水・薪を日ごとに追う。"""
++    P = c.persons
++    roof = c.house_m2 if roof_m2 is None else roof_m2
++    rain_per_day = roof * RAIN_MM[month - 1] / 30 * 0.8          # 1mm × 1㎡ = 1L。集水効率80%
++    need = WATER_L_PER_PERSON * P
++    frozen_days = 2 if freezer_full else 1                       # 満杯で約48時間、半分で約24時間
++    rice_days = rice_kg * KCAL["主食"] / (P * KCAL_PER_DAY)
++    food_days = frozen_days + summary["dry_days"] + rice_days + jobi_days
++    bake = c.bread_share > 0 and summary["own"]["主食"] > 0
++
++    water, wood, rows, short_day = tank_l, 0.0, [], None
++    for d in range(1, days + 1):
++        water = min(tank_l, water + rain_per_day) - need
++        if water < 0 and short_day is None:
++            short_day = d
++        boil = min(need, rain_per_day + max(water, 0))  # 雨水由来の飲み水は煮沸する前提
++        today_wood = WOOD_COOK_KG + boil * WOOD_PER_L_BOIL
++        if bake and d % OVEN_EVERY_DAYS == 1:
++            today_wood += WOOD_OVEN_BAKE
++        wood += today_wood
++        if d <= frozen_days:
++            food = "下味冷凍を焼き切る（かまど）"
++        elif d <= frozen_days + summary["dry_days"]:
++            food = "自家産の小麦（石窯パン）・大豆・芋"
++        elif d <= frozen_days + summary["dry_days"] + rice_days:
++            food = "備蓄米（かまど炊飯）"
++        elif d <= food_days:
++            food = "常備品（缶詰・乾物）"
++        else:
++            food = "不足"
++        rows.append((d, food, max(water, 0.0), today_wood, wood))
++        water = max(water, 0.0)
++    df = pd.DataFrame(rows, columns=["日", "主な食べ物", "水の残り(L)", "その日の薪(kg)", "薪の累計(kg)"])
++    return df, dict(rain_per_day=rain_per_day, need_per_day=need, food_days=food_days,
++                    water_short_day=short_day, wood_total=wood, frozen_days=frozen_days)
++
++
++# 薪の自給（栗の剪定枝・改植材）。乾燥に1年かかるので「今年切った分は来年の備え」
++def firewood_supply(kuri_trees: int = 5, prune_kg_per_tree: float = 15, replant_trees: int = 0,
++                    kg_per_old_tree: float = 300) -> float:
++    return kuri_trees * prune_kg_per_tree + replant_trees * kg_per_old_tree
++
++
++# ──────────────── 実測で係数を置き換える（探究フィールドワーク） ────────────────
++MEASURE_COLS = ["日付", "作物", "区画面積_m2", "収量_kg", "測定者記号", "備考"]
++
++
++def measurement_template() -> pd.DataFrame:
++    """フィールドワーク用の記録テンプレート（架空の例。氏名は書かず、記号で記録する）。"""
++    return pd.DataFrame([
++        ["2027-06-05", "小麦", 10, 2.6, "A", "例：鳥よけネットあり"],
++        ["2027-10-20", "大豆", 10, 1.7, "B", "例：乾燥後の重さ"],
++        ["2027-10-20", "サツマイモ", 5, 11.0, "C", "例：つるを除いた重さ"],
++    ], columns=MEASURE_COLS)
++
++
++def coef_from_measurements(df: pd.DataFrame) -> dict[str, Coef]:
++    """記録から作物ごとの収量（kg/㎡）を出し、初期値の係数を置き換える。"""
++    coef = dict(COEF)
++    d = df.copy()
++    d["区画面積_m2"] = pd.to_numeric(d["区画面積_m2"], errors="coerce")
++    d["収量_kg"] = pd.to_numeric(d["収量_kg"], errors="coerce")
++    d = d.dropna(subset=["区画面積_m2", "収量_kg"])
++    d = d[d["区画面積_m2"] > 0]
++    for crop, g in d.groupby("作物"):
++        if crop in coef:
++            coef[crop] = replace(coef[crop], yield_kg_m2=float(g["収量_kg"].sum() / g["区画面積_m2"].sum()))
++    return coef
++
++
++# ──────────────── 家計簿・収入構造との連動 ────────────────
++KAKEIBO_COLS = ["日付", "品目", "数量", "単位", "単価(円)"]
++_TO_KAKEIBO = {"小麦": "小麦", "大豆": "大豆", "サツマイモ": "芋", "野菜": "野菜", "果物": "果物"}
++
++
++def plan_to_kakeibo(c: Conditions, year: int) -> pd.DataFrame:
++    """生産の計画値を、自給家計簿の「収穫」と同じ列で返す（毎月15日付）。"""
++    prod = production(c)
++    price = {"小麦": c.coef["小麦"].price_yen_kg, "大豆": c.coef["大豆"].price_yen_kg,
++             "サツマイモ": c.coef["サツマイモ"].price_yen_kg, "野菜": PRICE["野菜"], "果物": PRICE["果物"]}
++    rows = [(date(year, m + 1, 15), _TO_KAKEIBO[k], round(float(v[m]), 1), "kg", price[k])
++            for k, v in prod.items() for m in range(12) if v[m] > 0.05]
++    return pd.DataFrame(rows, columns=KAKEIBO_COLS)
++
++
++def income_link(summary: dict, years_to_reach: int = 3) -> dict:
++    """収入構造の「C 自給（削減額）」に渡す値。移住から years_to_reach 年で上限に達する想定。"""
++    cap = int(max(0, round(summary["net"], -3)))
++    return {"saving_cap": cap, "saving_step": int(round(cap / years_to_reach, -3))}
++
++
++# ───────────────────────── 自己チェック ─────────────────────────
++if __name__ == "__main__":
++    base = Conditions(stage=1.0)
++    table = compare_presets(base)
++    pd.set_option("display.width", 200)
++    print(table.round(2).to_string(index=False))
++
++    _, sA = simulate(replace(base, a_soy=70, a_imo=0))
++    _, sB = simulate(replace(base, a_soy=0, a_imo=0))
++    _, sC = simulate(replace(base, a_soy=0, a_imo=70))
++    assert 0 <= sA["weight_rate"] <= 1 and 0 <= sA["kcal_rate"] <= 1
++    assert sA["rate"]["たんぱく質"] > sB["rate"]["たんぱく質"], "大豆があるとたんぱく質の自給率が上がる"
++    assert sC["kcal_rate"] > sB["kcal_rate"], "芋はカロリーが稼げる"
++    assert sB["rate"]["野菜"] >= sA["rate"]["野菜"], "野菜中心なら野菜の自給率は下がらない"
++    assert sB["veg_surplus"] > sA["veg_surplus"], "野菜中心は余りが増える"
++    df, s = simulate(base)
++    for cat in CATEGORIES:  # 経路の合計は必要量に一致する
++        assert abs(df[df["品目"] == cat]["kg"].sum() - s["demand"][cat]) < 1e-6, cat
++    o, so = outage(base, sA, days=7, month=9, tank_l=200, freezer_full=True, rice_kg=10, jobi_days=3)
++    assert len(o) == 7 and so["wood_total"] > 0
++    k = plan_to_kakeibo(base, 2027)
++    assert list(k.columns) == KAKEIBO_COLS and set(k["品目"]) <= {"小麦", "大豆", "芋", "野菜", "果物"}
++    m = coef_from_measurements(measurement_template())
++    assert abs(m["小麦"].yield_kg_m2 - 0.26) < 1e-9
++    print("\nOK: 自己チェックを通過しました")
+diff --git "a/pages/15_\350\207\252\347\265\246\343\202\267\343\203\237\343\203\245\343\203\254\343\203\274\343\202\277\343\203\274.py" "b/pages/15_\350\207\252\347\265\246\343\202\267\343\203\237\343\203\245\343\203\254\343\203\274\343\202\277\343\203\274.py"
+new file mode 100644
+index 0000000..25c9e1f
+--- /dev/null
++++ "b/pages/15_\350\207\252\347\265\246\343\202\267\343\203\237\343\203\245\343\203\254\343\203\274\343\202\277\343\203\274.py"
+@@ -0,0 +1,276 @@
++"""
++自給と防災の畑シミュレーター ─ 計算する → 可視化する → 自分の条件で判断する
++配置先: pages/15_自給シミュレーター.py （Streamlit のマルチページ構成）
++
++問い：「小麦と大豆の二毛作を主体に、ハウスで野菜」は、実家の畑100㎡で最適な自給態勢か？
++       水・電気が止まったら、かまど・石窯で何日しのげるか？
++
++方針
++  - 計算は jikyu_lab.py（`python jikyu_lab.py` で自己チェック）。
++  - 数値はすべて目安の初期値。探究フィールドワークの実測CSVで、自分の畑の値に置き換える。
++  - アップロードした記録はセッション内だけで使い、サーバーには残さない。生徒の氏名は扱わない。
++  - このページは公開。家計の実額は扱わず、連動先の自給家計簿・収入構造（本人のみ）へ
++    計画値を同じセッション内で渡すだけにする。
++"""
++from dataclasses import replace
++from datetime import date
++
++import pandas as pd
++import plotly.express as px
++import plotly.graph_objects as go
++import streamlit as st
++
++import jikyu_lab as jl
++import security_guard as sg
++
++st.set_page_config(page_title="自給と防災の畑", page_icon="🍞", layout="wide")
++
++PAGE = "jikyu"
++CH_COLORS = {
++    "自家産（とれたて）": "#6a9a4a", "自家産（保存・貯蔵）": "#2f6f5e", "下味冷凍": "#3f7cac",
++    "常備品": "#c98a2b", "現地で買う": "#b77a86",
++}
++
++# ─────────────────────── 条件（サイドバー） ───────────────────────
++with st.sidebar:
++    st.header("共通の条件")
++    stage_name = st.selectbox("管理の段階", list(jl.STAGES), index=1,
++                              help="隔週帰省だと、収穫遅れ・鳥害・草で収量が大きく落ちる想定です。")
++    persons = st.slider("食べる人数", 1, 4, 2)
++    house = st.slider("ハウスの面積（㎡）", 0, 60, 20, 5, help="実際の面積に合わせてください（初期値は仮）。")
++    bread = st.slider("主食のうちパンの割合（%）", 0, 60, 25, 5) / 100
++    keep = st.slider("余りを保存に回せる割合（%）", 0, 90, 50, 10) / 100
++    kuri = st.slider("栗5本の樹勢（%）", 10, 100, 40, 10, help="盛りの木を100%として。植えて30年。") / 100
++    rice_own = st.checkbox("米を委託中の水田から現物で受け取る（想定）")
++    if "jikyu_coef" in st.session_state:
++        st.success("収量の係数は、読み込んだ実測値を使っています。")
++        if st.button("初期値に戻す"):
++            del st.session_state["jikyu_coef"]
++            st.rerun()
++
++base = jl.Conditions(persons=persons, stage=jl.STAGES[stage_name], house_m2=house,
++                     bread_share=bread, keep_rate=keep, kuri_vigor=kuri, rice_own=rice_own,
++                     coef=st.session_state.get("jikyu_coef", dict(jl.COEF)))
++
++st.title("🍞 自給と防災の畑シミュレーター")
++st.caption("三原市西部の実家：畑100㎡・ハウス・柿1本・いちじく2本・栗5本 ／ ① 計算する → ② 可視化する → ③ 自分の条件で判断する")
++
++T = st.tabs(["① 畑の配分を比べる", "② 月ごとの調達", "③ 停電・断水（かまど・石窯）",
++             "④ 探究フィールドワーク", "⑤ 家計簿・収入構造とつなぐ"])
++
++# ═════════════════════ ① 畑の配分を比べる ═════════════════════
++with T[0]:
++    st.subheader("問い：二毛作（小麦→大豆）主体＋ハウス野菜が最適か")
++    st.write("同じ条件で4つの案を比べます。何を「最適」とするか（お金・カロリー・たんぱく質・停電への備え・手間）で答えが変わります。")
++    cmp = jl.compare_presets(base)
++    show = cmp.copy()
++    for col in ["重量の自給率", "カロリー自給率", "主食", "野菜", "たんぱく質"]:
++        show[col] = (show[col] * 100).round(0).astype(int).astype(str) + "%"
++    for col in ["停電でも食べられる備蓄(日)", "野菜の余り(kg/年)", "作業時間(時間/年)"]:
++        show[col] = show[col].round(0).astype(int)
++    show["全部買う場合との差(円/年)"] = show["全部買う場合との差(円/年)"].map(lambda v: f"{v:,.0f}")
++    st.dataframe(show, hide_index=True, width="stretch")
++    st.caption("重量の自給率は主食・野菜・果物・たんぱく質の4区分の合計。カロリー自給率は1人1日2,000kcalに対する割合で、"
++               "油・砂糖・調味料は含めていないため低めに出ます。差額は種苗・肥料などの資材費を差し引いた値です。")
++
++    long = cmp.melt(id_vars="案", value_vars=["カロリー自給率", "主食", "野菜", "たんぱく質"],
++                    var_name="指標", value_name="割合")
++    fig = px.bar(long, x="指標", y="割合", color="案", barmode="group",
++                 color_discrete_sequence=["#c98a2b", "#7fb3a8", "#6a9a4a", "#3f7cac"])
++    fig.update_yaxes(tickformat=".0%", range=[0, 1.05], title=None)
++    fig.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
++    st.plotly_chart(fig, width="stretch")
++
++    kpm = jl.kcal_per_m2(base)
++    st.markdown("**1㎡あたりのカロリー（年間の目安）**　"
++                + "　／　".join(f"{k} **{v:,.0f}** kcal" for k, v in kpm.items()))
++
++    st.divider()
++    st.subheader("自分の配分を試す")
++    c1, c2 = st.columns(2)
++    a_soy = c1.slider("小麦→大豆の面積（㎡）", 0, 100, 70, 5)
++    a_imo = c2.slider("小麦→サツマイモの面積（㎡）", 0, 100 - a_soy, 0, 5)
++    st.caption(f"残りの {100 - a_soy - a_imo}㎡ は通年の露地野菜。小麦は11〜5月に畑を使い、6月の収穫後に夏作へ回します。")
++    st.session_state["jikyu_area"] = (a_soy, a_imo)
++
++    cond = replace(base, a_soy=a_soy, a_imo=a_imo)
++    _, s = jl.simulate(cond)
++    m = st.columns(4)
++    m[0].metric("重量の自給率", f"{s['weight_rate']:.0%}")
++    m[1].metric("カロリー自給率", f"{s['kcal_rate']:.0%}")
++    m[2].metric("停電でも食べられる乾燥備蓄", f"{s['dry_days']:.0f} 日分")
++    m[3].metric("全部買う場合との差", f"{s['net']:,.0f} 円/年")
++
++    st.subheader("判断の材料")
++    tips = []
++    best_kcal = cmp.loc[cmp["カロリー自給率"].idxmax(), "案"]
++    best_money = cmp.loc[cmp["全部買う場合との差(円/年)"].idxmax(), "案"]
++    tips.append(f"カロリー（停電時の生き延びやすさ）で選ぶなら **{best_kcal}**、お金で選ぶなら **{best_money}** が上位です。")
++    tips.append("野菜は露地30㎡＋ハウスで必要量にほぼ届きます。畑を全部野菜にしても余りが増えるだけで、"
++                "主食とたんぱく質は1割も自給できません。")
++    tips.append("大豆はたんぱく質を、サツマイモはカロリーを稼ぎます。どちらか一方より、両方を組み合わせた折衷案が"
++                "弱点（たんぱく質ゼロ・カロリー不足）を作りにくい配分です。")
++    dc = s["double_crop"]
++    if dc:
++        tips.append(f"**二毛作の季節制約**：夏作の収穫（10月中下旬）が小麦の最適播種日（10/20頃）とぶつかります。"
++                    f"播種が11/5まで{dc['delay_days']}日ずれると、発芽率は {dc['germ_opt']:.0%} → {dc['germ_late']:.0%}、"
++                    f"種子は {dc['seed_opt_g_m2']:.1f} → {dc['seed_late_g_m2']:.1f} g/㎡ に増え、"
++                    f"{cond.a_wheat:.0f}㎡で約 {dc['seed_late_total_kg']:.2f} kg 必要です。"
++                    "早生の大豆を選ぶか、夏作の一部だけ早く片付けて小麦を先にまく区画を作ると緩和できます。")
++    for t in tips:
++        st.markdown(f"- {t}")
++
++# ═════════════════════ ② 月ごとの調達 ═════════════════════
++a_soy, a_imo = st.session_state.get("jikyu_area", (70, 0))
++cond = replace(base, a_soy=a_soy, a_imo=a_imo)
++df, s = jl.simulate(cond)
++
++with T[1]:
++    st.subheader("足りない分を、何でまかなうか")
++    st.write(f"①で選んだ配分（大豆 {a_soy}㎡・サツマイモ {a_imo}㎡・野菜 {cond.a_veg:.0f}㎡）で、"
++             "月ごとの必要量を5つの経路に分けます。")
++    cat = st.radio("品目", jl.CATEGORIES, horizontal=True,
++                   format_func=lambda k: f"{k}（自給 {s['rate'][k]:.0%}）")
++    d = df[df["品目"] == cat].copy()
++    d["割合"] = d["kg"] / d.groupby("月")["kg"].transform("sum")
++    fig = px.bar(d, x="月", y="割合", color="経路", color_discrete_map=CH_COLORS,
++                 category_orders={"経路": jl.CHANNELS}, hover_data={"kg": ":.1f", "割合": ":.0%"})
++    fig.update_xaxes(tickmode="array", tickvals=list(range(1, 13)), ticktext=[f"{m}月" for m in range(1, 13)], title=None)
++    fig.update_yaxes(tickformat=".0%", title=None)
++    fig.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
++    st.plotly_chart(fig, width="stretch")
++
++    pv = df.pivot_table(index="品目", columns="経路", values="kg", aggfunc="sum").reindex(columns=jl.CHANNELS).fillna(0)
++    pv["必要量"] = pv.sum(axis=1)
++    st.dataframe(pv.round(0).astype(int), width="stretch")
++    st.caption("単位は kg/年。主食は米換算、たんぱく質は肉換算。")
++
++    st.subheader("今の「下味冷凍＋常備品＋現地で買う」は、移住後どう変わるか")
++    st.dataframe(pd.DataFrame([
++        ["下味冷凍", "月1回仕込んで車で運ぶ", "肉・魚の月1回まとめ買いとして続ける（たんぱく質の主力）"],
++        ["常備品", "缶詰・乾物・冷凍野菜を実家に置く", "自家製の小麦粉・大豆・干し柿・切り干し大根に置き換わる"],
++        ["現地で買う", "惣菜の代わりに卵・豆腐・野菜", "野菜は端境期（2〜4月）だけ。果物は旬以外"],
++    ], columns=["経路", "今（隔週帰省）", "移住後"]), hide_index=True, width="stretch")
++
++# ═════════════════════ ③ 停電・断水 ═════════════════════
++with T[2]:
++    st.subheader("水と電気が止まったら、何日しのげるか")
++    st.write("冷凍庫は止まると傷み始め、雨水は煮沸が要り、煮炊きとパン焼きには薪が要ります。食べ物・水・薪を1日ずつ追います。")
++    c1, c2, c3 = st.columns(3)
++    days = c1.slider("停電・断水の日数", 1, 21, 7)
++    month = c1.selectbox("起きる月", list(range(1, 13)), index=8, format_func=lambda m: f"{m}月")
++    tank = c2.number_input("雨水タンクの容量（L）", 0, 5000, 200, 50)
++    roof = c2.number_input("集水する屋根の面積（㎡）", 0, 200, int(house), 5, help="初期値はハウスの面積")
++    freezer = c2.radio("冷凍庫の中身", ["満杯に近い", "半分以下"], horizontal=True)
++    rice_kg = c3.number_input("備蓄米（kg）", 0, 120, 30, 5)
++    jobi = c3.number_input("常備品（缶詰・乾物）の量（日分）", 0, 60, 7)
++
++    od, os_ = jl.outage(cond, s, days=days, month=month, tank_l=tank, freezer_full=freezer == "満杯に近い",
++                        rice_kg=rice_kg, jobi_days=jobi, roof_m2=roof)
++    m = st.columns(4)
++    m[0].metric("食べ物が続く日数", f"{os_['food_days']:.0f} 日")
++    m[1].metric("水が足りなくなる日", f"{os_['water_short_day']} 日目" if os_["water_short_day"] else "期間内は足りる")
++    m[2].metric("1日の雨水（平均）", f"{os_['rain_per_day']:.0f} L", f"必要 {os_['need_per_day']:.0f} L/日", delta_color="off")
++    m[3].metric(f"{days}日間の薪", f"{os_['wood_total']:.0f} kg")
++
++    fig = go.Figure()
++    fig.add_bar(x=od["日"], y=od["その日の薪(kg)"], name="その日の薪（kg）", marker_color="#a08a68", yaxis="y2", opacity=0.6)
++    fig.add_scatter(x=od["日"], y=od["水の残り(L)"], name="水の残り（L）", mode="lines+markers", line=dict(color="#3f7cac"))
++    fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h"),
++                      xaxis_title="日目", yaxis=dict(title="L", rangemode="tozero"),
++                      yaxis2=dict(title="kg", overlaying="y", side="right", rangemode="tozero"))
++    st.plotly_chart(fig, width="stretch")
++    with st.expander("1日ずつの表"):
++        st.dataframe(od.round(1), hide_index=True, width="stretch")
++
++    supply = jl.firewood_supply()
++    st.subheader("判断の材料")
++    st.markdown(
++        f"- 冷凍庫は閉めたままで、満杯なら約2日、半分なら約1日もちます。**下味冷凍は最初の{os_['frozen_days']}日で、かまどで焼き切る**順番にします。\n"
++        f"- 雨水は屋根1㎡に1mm降ると1Lです。{month}月は1日平均約{os_['rain_per_day']:.0f}L集まる計算です。飲み水は**煮沸かろ過**してから使います。\n"
++        f"- 薪は{days}日で約{os_['wood_total']:.0f}kg。栗5本の剪定枝だけで年約{supply:.0f}kg（目安）です。"
++        "栗を改植するときに出る材は乾燥に1年かかるので、**今年切った分が来年の備え**になります。\n"
++        "- 石窯で一度にまとめて焼けば、パンは数日もつ主食になります。自家産の小麦はここで効きます。"
++    )
++    st.warning("かまど・石窯は必ず屋外か十分に換気できる場所で使います（一酸化炭素中毒・火災の危険）。"
++               "本ページの数値は教育用の単純化モデルです。実際の備えは自治体のハザードマップと防災情報に従ってください。")
++
++# ═════════════════════ ④ 探究フィールドワーク ═════════════════════
++with T[3]:
++    st.subheader("探究フィールドワークの叩き台")
++    st.write("通信制高校・サポート校の探究、総合型選抜に向けた探究、特別支援学校の作業学習の場として使う想定です。"
++             "このシミュレーターの**目安の数値を、生徒が畑で測った値に置き換えていく**ことが探究の中心です。")
++
++    st.markdown("**「科学と人間生活」の単元との対応**")
++    st.dataframe(pd.DataFrame([
++        ["水のリスク", "雨水の集水量（1mm×1㎡＝1L）、1日に必要な水", "③ 停電・断水"],
++        ["火と有毒ガス", "かまど・石窯の燃焼、薪の量、一酸化炭素", "③ 停電・断水"],
++        ["食と衛生", "乾燥・発酵・冷凍による保存、冷凍庫が止まった後の時間", "② 月ごとの調達"],
++        ["土地を読む", "畑の配分、二毛作の季節のぶつかり、1㎡あたりのカロリー", "① 畑の配分"],
++        ["情報としての判断", "目安の値と実測の値を区別し、係数を置き換える", "④ この下の記録"],
++    ], columns=["単元", "このシミュレーターで扱うこと", "使うタブ"]), hide_index=True, width="stretch")
++
++    st.markdown("**半日プログラム（約3時間）の例**")
++    st.dataframe(pd.DataFrame([
++        ["30分", "畑の観察と面積の測量（巻尺）", "区画ごとの面積を記録する"],
++        ["60分", "実測：収量の計量、雨水タンクの水位、薪1束の重さ", "テンプレートCSVに記録（氏名ではなく記号）"],
++        ["30分", "記録を読み込み、係数を置き換えて再計算", "目安の値との差を確かめる"],
++        ["30分", "自分の家に置き換えて判断（マイ・タイムライン）", "停電が何日続いたら困るかを決める"],
++        ["30分", "発表と振り返り", "根拠の数値を添えて説明する"],
++    ], columns=["時間", "活動", "成果物"]), hide_index=True, width="stretch")
++    st.caption("刃物・火を使う活動は指導者が付き、かまど・石窯の火入れは見学から始めます。")
++
++    st.divider()
++    st.markdown("**実測の記録で係数を置き換える**")
++    tmpl = jl.measurement_template()
++    st.download_button("記録テンプレート（CSV）をダウンロード", sg.safe_csv(tmpl), "自給_実測記録テンプレート.csv", "text/csv")
++    st.dataframe(tmpl, hide_index=True, width="stretch")
++    st.caption("上の3行は架空の例です。作物名は「小麦・大豆・サツマイモ・露地野菜・ハウス野菜」のいずれかで書きます。")
++    up = st.file_uploader("記録したCSVを読み込む", type="csv", key="up_measure")
++    if up is not None:
++        mdf = sg.read_csv_safely(up, page=PAGE, kind="measure")
++        if mdf is not None:
++            missing = [c for c in ["作物", "区画面積_m2", "収量_kg"] if c not in mdf.columns]
++            if missing:
++                st.error(f"列が足りません：{'・'.join(missing)}。テンプレートの列名のまま記録してください。")
++            else:
++                new = jl.coef_from_measurements(mdf)
++                diff = pd.DataFrame([(k, jl.COEF[k].yield_kg_m2, new[k].yield_kg_m2) for k in jl.COEF],
++                                    columns=["作物", "目安(kg/㎡)", "実測(kg/㎡)"])
++                st.dataframe(diff.round(2), hide_index=True, width="stretch")
++                if st.button("この実測値で再計算する"):
++                    st.session_state["jikyu_coef"] = new
++                    st.rerun()
++
++# ═════════════════════ ⑤ 家計簿・収入構造とつなぐ ═════════════════════
++with T[4]:
++    st.subheader("計画値を、自給家計簿と収入構造へ渡す")
++    st.write("このページは計画（見込み）、自給家計簿は実績、収入構造は10年の家計の見通しです。"
++             "同じ品目名・同じ列でつなぐので、計画と実績の差がそのまま次の判断材料になります。")
++    year = st.number_input("計画の年", 2026, 2040, date.today().year + 1)
++    plan = jl.plan_to_kakeibo(cond, int(year))
++    link = jl.income_link(s)
++    st.session_state["jikyu_plan"] = plan
++    st.session_state["jikyu_link"] = link
++
++    c1, c2 = st.columns(2)
++    with c1:
++        st.markdown("**自給家計簿へ（収穫の計画値）**")
++        st.dataframe(plan.groupby("品目")["数量"].sum().round(0).rename("計画(kg/年)"), width="stretch")
++        st.download_button("計画値をCSVで保存（家計簿の収穫と同じ列）", sg.safe_csv(plan),
++                           f"自給計画_{year}.csv", "text/csv")
++    with c2:
++        st.markdown("**収入構造へ（C 自給の削減額）**")
++        st.metric("削減額の上限", f"{link['saving_cap']:,} 円/年")
++        st.metric("年ごとの増分（3年で上限）", f"{link['saving_step']:,} 円")
++    st.info("このブラウザで続けて「自給家計簿」「収入構造」（どちらも本人のみ）を開くと、ここで計算した値が初期値として入ります。"
++            "別の日に使うときは、上のCSVを家計簿の「計画と比べる」で読み込んでください。")
++    with st.expander("データのつながり（構造）"):
++        st.code(
++            "自給シミュレーター（公開・計画）\n"
++            "  ├─ plan_to_kakeibo() ─→ 日付, 品目, 数量, 単位, 単価(円)  ─→ 自給家計簿「計画と比べる」\n"
++            "  │                                                         ↑ 実績：収穫を記録（同じ列）\n"
++            "  └─ income_link() ────→ saving_step, saving_cap          ─→ 収入構造「C 自給（削減額）」\n"
++            "探究フィールドワーク（実測CSV）─→ coef_from_measurements() ─→ 収量の係数を置き換え",
++            language="text",
++        )
+diff --git "a/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py" "b/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py"
+index fa94d65..d27ea72 100644
+--- "a/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py"
++++ "b/pages/4_\350\207\252\347\265\246\345\256\266\350\250\210\347\260\277.py"
+@@ -82,7 +82,7 @@ with st.sidebar:
+ st.title("🌾 自給家計簿")
+ st.caption("記録する → 見せる → 自分の条件で判断する")
+ 
+-tab_h, tab_c, tab_w = st.tabs(["収穫を記録", "支出を記録", "作業日誌"])
++tab_h, tab_c, tab_w, tab_p = st.tabs(["収穫を記録", "支出を記録", "作業日誌", "計画と比べる"])
+ 
+ with tab_h:
+     st.write("収穫した量と、**同じものを買った場合の単価**を入れます。")
+@@ -93,7 +93,7 @@ with tab_h:
+         column_config={
+             "日付": st.column_config.DateColumn(required=True),
+             "品目": st.column_config.SelectboxColumn(
+-                options=["米", "小麦", "野菜", "果物", "卵", "その他"], required=True
++                options=["米", "小麦", "大豆", "芋", "野菜", "果物", "卵", "その他"], required=True
+             ),
+             "数量": st.column_config.NumberColumn(min_value=0.0, step=0.1),
+             "単位": st.column_config.SelectboxColumn(options=["kg", "個", "束", "本"]),
+@@ -126,6 +126,35 @@ with tab_w:
+         key="ed_work",
+     )
+ 
++with tab_p:
++    st.write("自給シミュレーターの**計画値**と、ここに記録した**実績**を品目ごとに比べます。"
++             "同じブラウザでシミュレーターを開いていれば自動で入ります。別の日は計画CSVを読み込みます。")
++    up_plan = st.file_uploader("自給計画のCSVを読み込む", type="csv", key="up_plan")
++    if up_plan is not None:
++        _plan = sg.read_csv_safely(up_plan, page="kakeibo", kind="plan")
++        if _plan is not None:
++            st.session_state["jikyu_plan"] = to_date(_plan)
++    plan = st.session_state.get("jikyu_plan")
++    if plan is None or len(plan) == 0:
++        st.info("まだ計画がありません。左メニュー「自給と防災の畑」の⑤タブで計画を作ってください。")
++    else:
++        _p = to_date(plan).dropna(subset=["日付"])
++        _a = to_date(st.session_state["harvest"]).dropna(subset=["日付"])
++        _p_year = int(pd.to_datetime(_p["日付"]).dt.year.mode().iloc[0])
++        _a = _a[pd.to_datetime(_a["日付"]).dt.year == _p_year]
++        _a = _a[_a["単位"].fillna("kg") == "kg"]
++        cmp = pd.DataFrame({
++            "計画(kg)": _p.groupby("品目")["数量"].sum(),
++            "実績(kg)": _a.groupby("品目")["数量"].sum() if not _a.empty else pd.Series(dtype=float),
++        }).fillna(0)
++        cmp["達成率"] = (cmp["実績(kg)"] / cmp["計画(kg)"].where(cmp["計画(kg)"] > 0)).fillna(0)
++        st.caption(f"{_p_year}年の計画と、同じ年の実績（単位が kg の記録）を比べています。")
++        st.dataframe(cmp.style.format({"計画(kg)": "{:,.1f}", "実績(kg)": "{:,.1f}", "達成率": "{:.0%}"}),
++                     width="stretch")
++        st.bar_chart(cmp[["計画(kg)", "実績(kg)"]])
++        st.caption("実績が計画を大きく下回る品目は、シミュレーターの収量の係数を実測値に置き換えると、"
++                   "翌年の計画が現実に近づきます（「④ 探究フィールドワーク」の記録CSVを使います）。")
++
+ # ------------------------------------------------------------
+ # 集計（計算する）
+ # ------------------------------------------------------------
+diff --git a/pages/income_structure_tab.py b/pages/income_structure_tab.py
+index 8ca056c..eb63c3f 100644
+--- a/pages/income_structure_tab.py
++++ b/pages/income_structure_tab.py
+@@ -69,6 +69,10 @@ def _defaults() -> dict:
+                   if k in PLACEHOLDER})
+     except Exception:  # noqa: BLE001  secrets.toml が無い環境
+         pass
++    # 自給シミュレーター（pages/15）を同じセッションで開いていれば、その計算結果を「C 自給」の初期値にする
++    link = st.session_state.get("jikyu_link")
++    if link:
++        d.update({k: int(link[k]) for k in ("saving_step", "saving_cap") if k in link})
+     return d
+ 
+ 
+@@ -76,6 +80,8 @@ def render_income_structure_tab():
+     d = _defaults()
+     st.header("収入構造シミュレーター")
+     st.caption("計算 → 可視化 → 自分の条件で判断。既定値は Secrets の [income]（未登録なら仮置き）です。")
++    if st.session_state.get("jikyu_link"):
++        st.info("「C 自給」の初期値は、自給と防災の畑シミュレーターの計算結果（全部買う場合との差）を使っています。")
+ 
+     c1, c2, c3 = st.columns(3)
+     with c1:
+-- 
+2.43.0
+
