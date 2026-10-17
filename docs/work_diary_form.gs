@@ -23,6 +23,8 @@
  *      「＋」→ 質問の種類「ファイルのアップロード」→ タイトルを「写真（任意）」→
  *      特定のファイル形式のみ：画像／ファイルの最大数：5／最大サイズ：10MB → 必須はオフ
  *      → メニュー「作業日誌 → 写真の設問を確かめる」で、正しく足せたかを確かめる
+ *   7. メニュー「作業日誌 → フォームの説明文を更新」で、写真の設問に「困りごとがあった日に1枚撮る」の案内を入れる
+ *      （作成済みのフォームの説明文を新しくするときも、これを実行する。回答の記録は消えない）
  *
  * 方針
  *   - フォームはメールアドレスを集めない（記入者は仮名で選ぶ）
@@ -71,6 +73,21 @@ const Q = { // フォームの設問タイトル（集計とトリガーがこ�
   photoNote: '写真の説明（任意）',
 };
 
+// フォームの説明文（setup と「フォームの説明文を更新」の両方で使う）
+// 困りごとの日に1枚撮ってもらうと、写真が日誌IDで結びつき、ダッシュボードの画像分析で
+// 「テキストに書かれた困りごとが写真でも見えるか」を突き合わせる根拠になる。
+const FORM_DESCRIPTION =
+  '1日1件、その日の作業を記入してください。\n' +
+  '・本文には氏名や取引先名を書かず、「担当」「取引先」などと書いてください。\n' +
+  '・困りごとがなかった日も「特に問題なし」と記入してください（分母になります）。\n' +
+  '・困りごと（遅れ・故障・人手不足）があった日は、その様子を写真で1枚撮ってください。' +
+  '困りごとがない日は撮らなくてかまいません。\n' +
+  '・写真は最大5枚です。人の顔・車のナンバー・取引先の看板は写さないでください。';
+const PHOTO_HELP =
+  '困りごとがあった日は、その様子を1枚撮ってください。' +
+  '例：故障した機械の部位／刈り残した範囲／積み残した収穫物。人の顔・車のナンバー・看板は写さない。';
+const PHOTO_NOTE_HELP = '何を写したか。例：故障した草刈機の刃／雨で入れなかった畝／積み残した収穫かご';
+
 // ===================================================================
 // メニュー
 // ===================================================================
@@ -82,6 +99,7 @@ function onOpen() {
     .addItem('フォームのURLを表示', 'showFormUrl')
     .addSeparator()
     .addItem('写真の設問を確かめる', 'checkPhotoItem')
+    .addItem('フォームの説明文を更新', 'updateFormTexts')
     .addItem('写真をZIPで保存（assets用）', 'exportPhotosZip')
     .addSeparator()
     .addItem('集計シートを作り直す', 'buildSummary')
@@ -113,12 +131,7 @@ function setup() {
 
   // フォーム（回答の控えは別シート「フォームの回答」に入る。分析は「日誌」シートを使う）
   const form = FormApp.create(CONFIG.formTitle);
-  form.setDescription(
-    '1日1件、その日の作業を記入してください。\n' +
-    '・本文には氏名や取引先名を書かず、「担当」「取引先」などと書いてください。\n' +
-    '・困りごとがなかった日も「特に問題なし」と記入してください（分母になります）。\n' +
-    '・写真は任意です（最大5枚）。人の顔・車のナンバー・取引先の看板は写さないでください。'
-  );
+  form.setDescription(FORM_DESCRIPTION);
   form.setCollectEmail(false);
   form.setAllowResponseEdits(false);
   form.setConfirmationMessage('記録しました。ありがとうございました。');
@@ -156,7 +169,7 @@ function buildQuestions_(form) {
   form.addParagraphTextItem().setTitle(Q.note).setRequired(false);
   // 写真の設問（ファイルのアップロード）は Apps Script では作れないので、編集画面で足す。説明欄だけ先に作る
   form.addTextItem().setTitle(Q.photoNote).setRequired(false)
-    .setHelpText('何を写したか。例：除草前の畝／故障した草刈機の刃');
+    .setHelpText(PHOTO_NOTE_HELP);
 }
 
 function buildSettings_(ss) {
@@ -491,16 +504,35 @@ function checkPhotoItem() {
       '2. タイトル：' + Q.photo + '\n' +
       '3. 特定のファイル形式のみ許可：画像\n' +
       '4. ファイルの最大数：' + CONFIG.maxPhotos + '／最大ファイルサイズ：10MB\n' +
-      '5. 「必須」はオフ。「' + Q.photoNote + '」の上に移動する\n\n' +
+      '5. 「必須」はオフ。「' + Q.photoNote + '」の上に移動する\n' +
+      '6. 足したら、メニュー「作業日誌 → フォームの説明文を更新」で撮り方の案内を入れる\n\n' +
       '※ この設問を足すと、回答者は Google アカウントでのログインが必要になります。\n\n' + form.getEditUrl()
     );
     return;
   }
   const item = ups[0];
   const title = item.getTitle();
+  const helpOk = item.getHelpText() === PHOTO_HELP;
   ui.alert('写真の設問があります：「' + title + '」\n' +
     (title === Q.photo ? '' : 'タイトルは「' + Q.photo + '」にそろえると説明と合います（動作はタイトルに関係なく動きます）。\n') +
+    (helpOk ? '' : '撮り方の案内（困りごとがあった日に1枚撮る）がまだです。メニュー「作業日誌 → フォームの説明文を更新」を実行してください。\n') +
     '\n届いた写真は「' + CONFIG.photoFolder + '/日付」フォルダに、日誌IDの名前で入ります。');
+}
+
+// 作成済みのフォームの説明文・写真の設問の案内を、このファイルの文言にそろえる（回答の記録は消えない）
+function updateFormTexts() {
+  const ui = SpreadsheetApp.getUi();
+  const id = PropertiesService.getDocumentProperties().getProperty('FORM_ID');
+  if (!id) { ui.alert('まだフォームがありません。先に setup を実行してください。'); return; }
+  const form = FormApp.openById(id);
+  form.setDescription(FORM_DESCRIPTION);
+  const done = ['フォームの説明文'];
+  const ups = form.getItems(FormApp.ItemType.FILE_UPLOAD);
+  if (ups.length) { ups[0].setHelpText(PHOTO_HELP); done.push('写真の設問の案内'); }
+  const notes = form.getItems().filter(function (it) { return it.getTitle() === Q.photoNote; });
+  if (notes.length) { notes[0].setHelpText(PHOTO_NOTE_HELP); done.push('写真の説明の例'); }
+  ui.alert('更新しました：' + done.join('・') +
+    (ups.length ? '' : '\n\n写真の設問がまだありません。足したあとで、もう一度実行してください（メニュー「写真の設問を確かめる」に手順があります）。'));
 }
 
 // 指定した月の写真を diary/YYYYMMDD/D012_1.jpg の形でZIPにし、スプレッドシートと同じフォルダに保存する
