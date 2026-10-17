@@ -1,0 +1,822 @@
+From 33cfb49abd23ef4875a35eabe0027d994b6e4077 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 18 Oct 2026 05:14:33 +0900
+Subject: [PATCH] =?UTF-8?q?=E4=BD=9C=E6=A5=AD=E6=97=A5=E8=AA=8C=E3=83=95?=
+ =?UTF-8?q?=E3=82=A9=E3=83=BC=E3=83=A0=E3=81=AB=E5=86=99=E7=9C=9F=E3=82=92?=
+ =?UTF-8?q?=E8=BF=BD=E5=8A=A0=E3=81=97=E3=80=81assets=20=E3=81=AE=E5=86=99?=
+ =?UTF-8?q?=E7=9C=9F=E3=82=92=E6=97=A5=E8=AA=8C=E3=81=8B=E3=82=89=E5=8F=82?=
+ =?UTF-8?q?=E7=85=A7=E3=81=A7=E3=81=8D=E3=82=8B=E3=82=88=E3=81=86=E3=81=AB?=
+ =?UTF-8?q?=E3=81=99=E3=82=8B?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- docs/work_diary_form.gs: 写真の受付（日誌IDの名前に付け替えて日付フォルダへ）、写真の説明欄、CSVに写真列、月ごとの写真ZIP
+- diary_photos.py: 日誌IDと日付フォルダで写真を結びつける、ZIPの位置情報を消す、GPSの残りを確認
+- 作業日誌テキスト分析: 写真をassetsに取り込む手順、サイドバーで写真の参照、原文と一緒に写真で確かめる
+- security-scan: assets の写真に位置情報が残っていれば Issue で知らせる
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01UbBN2XS3jkEdoKTQ6S6y6J
+---
+ .github/workflows/security-scan.yml           |  12 +
+ README.md                                     |   8 +
+ diary_photos.py                               | 257 ++++++++++++++++++
+ docs/work_diary_form.gs                       | 176 +++++++++++-
+ ...71\343\203\210\345\210\206\346\236\220.py" | 103 ++++++-
+ 5 files changed, 545 insertions(+), 11 deletions(-)
+ create mode 100644 diary_photos.py
+
+diff --git a/.github/workflows/security-scan.yml b/.github/workflows/security-scan.yml
+index 6232d8f..929cfec 100644
+--- a/.github/workflows/security-scan.yml
++++ b/.github/workflows/security-scan.yml
+@@ -50,6 +50,15 @@ jobs:
+           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar xz gitleaks
+           ./gitleaks git --redact -v --report-format json --report-path gitleaks.json .
+ 
++      - name: 写真の位置情報（GPS）の残り
++        id: gps
++        continue-on-error: true
++        run: |
++          pip install -q "pillow>=12.3,<13" "pandas>=3.0,<4"
++          set -o pipefail
++          python diary_photos.py --check assets | tee gps.txt
++          tail -5 gps.txt >> "$GITHUB_STEP_SUMMARY"
++
+       - name: レポートを保存（ログ記録）
+         if: always()
+         uses: actions/upload-artifact@v4
+@@ -59,6 +68,7 @@ jobs:
+             pip-audit.md
+             bandit.txt
+             gitleaks.json
++            gps.txt
+           retention-days: 90
+           if-no-files-found: ignore
+ 
+@@ -69,12 +79,14 @@ jobs:
+           AUDIT: ${{ steps.audit.outcome }}
+           BANDIT: ${{ steps.bandit.outcome }}
+           LEAKS: ${{ steps.gitleaks.outcome }}
++          GPS: ${{ steps.gps.outcome }}
+           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+         run: |
+           problems=""
+           [ "$AUDIT"  = "failure" ] && problems="$problems- 依存ライブラリに既知の脆弱性（pip-audit）\n"
+           [ "$BANDIT" = "failure" ] && problems="$problems- コードに中〜高リスクのパターン（bandit）\n"
+           [ "$LEAKS"  = "failure" ] && problems="$problems- **秘密情報（APIキー等）の混入の疑い（gitleaks）→ すぐにキーを無効化**\n"
++          [ "$GPS"    = "failure" ] && problems="$problems- 写真に位置情報（GPS）が残っています → \`python diary_photos.py --strip assets\` で消してコミット（履歴にも残る点に注意）\n"
+           if [ -z "$problems" ]; then echo "✅ 問題なし" >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
+           echo -e "## ⚠️ 検出\n$problems" >> "$GITHUB_STEP_SUMMARY"
+           if [ "${{ github.event_name }}" != "pull_request" ]; then
+diff --git a/README.md b/README.md
+index 75b5398..6bf6333 100644
+--- a/README.md
++++ b/README.md
+@@ -59,6 +59,7 @@ conda create が "Solving environment" のまま長時間止まる場合は、An
+ | media_gallery.py | 画像・動画・PDF・テキスト・ノートブックの表示部品、Colab リンク |
+ | notebooks/ | Google Colab 用ノートブック |
+ | diary_text.py | 作業日誌のテキスト分析（匿名化・回数と件数・KWIC・否定の規則・言い換え） |
++| diary_photos.py | 作業日誌と assets の写真の結びつけ（日誌ID・日付フォルダ）、写真ZIPの位置情報の削除、GPSの残りの確認。`python diary_photos.py` で自己チェック、`--check assets` / `--strip assets` |
+ | soil_vision.py | 画像解析（ExG・大津二値化・グリッド集計）、可変施肥、指標植物のベイズ更新、生成AI呼び出し |
+ | assets/ | 圃場写真（日付フォルダ） |
+ | .streamlit/・.github/ | アプリの設定、依存ライブラリの更新提案・脆弱性スキャン・見張り番 |
+@@ -233,6 +234,13 @@ CSVは Excel やメモ帳で直接書き足しても構いません（列は `
+ - 初期データ `data/sample_work_diary.csv`（36件）と人の判定 `data/sample_work_diary_labels.csv` は**すべて架空**です。
+ - どちらも外部の生成AIを呼び出しません。実在の日誌の原文は、匿名化したあとでも外部のAIに貼らないでください。
+ 
++##### 📷 写真（フォーム → assets → 日誌）
++1. **フォームに写真の設問を足す**（Apps Script では作れないため手作業）：フォームの編集画面で「ファイルのアップロード」、タイトル「写真（任意）」、画像のみ・最大5枚・10MB。スプレッドシートのメニュー「作業日誌 → 写真の設問を確かめる」で確認できます。写真の設問があると、回答者は Google アカウントでのログインが必要になります。
++2. **届いた写真**は、日誌IDの名前（`D012_1.jpg`）に付け替えて Drive の「作業日誌_写真/YYYYMMDD」に移し、日誌シートの「写真」列に記録します（Google が付ける回答者名をファイル名から消すため）。解析用CSVにも「写真」「写真の説明」列が入ります。
++3. **assets へ**：メニュー「写真をZIPで保存（assets用）」→ ページの「📷 写真をassetsに取り込む」で**位置情報（GPS）を消したZIP**を作る → 目で確かめる → 展開して `diary` フォルダごと `assets/` にアップロード（`assets/diary/20261018/D012_1.jpg`）。
++4. **ページで参照**：サイドバー「使うデータ」の下の「取り込み済みの写真（assets）を参照する」で、日誌IDの名前の写真と、日付フォルダ（`assets/YYYYMMDD/`）の写真を日誌に結びつけて表示します。日付だけの結びつけは「同じ日／近い日」と表示し、根拠には日誌IDの写真を使います。
++5. **安全網**：`security-scan` ワークフローが、push のたびに `assets/` の写真に位置情報が残っていないかを調べ、残っていれば Issue で知らせます。
++
+ #### 🌾 地元の農業法人での農作業（あやめの郷）
+ ※ このページのファイル（`pages/2_…_農作業.py`）は、まだリポジトリに入っていません。置くと左メニューの「🔬 研究・実証」に自動で出ます。
+ 
+diff --git a/diary_photos.py b/diary_photos.py
+new file mode 100644
+index 0000000..80e7f5f
+--- /dev/null
++++ b/diary_photos.py
+@@ -0,0 +1,257 @@
++"""
++diary_photos.py ─ 作業日誌と、取り込み済みの写真（assets）を結びつける部品
++
++写真の置き方（どちらでも結びつきます）
++  ① 日誌IDで結びつける（Googleフォームから取り込んだ写真）
++       assets/diary/20261018/D012_1.jpg   ← ファイル名の先頭が日誌ID
++     Apps Script（docs/work_diary_form.gs）のメニュー「写真をZIPで保存（assets用）」で、
++     この形のフォルダごとZIPになります。展開して assets/ の中に置きます。
++  ② 同じ日の写真として結びつける（これまでの記録写真）
++       assets/20261003/米ぬか発酵肥料づくり開始-1.jpg ← 日付フォルダ（YYYYMMDD）と日誌の日付が同じ
++
++方針
++  - 写真は公開リポジトリに置かれるので、位置情報（GPS）が残っていないかを必ず確かめる。
++      python diary_photos.py --check assets   … GPS付きの写真があれば一覧を出して終了コード1
++      python diary_photos.py --strip assets   … GPSなどのExifを消して上書き保存（向きは保つ）
++  - 画面に出すときも、Exifを外して縮小した画像だけを渡す（clean_image）。
++  - 人の顔・車のナンバー・取引先の看板が写った写真は置かない（人の目で確かめる）。
++"""
++from __future__ import annotations
++
++import argparse
++import io
++import re
++import sys
++from pathlib import Path
++
++import pandas as pd
++
++IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
++GPS_TAG = 34853
++ID_RE = re.compile(r"^([A-Z]\d{2,})_")          # D012_1.jpg → D012
++DATE_DIR_RE = re.compile(r"^\d{8}$")
++COLS = ["パス", "日付", "ID", "説明"]
++
++
++def _caption(name: str) -> str:
++    stem = Path(name).stem
++    stem = re.sub(r"-\d+$", "", stem)
++    stem = re.sub(r"[_ ]?\d{8}$", "", stem)
++    return stem.replace("_", " ")
++
++
++def scan(assets: Path) -> pd.DataFrame:
++    """assets 以下の画像を一覧にする。日付は親フォルダ（YYYYMMDD）、IDはファイル名の先頭から取る。"""
++    rows = []
++    if not assets.exists():
++        return pd.DataFrame(columns=COLS)
++    for p in sorted(assets.rglob("*")):
++        if not p.is_file() or p.suffix.lower() not in IMAGE_EXT:
++            continue
++        day = next((d.name for d in p.parents if DATE_DIR_RE.match(d.name)), None)
++        m = ID_RE.match(p.name)
++        rows.append((p, f"{day[:4]}-{day[4:6]}-{day[6:]}" if day else None,
++                     m.group(1) if m else None, _caption(p.name)))
++    return pd.DataFrame(rows, columns=COLS)
++
++
++def link(diary: pd.DataFrame, photos: pd.DataFrame, by_id: bool = True, by_date: bool = True,
++         days: int = 0) -> pd.DataFrame:
++    """日誌の各行と写真を結びつける。返す列：ID, 日付, パス, 説明, 結びつけ方。
++
++    by_id   … ファイル名の先頭が日誌ID、または日誌の「写真」列にファイル名がある
++    by_date … 日付フォルダが日誌の日付と同じ（days>0 なら前後 days 日まで）。IDで結びついた写真は重ねない
++    """
++    out = []
++    if diary.empty or photos.empty:
++        return pd.DataFrame(columns=["ID", "日付", "パス", "説明", "結びつけ方"])
++    d = diary.copy()
++    d["ID"] = d["ID"].astype(str)
++    d["_日付"] = pd.to_datetime(d["日付"], errors="coerce").dt.strftime("%Y-%m-%d")
++    names = {}
++    if "写真" in d.columns:  # フォームから来たCSV：「D012_1.jpg;D012_2.jpg」
++        for i, v in zip(d["ID"], d["写真"].fillna("").astype(str)):
++            for n in re.split(r"[;；,、\s]+", v):
++                if n:
++                    names[n] = i
++    used = set()
++    if by_id:
++        for _, p in photos.iterrows():
++            pid = p["ID"] if p["ID"] in set(d["ID"]) else names.get(Path(p["パス"]).name)
++            if pid:
++                day = d.loc[d["ID"] == pid, "_日付"].iloc[0]
++                out.append((pid, day, p["パス"], p["説明"], "日誌ID"))
++                used.add(str(p["パス"]))
++    if by_date:
++        ph = photos[photos["日付"].notna()].copy()
++        ph["_d"] = pd.to_datetime(ph["日付"])
++        ph = ph[~ph["パス"].astype(str).isin(used)]
++        for _, r in d.dropna(subset=["_日付"]).iterrows():
++            gap = (ph["_d"] - pd.Timestamp(r["_日付"])).dt.days
++            for (_, p), g in zip(ph[gap.abs() <= days].iterrows(), gap[gap.abs() <= days]):
++                how = "同じ日" if g == 0 else f"近い日（{g:+d}日）"
++                out.append((r["ID"], r["_日付"], p["パス"], p["説明"], how))
++    return pd.DataFrame(out, columns=["ID", "日付", "パス", "説明", "結びつけ方"])
++
++
++# ──────────────── 位置情報（GPS） ────────────────
++def has_gps(path: Path) -> bool:
++    from PIL import Image
++
++    try:
++        with Image.open(path) as im:
++            ex = im.getexif()
++            return bool(ex.get(GPS_TAG)) or bool(ex.get_ifd(GPS_TAG))
++    except Exception:  # noqa: BLE001  壊れた画像は別のチェックで扱う
++        return False
++
++
++def clean_image(path: Path, max_side: int = 1600):
++    """表示用：向きを直し、Exif（位置情報を含む）を外し、長い辺を max_side に縮める。"""
++    from PIL import Image, ImageOps
++
++    with Image.open(path) as im:
++        im = ImageOps.exif_transpose(im)
++        im.thumbnail((max_side, max_side))
++        out = im.convert("RGBA" if im.mode in ("RGBA", "LA", "P") else "RGB")
++    out.info = {}  # Exif・コメントなどの付随情報を持たせない
++    return out
++
++
++def strip_exif(path: Path) -> bool:
++    """Exifを消して上書き保存する（向きは画素に反映してから消す）。消したら True。"""
++    from PIL import Image, ImageOps
++
++    with Image.open(path) as im:
++        if not im.getexif():
++            return False
++        fixed = ImageOps.exif_transpose(im)
++        fmt = im.format or "JPEG"
++        buf = io.BytesIO()
++        save_kw = {"quality": 92} if fmt == "JPEG" else {}
++        fixed.save(buf, format=fmt, **save_kw)
++    path.write_bytes(buf.getvalue())
++    return True
++
++
++MAX_ZIP_FILES = 300
++MAX_ZIP_UNPACKED = 300 * 1024 * 1024     # 展開後の合計（ZIP爆弾よけ）
++ZIP_PATH_RE = re.compile(r"^diary/\d{8}/[A-Z]\d{2,}_\d+\.(jpe?g|png|webp)$", re.I)
++
++
++def clean_zip(data: bytes, max_side: int = 2000) -> tuple[bytes, pd.DataFrame]:
++    """フォームの写真ZIP（diary/YYYYMMDD/D012_1.jpg の形）を、位置情報を消して縮小したZIPにする。
++
++    決まった形でない名前（../ を含む・別のフォルダ・画像以外）は入れずに、理由を一覧で返す。
++    """
++    import zipfile
++
++    from PIL import Image, ImageOps
++
++    out_buf, rows, total = io.BytesIO(), [], 0
++    with zipfile.ZipFile(io.BytesIO(data)) as zin, zipfile.ZipFile(out_buf, "w", zipfile.ZIP_DEFLATED) as zout:
++        infos = [i for i in zin.infolist() if not i.is_dir()]
++        if len(infos) > MAX_ZIP_FILES:
++            raise ValueError(f"ファイルが多すぎます（上限 {MAX_ZIP_FILES} 個）")
++        for info in infos:
++            name = info.filename.replace("\\", "/")
++            if not ZIP_PATH_RE.match(name):
++                rows.append((name, "入れない", "diary/日付/日誌ID_番号.jpg の形ではない"))
++                continue
++            total += info.file_size
++            if total > MAX_ZIP_UNPACKED:
++                raise ValueError("展開後の大きさが上限を超えました")
++            try:
++                with Image.open(io.BytesIO(zin.read(info))) as im:
++                    gps = bool(im.getexif().get_ifd(GPS_TAG))
++                    im = ImageOps.exif_transpose(im)
++                    im.thumbnail((max_side, max_side))
++                    im = im.convert("RGB")
++                    buf = io.BytesIO()
++                    im.save(buf, format="JPEG", quality=88)  # Exifは渡さない＝消える
++            except Exception:  # noqa: BLE001
++                rows.append((name, "入れない", "画像として読めない"))
++                continue
++            new = re.sub(r"\.(png|webp|jpeg)$", ".jpg", name, flags=re.I)
++            zout.writestr(new, buf.getvalue())
++            rows.append((new, "入れた", "位置情報を消した" if gps else "位置情報なし"))
++    return out_buf.getvalue(), pd.DataFrame(rows, columns=["ファイル", "結果", "メモ"])
++
++
++def gps_list(root: Path) -> list[Path]:
++    return [p for p in sorted(root.rglob("*")) if p.suffix.lower() in IMAGE_EXT and has_gps(p)]
++
++
++# ──────────────── 自己チェック・コマンド ────────────────
++def _selftest() -> None:
++    import tempfile
++
++    from PIL import Image
++
++    with tempfile.TemporaryDirectory() as t:
++        root = Path(t) / "assets"
++        (root / "diary" / "20261018").mkdir(parents=True)
++        (root / "20261003").mkdir(parents=True)
++        Image.new("RGB", (40, 30), "green").save(root / "diary" / "20261018" / "D012_1.jpg")
++        Image.new("RGB", (40, 30), "brown").save(root / "20261003" / "米ぬか発酵肥料づくり開始-1.jpg")
++        # GPS付きの写真（緯度経度のタグだけ入れる）
++        im = Image.new("RGB", (40, 30), "blue")
++        ex = im.getexif()
++        ex.get_ifd(GPS_TAG).update({1: "N", 2: (34.0, 24.0, 0.0)})
++        im.save(root / "20261003" / "gps_test-1.jpg", exif=ex)
++
++        ph = scan(root)
++        assert len(ph) == 3 and set(ph["ID"].dropna()) == {"D012"}
++        diary = pd.DataFrame({"ID": ["D012", "D013"], "日付": ["2026-10-18", "2026-10-03"], "本文": ["a", "b"]})
++        lk = link(diary, ph)
++        assert set(lk[lk["結びつけ方"] == "日誌ID"]["ID"]) == {"D012"}
++        assert len(lk[(lk["ID"] == "D013") & (lk["結びつけ方"] == "同じ日")]) == 2
++        near = link(pd.DataFrame({"ID": ["D014"], "日付": ["2026-10-02"], "本文": ["c"]}), ph, days=1)
++        assert len(near) == 2 and set(near["結びつけ方"]) == {"近い日（+1日）"}
++        g = gps_list(root)
++        assert [p.name for p in g] == ["gps_test-1.jpg"], g
++        assert strip_exif(g[0]) and not gps_list(root)
++        assert clean_image(root / "diary" / "20261018" / "D012_1.jpg").size == (40, 30)
++
++        # ZIPの掃除：GPS付き写真は位置情報が消え、決まった形でない名前は入らない
++        import zipfile
++        b = io.BytesIO()
++        im2 = Image.new("RGB", (50, 40), "blue")
++        ex2 = im2.getexif()
++        ex2.get_ifd(GPS_TAG).update({1: "N", 2: (34.0, 24.0, 0.0)})
++        g2 = io.BytesIO()
++        im2.save(g2, format="JPEG", exif=ex2)
++        with zipfile.ZipFile(b, "w") as z:
++            z.writestr("diary/20261018/D012_1.jpg", g2.getvalue())
++            z.writestr("../evil.jpg", g2.getvalue())
++            z.writestr("diary/20261018/memo.txt", "x")
++        cleaned, rep = clean_zip(b.getvalue())
++        with zipfile.ZipFile(io.BytesIO(cleaned)) as z:
++            assert z.namelist() == ["diary/20261018/D012_1.jpg"]
++            with Image.open(io.BytesIO(z.read("diary/20261018/D012_1.jpg"))) as im3:
++                assert not im3.getexif().get_ifd(GPS_TAG)
++        assert (rep["結果"] == "入れない").sum() == 2
++    print("OK: 自己チェックを通過しました")
++
++
++def main(argv: list[str] | None = None) -> int:
++    ap = argparse.ArgumentParser(description="日誌の写真：位置情報の確認・削除")
++    ap.add_argument("--check", metavar="DIR", help="GPS付きの写真を探す（あれば終了コード1）")
++    ap.add_argument("--strip", metavar="DIR", help="Exif（GPSを含む）を消して上書き保存")
++    a = ap.parse_args(argv)
++    if a.check:
++        found = gps_list(Path(a.check))
++        for p in found:
++            print(f"GPS付き: {p}")
++        print(f"{len(found)} 枚の写真に位置情報が残っています" if found else "位置情報の残った写真はありません")
++        return 1 if found else 0
++    if a.strip:
++        n = sum(strip_exif(p) for p in sorted(Path(a.strip).rglob("*")) if p.suffix.lower() in IMAGE_EXT)
++        print(f"{n} 枚の写真からExifを消しました")
++        return 0
++    _selftest()
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/docs/work_diary_form.gs b/docs/work_diary_form.gs
+index adca966..c52d1fb 100644
+--- a/docs/work_diary_form.gs
++++ b/docs/work_diary_form.gs
+@@ -8,6 +8,10 @@
+  *   3. 「集計」シートで、作業×月の件数・「遅れ」「故障」「人手」の回数と件数・止まった時間を自動集計する
+  *   4. メニュー「作業日誌 → 解析用CSVを作る」で、氏名・取引先名を伏せた CSV を Drive に保存する
+  *      → スマートパン屋農家ダッシュボード「🔤 作業日誌テキスト分析」に読み込める
++ *   5. 写真（任意・最大5枚）を受け付ける。届いた写真は日誌IDの名前（D012_1.jpg）に付け替えて
++ *      「作業日誌_写真/YYYYMMDD」フォルダに移す（Googleが付ける回答者名をファイル名から消すため）
++ *   6. メニュー「作業日誌 → 写真をZIPで保存（assets用）」で、月ごとの写真を diary/YYYYMMDD/D012_1.jpg の形でZIPにする
++ *      → ダッシュボードの「写真をassetsに取り込む」で位置情報を消してから、リポジトリの assets/ に置く
+  *
+  * 使い方（最初の1回だけ）
+  *   1. Google スプレッドシートを新しく作る（名前は例えば「work_diary_202610」）
+@@ -15,10 +19,18 @@
+  *   3. 関数「setup」を選んで ▶ 実行 → 権限を許可する
+  *   4. スプレッドシートを再読み込みすると、メニューに「作業日誌」が出る
+  *   5. 「設定」シートで記入者・匿名化辞書を直し、「作業日誌 → フォームの選択肢を更新」
++ *   6. 写真の設問だけは Apps Script から作れない（Google の制限）ので、フォームの編集画面で1問足す：
++ *      「＋」→ 質問の種類「ファイルのアップロード」→ タイトルを「写真（任意）」→
++ *      特定のファイル形式のみ：画像／ファイルの最大数：5／最大サイズ：10MB → 必須はオフ
++ *      → メニュー「作業日誌 → 写真の設問を確かめる」で、正しく足せたかを確かめる
+  *
+  * 方針
+  *   - フォームはメールアドレスを集めない（記入者は仮名で選ぶ）
+  *   - 日誌の原文は、このスクリプトから外部の生成AIに送らない
++ *   - 写真の設問があるフォームは、回答者に Google アカウントでのログインを求める（Google の仕様）。
++ *     写真のファイル名には回答者名が付くので、届いたらすぐ日誌IDの名前に付け替える
++ *   - 写真には位置情報（GPS）が残ることがある。公開リポジトリに置く前に必ず消す（ダッシュボード側で消せる）
++ *   - 人の顔・車のナンバー・取引先の看板は写さない
+  */
+ 
+ // ===== 設定（setup のときの初期値。あとは「設定」シートで直す） =====
+@@ -27,6 +39,8 @@ const CONFIG = {
+   sheetDiary: '日誌',
+   sheetSummary: '集計',
+   sheetSettings: '設定',
++  photoFolder: '作業日誌_写真',
++  maxPhotos: 5,
+   idPrefix: 'D',
+   writers: ['記入者A', '記入者B', '記入者C', '記入者D', '記入者E'],
+   tasks: ['播種', '育苗', '除草', '収穫', '出荷', '機械整備', 'その他'],
+@@ -40,8 +54,11 @@ const CONFIG = {
+   },
+ };
+ 
+-const HEADERS = ['ID', '日付', '記入者', '作業', '本文', '止まった時間(分)', '影響', '備考', '月', '受付時刻'];
+-const EXPORT_COLS = 8; // CSV に出すのは ID〜備考 まで
++// 写真の2列は末尾に足す（既存の列の位置を変えると集計の数式がずれるため）
++const HEADERS = ['ID', '日付', '記入者', '作業', '本文', '止まった時間(分)', '影響', '備考', '月', '受付時刻', '写真', '写真の説明'];
++const EXPORT_IDX = [0, 1, 2, 3, 4, 5, 6, 7, 10, 11]; // CSV に出す列：ID〜備考、写真、写真の説明
++const COL_PHOTO = 11;   // K列（1始まり）
++const COL_PHOTO_NOTE = 12;
+ const Q = { // フォームの設問タイトル（集計とトリガーがこの名前で読む）
+   date: '日付',
+   writer: '記入者',
+@@ -50,6 +67,8 @@ const Q = { // フォームの設問タイトル（集計とトリガーがこ
+   stop: '止まった時間（分）',
+   impact: '影響',
+   note: '備考',
++  photo: '写真（任意）',
++  photoNote: '写真の説明（任意）',
+ };
+ 
+ // ===================================================================
+@@ -62,6 +81,9 @@ function onOpen() {
+     .addItem('フォームの選択肢を更新', 'refreshChoices')
+     .addItem('フォームのURLを表示', 'showFormUrl')
+     .addSeparator()
++    .addItem('写真の設問を確かめる', 'checkPhotoItem')
++    .addItem('写真をZIPで保存（assets用）', 'exportPhotosZip')
++    .addSeparator()
+     .addItem('集計シートを作り直す', 'buildSummary')
+     .addToUi();
+ }
+@@ -94,7 +116,8 @@ function setup() {
+   form.setDescription(
+     '1日1件、その日の作業を記入してください。\n' +
+     '・本文には氏名や取引先名を書かず、「担当」「取引先」などと書いてください。\n' +
+-    '・困りごとがなかった日も「特に問題なし」と記入してください（分母になります）。'
++    '・困りごとがなかった日も「特に問題なし」と記入してください（分母になります）。\n' +
++    '・写真は任意です（最大5枚）。人の顔・車のナンバー・取引先の看板は写さないでください。'
+   );
+   form.setCollectEmail(false);
+   form.setAllowResponseEdits(false);
+@@ -109,7 +132,8 @@ function setup() {
+   SpreadsheetApp.flush();
+   SpreadsheetApp.getUi().alert(
+     'フォームを作りました。\n\n入力用URL：\n' + form.getPublishedUrl() +
+-    '\n\n「設定」シートで記入者と匿名化辞書を直したら、メニュー「作業日誌 → フォームの選択肢を更新」を実行してください。'
++    '\n\n「設定」シートで記入者と匿名化辞書を直したら、メニュー「作業日誌 → フォームの選択肢を更新」を実行してください。' +
++    '\n\n写真の設問は、フォームの編集画面で手で1問足します（手順はメニュー「作業日誌 → 写真の設問を確かめる」）。'
+   );
+ }
+ 
+@@ -130,6 +154,9 @@ function buildQuestions_(form) {
+   form.addMultipleChoiceItem().setTitle(Q.impact).setChoiceValues(CONFIG.impacts).setRequired(true)
+     .setHelpText('困りごとが何に響いたか、いちばん大きいものを1つ');
+   form.addParagraphTextItem().setTitle(Q.note).setRequired(false);
++  // 写真の設問（ファイルのアップロード）は Apps Script では作れないので、編集画面で足す。説明欄だけ先に作る
++  form.addTextItem().setTitle(Q.photoNote).setRequired(false)
++    .setHelpText('何を写したか。例：除草前の畝／故障した草刈機の刃');
+ }
+ 
+ function buildSettings_(ss) {
+@@ -165,10 +192,19 @@ function onFormSubmit(e) {
+   lock.waitLock(30000);
+   try {
+     const ans = {};
+-    e.response.getItemResponses().forEach(r => { ans[r.getItem().getTitle()] = r.getResponse(); });
++    let photoIds = [];
++    e.response.getItemResponses().forEach(r => {
++      const item = r.getItem();
++      if (item.getType() === FormApp.ItemType.FILE_UPLOAD) {
++        photoIds = photoIds.concat(r.getResponse() || []); // 写真はファイルIDの配列で届く
++      } else {
++        ans[item.getTitle()] = r.getResponse();
++      }
++    });
+ 
+     const ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(getSsId_());
+     const diary = ss.getSheetByName(CONFIG.sheetDiary);
++    ensureHeaders_(diary);
+     const last = diary.getLastRow();
+     const used = last < 2 ? [] : diary.getRange(2, 1, last - 1, 1).getValues()
+       .map(r => parseInt(String(r[0]).replace(CONFIG.idPrefix, ''), 10)).filter(x => !isNaN(x));
+@@ -179,15 +215,59 @@ function onFormSubmit(e) {
+     const month = Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM');
+     const stop = Number(ans[Q.stop] || 0);
+ 
++    const photos = photoIds.length ? movePhotos_(ss, photoIds, id, d) : [];
++
+     diary.appendRow([
+       id, d, ans[Q.writer] || '', ans[Q.task] || '', clean_(ans[Q.body]), stop,
+       ans[Q.impact] || '', clean_(ans[Q.note]), "'" + month, e.response.getTimestamp(),
++      photos.join(';'), clean_(ans[Q.photoNote]),
+     ]);
+   } finally {
+     lock.releaseLock();
+   }
+ }
+ 
++// 以前の setup で作った日誌シートにも、写真の2列の見出しを足す
++function ensureHeaders_(diary) {
++  const h = diary.getRange(1, COL_PHOTO, 1, 2).getValues()[0];
++  if (h[0] !== HEADERS[COL_PHOTO - 1] || h[1] !== HEADERS[COL_PHOTO_NOTE - 1]) {
++    diary.getRange(1, COL_PHOTO, 1, 2).setValues([[HEADERS[COL_PHOTO - 1], HEADERS[COL_PHOTO_NOTE - 1]]])
++      .setFontWeight('bold').setBackground('#f3ead7');
++  }
++}
++
++// 写真を「作業日誌_写真/YYYYMMDD/D012_1.jpg」に付け替える（回答者名の入ったファイル名を残さない）
++function movePhotos_(ss, ids, diaryId, d) {
++  const day = Utilities.formatDate(d, 'Asia/Tokyo', 'yyyyMMdd');
++  const folder = childFolder_(photoRoot_(ss), day);
++  const names = [];
++  ids.slice(0, CONFIG.maxPhotos).forEach((fid, k) => {
++    try {
++      const f = DriveApp.getFileById(fid);
++      const ext = (f.getName().match(/\.(jpe?g|png|webp|heic)$/i) || ['.jpg'])[0].toLowerCase();
++      const name = diaryId + '_' + (k + 1) + ext;
++      f.setName(name);
++      f.setDescription('作業日誌 ' + diaryId);
++      f.moveTo(folder);
++      names.push(name);
++    } catch (err) {
++      console.warn('写真を移せませんでした: ' + err); // 写真が無くても日誌の記録は止めない
++    }
++  });
++  return names;
++}
++
++function photoRoot_(ss) {
++  const parents = DriveApp.getFileById(ss.getId()).getParents();
++  const base = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
++  return childFolder_(base, CONFIG.photoFolder);
++}
++
++function childFolder_(parent, name) {
++  const it = parent.getFoldersByName(name);
++  return it.hasNext() ? it.next() : parent.createFolder(name);
++}
++
+ function getSsId_() {
+   const formId = PropertiesService.getDocumentProperties().getProperty('FORM_ID');
+   return FormApp.openById(formId).getDestinationId();
+@@ -306,12 +386,14 @@ function exportCsv() {
+   const names = readList_(set, 4);
+   const partners = readList_(set, 5);
+ 
+-  const rows = diary.getRange(1, 1, last, EXPORT_COLS).getValues();
++  ensureHeaders_(diary);
++  const rows = diary.getRange(1, 1, last, HEADERS.length).getValues()
++    .map(r => EXPORT_IDX.map(j => r[j]));
+   let masked = 0;
+   const out = rows.map((r, i) => r.map((v, j) => {
+     if (i === 0) return v;
+     if (j === 1 && v instanceof Date) return Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd');
+-    if (j === 4 || j === 7) {
++    if (j === 4 || j === 7 || j === 9) { // 本文・備考・写真の説明
+       const m = mask_(String(v), names, partners);
+       if (m !== String(v)) masked++;
+       return m;
+@@ -320,7 +402,7 @@ function exportCsv() {
+   }));
+ 
+   // 匿名化のあとに辞書の語が残っていないか
+-  const joined = out.slice(1).map(r => r[4] + ' ' + r[7]).join('\n');
++  const joined = out.slice(1).map(r => r[4] + ' ' + r[7] + ' ' + r[9]).join('\n');
+   const left = names.concat(partners).filter(w => joined.indexOf(w) !== -1);
+   if (left.length) {
+     SpreadsheetApp.getUi().alert('匿名化のあとに残った語があります：' + left.join('、') + '\nCSVは作りませんでした。');
+@@ -392,3 +474,81 @@ function showFormUrl() {
+   const form = FormApp.openById(PropertiesService.getDocumentProperties().getProperty('FORM_ID'));
+   SpreadsheetApp.getUi().alert('入力用URL：\n' + form.getPublishedUrl() + '\n\n編集用URL：\n' + form.getEditUrl());
+ }
++
++// ===================================================================
++// 写真
++// ===================================================================
++// 写真の設問（ファイルのアップロード）が足されているかを確かめる
++function checkPhotoItem() {
++  const form = FormApp.openById(PropertiesService.getDocumentProperties().getProperty('FORM_ID'));
++  const ups = form.getItems(FormApp.ItemType.FILE_UPLOAD);
++  const ui = SpreadsheetApp.getUi();
++  if (!ups.length) {
++    ui.alert(
++      '写真の設問がまだありません。\n\n' +
++      'フォームの編集画面（下のURL）で：\n' +
++      '1. 「＋」で質問を足し、種類を「ファイルのアップロード」にする\n' +
++      '2. タイトル：' + Q.photo + '\n' +
++      '3. 特定のファイル形式のみ許可：画像\n' +
++      '4. ファイルの最大数：' + CONFIG.maxPhotos + '／最大ファイルサイズ：10MB\n' +
++      '5. 「必須」はオフ。「' + Q.photoNote + '」の上に移動する\n\n' +
++      '※ この設問を足すと、回答者は Google アカウントでのログインが必要になります。\n\n' + form.getEditUrl()
++    );
++    return;
++  }
++  const item = ups[0];
++  const title = item.getTitle();
++  ui.alert('写真の設問があります：「' + title + '」\n' +
++    (title === Q.photo ? '' : 'タイトルは「' + Q.photo + '」にそろえると説明と合います（動作はタイトルに関係なく動きます）。\n') +
++    '\n届いた写真は「' + CONFIG.photoFolder + '/日付」フォルダに、日誌IDの名前で入ります。');
++}
++
++// 指定した月の写真を diary/YYYYMMDD/D012_1.jpg の形でZIPにし、スプレッドシートと同じフォルダに保存する
++function exportPhotosZip() {
++  const ui = SpreadsheetApp.getUi();
++  const def = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM');
++  const res = ui.prompt('写真をZIPで保存', 'どの月の写真ですか（例：' + def + '）。空欄なら今月。', ui.ButtonSet.OK_CANCEL);
++  if (res.getSelectedButton() !== ui.Button.OK) return;
++  const month = (res.getResponseText().trim() || def);
++  if (!/^\d{4}-\d{2}$/.test(month)) { ui.alert('「2026-10」の形で入力してください。'); return; }
++
++  const ss = SpreadsheetApp.getActiveSpreadsheet();
++  const diary = ss.getSheetByName(CONFIG.sheetDiary);
++  ensureHeaders_(diary);
++  const last = diary.getLastRow();
++  if (last < 2) { ui.alert('日誌がまだありません。'); return; }
++  const rows = diary.getRange(2, 1, last - 1, HEADERS.length).getValues();
++  const root = photoRoot_(ss);
++  const blobs = [];
++  let missing = 0;
++  rows.forEach(r => {
++    const d = r[1] instanceof Date ? r[1] : new Date(r[1]);
++    if (Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM') !== month || !r[COL_PHOTO - 1]) return;
++    const day = Utilities.formatDate(d, 'Asia/Tokyo', 'yyyyMMdd');
++    const dayFolders = root.getFoldersByName(day);
++    const folder = dayFolders.hasNext() ? dayFolders.next() : null;
++    String(r[COL_PHOTO - 1]).split(';').filter(String).forEach(name => {
++      const it = folder ? folder.getFilesByName(name) : null;
++      if (it && it.hasNext()) {
++        blobs.push(it.next().getBlob().setName('diary/' + day + '/' + name));
++      } else {
++        missing++;
++      }
++    });
++  });
++  if (!blobs.length) { ui.alert(month + ' の写真はありません。'); return; }
++
++  const zipName = 'diary_photos_' + month.replace('-', '') + '.zip';
++  const zip = Utilities.zip(blobs, zipName);
++  const file = DriveApp.createFile(zip);
++  const parents = DriveApp.getFileById(ss.getId()).getParents();
++  if (parents.hasNext()) file.moveTo(parents.next());
++  ui.alert(
++    'ZIPを保存しました：' + zipName + '（写真 ' + blobs.length + ' 枚' + (missing ? '／見つからない写真 ' + missing + ' 枚' : '') + '）\n\n' +
++    file.getUrl() + '\n\n' +
++    '次の手順：\n' +
++    '1. ダッシュボード「🔤 作業日誌テキスト分析」の「写真をassetsに取り込む」でこのZIPを読み込み、位置情報を消したZIPを保存\n' +
++    '2. 写真を目で確かめる（人の顔・車のナンバー・看板が写っていないか）\n' +
++    '3. 保存したZIPを展開し、diary フォルダごとリポジトリの assets/ にアップロード'
++  );
++}
+diff --git "a/pages/5_\360\237\224\244_\344\275\234\346\245\255\346\227\245\350\252\214\343\203\206\343\202\255\343\202\271\343\203\210\345\210\206\346\236\220.py" "b/pages/5_\360\237\224\244_\344\275\234\346\245\255\346\227\245\350\252\214\343\203\206\343\202\255\343\202\271\343\203\210\345\210\206\346\236\220.py"
+index c9275aa..0740f27 100644
+--- "a/pages/5_\360\237\224\244_\344\275\234\346\245\255\346\227\245\350\252\214\343\203\206\343\202\255\343\202\271\343\203\210\345\210\206\346\236\220.py"
++++ "b/pages/5_\360\237\224\244_\344\275\234\346\245\255\346\227\245\350\252\214\343\203\206\343\202\255\343\202\271\343\203\210\345\210\206\346\236\220.py"
+@@ -14,6 +14,9 @@
+   - 日誌の原文は、このページから外部の生成AIに送らない（AI呼び出しは一切ない）。
+   - アップロードした日誌はそのセッション内だけで使い、サーバーには残さない。
+   - 初期表示は架空の日誌36件（data/sample_work_diary.csv）。
++  - 写真はリポジトリの assets/ に取り込み済みのものだけを参照する（diary_photos.py）。
++    日誌IDの名前（assets/diary/YYYYMMDD/D012_1.jpg）か、日付フォルダ（assets/YYYYMMDD/）で結びつけ、
++    画面には位置情報（Exif）を外して縮小した画像だけを出す。
+ """
+ from pathlib import Path
+ 
+@@ -21,12 +24,15 @@ import pandas as pd
+ import plotly.express as px
+ import streamlit as st
+ 
++import diary_photos as dp
+ import diary_text as dtx
+ import security_guard as sg
+ 
+ st.set_page_config(page_title="作業日誌テキスト分析", page_icon="🔤", layout="wide")
+ 
+ DATA = Path(__file__).parent.parent / "data"
++ASSETS = Path(__file__).parent.parent / "assets"
++MAX_PHOTO_ZIP = 100 * 1024 * 1024
+ SAMPLE = DATA / "sample_work_diary.csv"
+ SAMPLE_LABELS = DATA / "sample_work_diary_labels.csv"
+ SAMPLE_NAMES = ["山田", "佐藤"]            # 架空データ用の匿名化辞書
+@@ -84,16 +90,41 @@ with f1:
+ with f2:
+     st.markdown(
+         "| 段 | どこで | すること |\n|---|---|---|\n"
+-        "| 1 入力 | Googleフォーム | 日付・記入者（仮名）・作業・本文・止まった時間・影響 |\n"
++        "| 1 入力 | Googleフォーム | 日付・記入者（仮名）・作業・本文・止まった時間・影響・**写真（任意・5枚まで）** |\n"
+         "| 2 集計 | 法人のスプレッドシート | 「日誌」シートに D001… で自動追記、「集計」シートが自動更新 |\n"
+         "| 3 匿名化 | 同じスプレッドシート | メニュー「作業日誌 → 解析用CSVを作る」で氏名・取引先名を伏せたCSVを保存 |\n"
+-        "| 4 分析 | このページ | 左のサイドバーで「自分の日誌CSVを読み込む」→ そのCSVを選ぶ |"
++        "| 4 分析 | このページ | 左のサイドバーで「自分の日誌CSVを読み込む」→ そのCSVを選ぶ |\n"
++        "| 5 写真 | 同じスプレッドシート → このページ → GitHub | 「写真をZIPで保存（assets用）」→ 下の「写真をassetsに取り込む」で位置情報を消す → `assets/` に置く |"
+     )
+ with st.expander("フォームをこの画面の中で開く"):
+     st.iframe(FORM_URL + "?embedded=true", height=900)
+ st.caption("フォームの回答はこのページには届かず、このページから回答を読みに行くこともしません。"
+            "分析に使うのは、手順3で匿名化したCSVだけです。")
+ 
++with st.expander("📷 写真をassetsに取り込む（位置情報を消してから置く）"):
++    st.markdown(
++        "フォームに届いた写真は、スプレッドシートのメニュー「作業日誌 → **写真をZIPで保存（assets用）**」で、"
++        "`diary/20261018/D012_1.jpg` の形のZIPになります。スマホの写真には**撮った場所（GPS）**が残ることがあるので、"
++        "公開リポジトリに置く前にここで消します。\n\n"
++        "1. ZIPを読み込む → 2. 位置情報を消して縮小したZIPを保存 → 3. 写真を目で確かめる（人の顔・車のナンバー・看板） → "
++        "4. 展開して `diary` フォルダごと、リポジトリの `assets/` にアップロード"
++    )
++    zup = st.file_uploader("写真のZIP（diary_photos_YYYYMM.zip）", type="zip", key="photo_zip")
++    if zup is not None and sg.check_upload(zup, MAX_PHOTO_ZIP, page="diary", kind="photo_zip"):
++        try:
++            cleaned, rep_df = dp.clean_zip(zup.getvalue())
++        except Exception as e:  # noqa: BLE001  壊れたZIP・上限超え
++            sg.log_event("photo_zip_rejected", "WARNING", page="diary", error=type(e).__name__)
++            st.error(f"ZIPを処理できませんでした：{e}" if isinstance(e, ValueError) else "ZIPを開けませんでした。")
++        else:
++            ok = rep_df[rep_df["結果"] == "入れた"]
++            st.success(f"{len(ok)} 枚を入れました（位置情報を消した写真：{int((ok['メモ'] == '位置情報を消した').sum())} 枚）。")
++            st.dataframe(rep_df, hide_index=True, width="stretch")
++            st.download_button("位置情報を消したZIPを保存", cleaned, "diary_photos_clean.zip", "application/zip")
++    st.caption("読み込んだZIPはこのセッションの中だけで処理し、サーバーには残しません。"
++               "iPhoneの HEIC 形式は読めないので、カメラの設定（フォーマット → 互換性優先）で JPEG にしてください。"
++               "撮るときに位置情報をオフにしておくのが、いちばん確実です。")
++
+ # ------------------------------------------------------------
+ # サイドバー：データの選択
+ # ------------------------------------------------------------
+@@ -108,6 +139,14 @@ with st.sidebar:
+         st.caption("読み込んだ日誌はこのセッションの中だけで使い、サーバーには残りません。"
+                    "このページは外部の生成AIを呼び出しません。")
+     st.divider()
++    show_photos = st.toggle("取り込み済みの写真（assets）を参照する", value=True,
++                            help="assets/diary/日付/日誌ID_番号.jpg と、日付フォルダ assets/YYYYMMDD/ の写真を日誌に結びつけます")
++    photo_days = 0
++    if show_photos:
++        photo_days = st.slider("日付フォルダの写真を何日ずれまで結びつけるか", 0, 3,
++                               2 if source.startswith("架空") else 0,
++                               help="0 なら同じ日だけ。日誌IDの名前の写真は、日付に関係なく結びつきます")
++    st.divider()
+     st.link_button("📝 作業日誌フォーム", FORM_URL, width="stretch")
+     st.caption("同じ手順を Google Colab で：`notebooks/text_analysis_work_diary.ipynb`")
+ 
+@@ -155,7 +194,10 @@ if use_nfkc:
+     partner_list = [dtx.normalize(w) for w in partner_list]
+ pre_mask = df["本文"].copy()
+ df["本文"] = [dtx.mask(t, name_list, partner_list) for t in df["本文"]]
+-left = dtx.residual(df["本文"], name_list + partner_list)
++if "写真の説明" in df.columns:
++    df["写真の説明"] = [dtx.mask(t, name_list, partner_list) for t in df["写真の説明"].fillna("").astype(str)]
++left = dtx.residual(list(df["本文"]) + (list(df["写真の説明"]) if "写真の説明" in df.columns else []),
++                    name_list + partner_list)
+ changed = int((pre_mask != df["本文"]).sum())
+ if left:
+     st.error(f"匿名化のあとに残っている語があります：{', '.join(left)}。ここで止めます。")
+@@ -249,6 +291,61 @@ if len(judged):
+ st.caption("「人手が足り**ない**」は「ない」を含むのに困りごと。否定の規則は**語ごとに逆向き**になります。"
+            "規則は手元のデータを見て作った後付けなので、別の月・別の法人の日誌で一致率を確かめ直します。")
+ 
++# ------------------------------------------------------------
++# 📷 原文と一緒に写真で確かめる（assets に取り込み済みの写真）
++# ------------------------------------------------------------
++@st.cache_data(show_spinner=False, ttl=600)
++def _scan_assets(root: str) -> pd.DataFrame:
++    return dp.scan(Path(root))
++
++
++@st.cache_data(show_spinner=False, max_entries=64)
++def _photo(path: str):
++    return dp.clean_image(Path(path), max_side=900)
++
++
++if show_photos:
++    st.subheader("📷 写真で確かめる（取り込み済みの assets）")
++    photos = _scan_assets(str(ASSETS))
++    linked = dp.link(df, photos, days=photo_days)
++    if linked.empty:
++        st.info("この日誌に結びつく写真は、まだ assets にありません。"
++                "フォームの写真は上の「📷 写真をassetsに取り込む」の手順で置くと、日誌IDで結びつきます。")
++    else:
++        per = linked.groupby("ID").size()
++        hit_ids = [i for i in dict.fromkeys(edited["ID"]) if i in per.index]
++        p1, p2, p3 = st.columns(3)
++        p1.metric("写真のある日誌", f"{per.size} 件 / {len(df)} 件")
++        p2.metric("結びついた写真", f"{len(linked)} 枚")
++        p3.metric("そのうち困りごと候補の日誌", f"{len(hit_ids)} 件", help="①の検索語を含む日誌")
++        only_hits = st.toggle("困りごと候補（検索語を含む日誌）だけを選ぶ", value=bool(hit_ids))
++        ids = hit_ids if only_hits and hit_ids else list(per.index)
++        pick_id = st.selectbox("日誌を選ぶ", ids,
++                               format_func=lambda i: f"{i}（写真 {per[i]} 枚）", key="photo_pick")
++        row = df[df["ID"] == pick_id].iloc[0]
++        st.markdown(f"**{pick_id}｜{row['日付']}｜{row.get('作業', '')}**　{row['本文']}")
++        if "写真の説明" in df.columns and str(row.get("写真の説明", "")).strip():
++            st.caption(f"写真の説明：{row['写真の説明']}")
++        sel = linked[linked["ID"] == pick_id]
++        cols = st.columns(3)
++        for k, (_, ph) in enumerate(sel.iterrows()):
++            with cols[k % 3]:
++                try:
++                    st.image(_photo(str(ph["パス"])), width="stretch")
++                except Exception:  # noqa: BLE001
++                    st.warning(f"表示できませんでした：{Path(ph['パス']).name}")
++                    continue
++                st.caption(f"{ph['説明']}｜{ph['結びつけ方']}｜`{Path(ph['パス']).relative_to(ASSETS.parent)}`")
++        if any(dp.has_gps(Path(p)) for p in sel["パス"]):
++            st.warning("この中に位置情報（GPS）が残った写真があります。画面では消して表示していますが、"
++                       "リポジトリのファイルには残っています。`python diary_photos.py --strip assets` で消してください。")
++        st.caption("「同じ日」「近い日」は日付だけで結びつけたもので、その作業の写真とは限りません。"
++                   "日誌IDで結びついた写真（フォームから取り込んだもの）を根拠に使います。")
++        with st.expander("結びつけの一覧（CSVで保存できます）"):
++            out = linked.assign(パス=[str(Path(p).relative_to(ASSETS.parent)) for p in linked["パス"]])
++            st.dataframe(out, hide_index=True, width="stretch")
++            st.download_button("日誌と写真の対応をCSVで保存", sg.safe_csv(out), "日誌_写真の対応.csv", "text/csv")
++
+ syn = dtx.synonym_hits(df)
+ with st.expander(f"検索の漏れ：3語では拾えない言い換え（{len(syn)} 件）"):
+     st.dataframe(syn, hide_index=True, width="stretch")
+-- 
+2.43.0
+
