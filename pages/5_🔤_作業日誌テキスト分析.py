@@ -1,9 +1,10 @@
 """
-作業日誌テキスト分析 ─ 「困りごと」を数え、原文で確かめ、AIエージェントを入れる作業を決める
+作業日誌テキスト分析＋画像分析 ─ 「困りごと」を数え、原文と写真で確かめ、AIエージェントを入れる作業を決める
 配置先: pages/5_🔤_作業日誌テキスト分析.py （Streamlit のマルチページ構成）
 
 研究メモ（テキスト分析 課題3）の手順を画面にしたもの。骨格はリポジトリ共通の3段構え：
-  0 匿名化 → ① 計算する（回数・件数・分母、KWIC、否定の判定）→ ✅ 検証する → ② 可視化する → ③ 自分の条件で判断する
+  0 匿名化 → ① 計算する（回数・件数・分母、KWIC、否定の判定）→ 🖼️ 写真を読む（Claude）→ ✅ 検証する
+  → ② 可視化する → ③ 自分の条件で判断する
 同じ手順のノートブック: notebooks/text_analysis_work_diary.ipynb
 
 授業との対応
@@ -11,13 +12,17 @@
   第2回「生成AIと始めるPython」：for・if・カウンタ、手で数えた小さな例でAIのコードを検証、トレース表（DNCL）
 
 方針
-  - 日誌の原文は、このページから外部の生成AIに送らない（AI呼び出しは一切ない）。
+  - 日誌の原文（テキスト）は、このページから外部の生成AIに送らない。
+  - 画像分析（diary_vision.py）で Claude に渡すのは、位置情報（Exif）を消して縮小した写真1枚と固定の指示文だけ。
+    渡すのは利用者が操作したときに限る（Claude.ai に自分で貼る／APIキーがあるときだけボタンで送る）。
+    Claude の答えは語彙で検査し、人が確かめてから使う（Human-in-the-Loop）。
   - アップロードした日誌はそのセッション内だけで使い、サーバーには残さない。
   - 初期表示は架空の日誌36件（data/sample_work_diary.csv）。
   - 写真はリポジトリの assets/ に取り込み済みのものだけを参照する（diary_photos.py）。
     日誌IDの名前（assets/diary/YYYYMMDD/D012_1.jpg）か、日付フォルダ（assets/YYYYMMDD/）で結びつけ、
     画面には位置情報（Exif）を外して縮小した画像だけを出す。
 """
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -26,15 +31,18 @@ import streamlit as st
 
 import diary_photos as dp
 import diary_text as dtx
+import diary_vision as dv
 import security_guard as sg
 
-st.set_page_config(page_title="作業日誌テキスト分析", page_icon="🔤", layout="wide")
+st.set_page_config(page_title="作業日誌テキスト分析＋画像分析", page_icon="🔤", layout="wide")
 
 DATA = Path(__file__).parent.parent / "data"
 ASSETS = Path(__file__).parent.parent / "assets"
 MAX_PHOTO_ZIP = 100 * 1024 * 1024
 SAMPLE = DATA / "sample_work_diary.csv"
 SAMPLE_LABELS = DATA / "sample_work_diary_labels.csv"
+SAMPLE_PHOTO_AI = DATA / "sample_photo_ai.csv"   # 取り込み済みの写真に Claude が付けたタグ（記入例・人の確認前）
+CLAUDE_AI_URL = "https://claude.ai/new"
 SAMPLE_NAMES = ["山田", "佐藤"]            # 架空データ用の匿名化辞書
 SAMPLE_PARTNERS = ["みどり青果", "ひかり製パン"]
 REQUIRED = ["ID", "日付", "作業", "本文"]
@@ -49,8 +57,8 @@ CANDIDATES = {
     "人手": ("作業量と出勤予定から、人手が足りない日を前もって知らせる", "出勤予定・作業ごとの所要時間"),
 }
 
-st.title("🔤 作業日誌テキスト分析")
-st.caption("文字を数える。意味は、確かめる。 ── 小規模農業法人へのAIエージェント導入に向けた予備分析")
+st.title("🔤 作業日誌テキスト分析＋画像分析")
+st.caption("文字を数える。写真を読む。意味は、確かめる。 ── 小規模農業法人へのAIエージェント導入に向けた予備分析")
 
 with st.container(border=True):
     st.markdown(
@@ -62,6 +70,8 @@ with st.container(border=True):
         "第二に、「故障はなかった」のような否定も一致するため、原文で確かめる。"
         "第三に、「壊れた」などの言い換えは漏れる。"
         "第四に、氏名や取引先名を匿名化してから分析し、外部のAIには入力しない。"
+        "さらに、日誌に添えた写真を Claude で読み、**テキストに書かれた困りごとが写真でも見えるか**、"
+        "**書かれていない困りごとが写真にだけ写っていないか**を突き合わせる（写真は位置情報を消してから渡す）。"
     )
 
 with st.expander("このページの道のり：6つの工程と、人・AI・Pythonの役割", expanded=False):
@@ -74,7 +84,8 @@ with st.expander("このページの道のり：6つの工程と、人・AI・Py
         "| 3 表現 | ① 検索語 | 人 | 何を1つと数えるか（回数／日誌の件数／日誌×語の組） |\n"
         "| 4 計算 | ① 表 | Python | 言われたとおりに数える（意味は考えない） |\n"
         "| 5 検証 | ✅ 検証 | 人 | 手で数えた答えを**先に**決め、コードの結果と比べる |\n"
-        "| 6 解釈 | ①判定・②・③・3行 | 人 | 原文に戻って意味を読み、言える範囲を決める |\n\n"
+        "| 6 解釈 | ①判定・②・③・3行 | 人 | 原文に戻って意味を読み、言える範囲を決める |\n"
+        "| ＋ 写真 | 🖼️ 画像分析 | Claude → 人 | Claude は決まった語彙でタグを付ける係。合っているかは人が確かめる |\n\n"
         "AI（生成AI）はコードの候補を出す係です。このページの部品 `diary_text.py` も、"
         "動いたから正しいとは考えず、✅ 検証で手計算と照らし合わせています。"
     )
@@ -86,11 +97,12 @@ st.header("📝 日誌を入力する（Googleフォーム）")
 f1, f2 = st.columns([1, 2])
 with f1:
     st.link_button("作業日誌フォームを開く", FORM_URL, type="primary", width="stretch")
-    st.caption("スマホからも入力できます。1日1件、困りごとがない日も「特に問題なし」と書きます（分母になります）。")
+    st.caption("スマホからも入力できます。1日1件、困りごとがない日も「特に問題なし」と書きます（分母になります）。"
+               "**困りごとがあった日は、その様子を1枚撮ります**（写真が日誌IDで結びつき、🖼️ 画像分析の根拠になります）。")
 with f2:
     st.markdown(
         "| 段 | どこで | すること |\n|---|---|---|\n"
-        "| 1 入力 | Googleフォーム | 日付・記入者（仮名）・作業・本文・止まった時間・影響・**写真（任意・5枚まで）** |\n"
+        "| 1 入力 | Googleフォーム | 日付・記入者（仮名）・作業・本文・止まった時間・影響・**写真（困りごとの日は1枚・5枚まで）** |\n"
         "| 2 集計 | 法人のスプレッドシート | 「日誌」シートに D001… で自動追記、「集計」シートが自動更新 |\n"
         "| 3 匿名化 | 同じスプレッドシート | メニュー「作業日誌 → 解析用CSVを作る」で氏名・取引先名を伏せたCSVを保存 |\n"
         "| 4 分析 | このページ | 左のサイドバーで「自分の日誌CSVを読み込む」→ そのCSVを選ぶ |\n"
@@ -346,6 +358,213 @@ if show_photos:
             st.dataframe(out, hide_index=True, width="stretch")
             st.download_button("日誌と写真の対応をCSVで保存", sg.safe_csv(out), "日誌_写真の対応.csv", "text/csv")
 
+# ------------------------------------------------------------
+# 🖼️ 画像分析：写真を Claude で読み、テキストと突き合わせる（diary_vision.py）
+# ------------------------------------------------------------
+ROOT = ASSETS.parent
+img_tab = pd.DataFrame(columns=["ID", "語", "テキストの判定", "写真の手がかり", "写真の確信度", "突き合わせ"])
+
+
+@st.cache_data(show_spinner=False, max_entries=256)
+def _metrics(path: str) -> dict:
+    return dv.metrics(dv.load_small(Path(path), max_side=512))
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _send_bytes(path: str) -> bytes:
+    return dv.to_jpeg_bytes(dv.load_small(Path(path)))
+
+
+if show_photos:
+    st.header("🖼️ 画像分析：写真を Claude で読み、テキストと突き合わせる")
+    with st.container(border=True):
+        st.markdown(
+            "| 段 | 担当 | すること |\n|---|---|---|\n"
+            "| ① 手元で数える | Python | 明るさ・ピント・緑の割合・白い割合。**AIは使わない**。空白や資料らしい写真はここで外せる |\n"
+            "| ① タグを付ける | Claude | 決まった語彙から「種類・場面・写っているもの・困りごとの手がかり・写り込み」を選ぶ |\n"
+            "| ✅ 確かめる | 人 | Claude のタグが合っているかを見て、一致率を出す |\n"
+            "| ② 突き合わせる | Python → 人 | テキストの判定と写真の手がかりを並べ、食い違った日誌の原文を読み直す |\n"
+            "| ③ 判断に足す | 人 | 写真で裏づけられた困りごとを、優先度の材料に加える |"
+        )
+        st.caption("Claude に渡すのは「位置情報を消して長い辺を1024pxに縮めた写真1枚」と「固定の指示文」だけです。"
+                   "日誌の本文・ID・日付・ファイル名は渡しません。答えは語彙で検査し、語彙に無い答えや写真の中の文字による指示は捨てます。")
+
+    photos_all = _scan_assets(str(ASSETS))
+    linked_all = dp.link(df, photos_all, days=photo_days)
+    scope = st.radio("解析する写真", ["日誌に結びついた写真", "assets の写真すべて"], horizontal=True, key="img_scope")
+    paths = (list(dict.fromkeys(linked_all["パス"])) if scope.startswith("日誌") else
+             list(photos_all.loc[photos_all["日付"].notna(), "パス"]))
+    if not paths:
+        st.info("解析できる写真がまだありません。上の「📷 写真をassetsに取り込む」の手順で写真を置いてください。")
+    else:
+        # ── ① 手元で数える（AIなし） ──
+        mt = pd.DataFrame([{"キー": dv.key(p, ROOT), **_metrics(str(p))} for p in paths])
+        mt["目安"] = [("・".join(dv.quality_flags(r)) or "送ってよい") for r in mt.to_dict("records")]
+        n_skip = int((mt["目安"] != "送ってよい").sum())
+        q1, q2, q3 = st.columns(3)
+        q1.metric("対象の写真", f"{len(mt)} 枚")
+        q2.metric("Claude に送らずに済む写真", f"{n_skip} 枚", help="空白・資料らしい（白い割合が50%以上）・暗い・ボケ")
+        q3.metric("送る候補", f"{len(mt) - n_skip} 枚")
+        with st.expander("① 手元で数えた値（写真ごと）"):
+            st.dataframe(mt, hide_index=True, width="stretch")
+            st.caption("ピント＝ラプラシアン（隣の画素との差）の分散。小さいほどボケている。"
+                       "白い割合＝ほぼ白の画素の割合。紙や画面を撮った写真で大きくなる。境目の値は手元の写真で決めた仮置き。")
+
+        # ── ① Claude にタグを付けてもらう ──
+        st.session_state.setdefault("photo_ai", {})
+        use_sample = st.toggle("記入例の解析結果（Claude が付けたタグ・人の確認前）を使う", value=True,
+                               help=f"{SAMPLE_PHOTO_AI.relative_to(ROOT)}：assets の写真に、開発時に Claude が付けたタグ")
+        base = dv.load_results(SAMPLE_PHOTO_AI) if use_sample else None
+        session = pd.DataFrame(list(st.session_state.photo_ai.values()), columns=dv.RESULT_COLS)
+        ai_res = dv.merge_results(base, session)
+
+        st.subheader("Claude で1枚ずつ読む")
+        keys = list(mt["キー"])
+        done = set(ai_res["パス"])
+        pick_k = st.selectbox(
+            "写真を選ぶ", keys, key="img_pick",
+            format_func=lambda k: f"{'✅' if k in done else '　'} {k}（{mt.set_index('キー').at[k, '目安']}）")
+        pick_p = paths[keys.index(pick_k)]
+        v1, v2 = st.columns([2, 3])
+        with v1:
+            st.image(_photo(str(pick_p)), width="stretch")
+            ids = linked_all.loc[linked_all["パス"] == pick_p, ["ID", "結びつけ方"]].drop_duplicates()
+            if len(ids):
+                st.caption("結びついた日誌：" + "、".join(f"{a}（{b}）" for a, b in ids.itertuples(index=False)))
+        with v2:
+            tab_web, tab_api = st.tabs(["Claude.ai で読む（APIキー不要）", "API で読む（任意）"])
+            with tab_web:
+                st.markdown("1. 位置情報を消した写真を保存する　2. Claude.ai に写真と指示文を貼る　3. 返ってきた JSON を下に貼る")
+                c1, c2 = st.columns(2)
+                c1.download_button("① 写真を保存（位置情報なし）", _send_bytes(str(pick_p)),
+                                   f"photo_{keys.index(pick_k):03d}.jpg", "image/jpeg", width="stretch")
+                c2.link_button("② Claude.ai を開く", CLAUDE_AI_URL, width="stretch")
+                st.code(dv.prompt(), language="text")
+                st.caption("右上のボタンで指示文をコピーできます。ファイル名は番号だけにしてあり、日誌の情報は含みません。")
+                reply = st.text_area("③ Claude の返事を貼る", height=120, key=f"reply_{pick_k}")
+                if st.button("検査して取り込む", key=f"take_{pick_k}") and reply.strip():
+                    try:
+                        r = dv.parse(reply)
+                    except (ValueError, json.JSONDecodeError) as e:
+                        st.error(f"取り込めませんでした：{e}")
+                    else:
+                        st.session_state.photo_ai[pick_k] = {"パス": pick_k, **r, "出どころ": "Claude.ai（貼り付け）"}
+                        sg.log_event("photo_ai_pasted", "INFO", page="diary")
+                        st.rerun()
+            with tab_api:
+                if not dv.ai_available():
+                    st.info("APIキー（ANTHROPIC_API_KEY）が設定されていないので、この方法は使えません。"
+                            "左の「Claude.ai で読む」を使ってください。")
+                else:
+                    st.caption(f"モデル：`{dv.AI_MODEL}`。1回の訪問で {sg.AI_CALLS_PER_SESSION} 回まで。"
+                               "空白・資料らしい写真は送らないでください。")
+                    if st.button("🤖 この写真を Claude に送る", key=f"api_{pick_k}") and sg.ai_quota_ok("diary_vision"):
+                        with st.spinner("Claude が写真を読んでいます…"):
+                            try:
+                                r = dv.analyze_api(dv.load_small(Path(pick_p)))
+                            except Exception as e:  # noqa: BLE001  通信・JSONの失敗
+                                sg.log_event("photo_ai_failed", "WARNING", page="diary", error=type(e).__name__)
+                                st.error("Claude の結果を受け取れませんでした。Claude.ai で読む方法を使ってください。")
+                            else:
+                                st.session_state.photo_ai[pick_k] = {"パス": pick_k, **r, "出どころ": "Claude API"}
+                                st.rerun()
+            cur = ai_res[ai_res["パス"] == pick_k]
+            if len(cur):
+                r = cur.iloc[0]
+                st.markdown(f"**{r['種類']}｜{r['場面']}**　{r['説明']}  \n写っているもの：{r['写っているもの'] or '—'}  \n"
+                            f"困りごとの手がかり：{r['手がかり'] or 'なし'}　（{r['出どころ']}）")
+
+        # ── ✅ 人が確かめる ──
+        res_t = ai_res[ai_res["パス"].isin(keys)].copy()
+        if res_t.empty:
+            st.info("この範囲の写真には、まだ Claude のタグがありません。上で1枚ずつ読んでください。")
+        else:
+            st.subheader("✅ Claude のタグを人が確かめる")
+            res_t["困りごと（Claude）"] = [
+                "・".join(f"{k}{r[k]:.1f}" for k in dv.TROUBLES if r[k] > 0) or "なし" for _, r in res_t.iterrows()]
+            res_t["種類（人）"] = res_t["種類"]
+            res_t["手がかりの確認"] = "未確認"
+            chk = st.data_editor(
+                res_t[["パス", "種類", "種類（人）", "困りごと（Claude）", "手がかり", "説明", "手がかりの確認"]],
+                hide_index=True, width="stretch", key=f"img_check_{use_sample}_{len(res_t)}",
+                disabled=["パス", "種類", "困りごと（Claude）", "手がかり", "説明"],
+                column_config={
+                    "種類（人）": st.column_config.SelectboxColumn("種類（人）", options=dv.KINDS, required=True),
+                    "手がかりの確認": st.column_config.SelectboxColumn(
+                        "手がかりの確認", options=["未確認", "正しい", "誤り（無いのに有る）", "見落とし（有るのに無い）"],
+                        required=True),
+                })
+            seen = chk[chk["手がかりの確認"] != "未確認"]
+            k1, k2, k3 = st.columns(3)
+            k1.metric("種類の一致", f"{int((chk['種類'] == chk['種類（人）']).sum())} / {len(chk)}",
+                      help="人が直さなかった行＝一致。直したら不一致として数える")
+            k2.metric("手がかりを確かめた写真", f"{len(seen)} / {len(chk)}")
+            k3.metric("手がかりの正答率", f"{(seen['手がかりの確認'] == '正しい').mean():.0%}" if len(seen) else "—",
+                      help="確かめた写真のうち「正しい」の割合。見落としと誤りは別に数える")
+            if len(seen):
+                st.caption("　".join(f"{k}：{v} 枚" for k, v in seen["手がかりの確認"].value_counts().items()))
+            st.caption("一致率が低い項目は、まだ Claude に任せられません。一致率は**この写真の束での値**で、"
+                       "別の季節・別の圃場で確かめ直します（テキストの規則と同じ）。")
+
+            pv = res_t[res_t[list(dv.PRIVACY.values())].any(axis=1)]
+            pv = pv[pv[["人の顔", "車のナンバー", "看板・取引先名"]].any(axis=1)]
+            if len(pv):
+                st.warning(f"公開前に人の目で確かめる写真が {len(pv)} 枚あります（人の顔・車のナンバー・看板）："
+                           + "、".join(pv["パス"].map(lambda x: Path(x).name).head(6)))
+
+            # ── ② 可視化する ──
+            st.subheader("② 可視化する：手元の数値と Claude のタグ")
+            g1, g2 = st.columns(2)
+            sc = mt.merge(res_t[["パス", "種類", "場面"]], left_on="キー", right_on="パス", how="inner")
+            fig_s = px.scatter(sc, x="白い割合", y="緑の割合", color="種類", hover_data=["キー", "場面"],
+                               color_discrete_map={"現場写真": "#15803d", "資料・画面": "#64748b", "判別できない": "#cbd5e1"})
+            fig_s.add_vline(x=0.5, line_dash="dot", line_color="#94a3b8")
+            fig_s.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="Claude の種類")
+            g1.plotly_chart(fig_s, width="stretch")
+            g1.caption("点線（白い割合50%）の右は「資料らしい」。Claude の判定と手元の数値がそろっていれば、"
+                       "資料は送らずに外せる＝呼び出しを減らせる。")
+            field = res_t[res_t["種類"] == "現場写真"]
+            if len(field):
+                lg = field.melt(id_vars="場面", value_vars=dv.TROUBLES, var_name="困りごと", value_name="確信度")
+                fig_b = px.box(lg, x="困りごと", y="確信度", points="all", color="困りごと",
+                               color_discrete_sequence=["#c2410c", "#b45309", "#7c3aed"])
+                fig_b.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
+                                    yaxis_range=[-0.05, 1.05])
+                g2.plotly_chart(fig_b, width="stretch")
+                g2.caption(f"現場写真 {len(field)} 枚の、困りごとの手がかりの確信度。0 が多いのは「写真では見えない」"
+                           "困りごと（人手・遅れの多く）があるため。")
+
+            # ── 突き合わせ：テキストの判定 × 写真の手がかり ──
+            st.subheader("テキストと写真を突き合わせる")
+            t1, t2, t3 = st.columns(3)
+            thr = t1.slider("写真の手がかりとみなす確信度", 0.1, 0.9, 0.3 if use_sample else 0.5, 0.1, key="img_thr")
+            by_date = t2.toggle("日付で結びついた写真も含める", value=source.startswith("架空"),
+                                help="日付だけで結びついた写真は、その作業の写真とは限りません。根拠には日誌IDで結びついた写真を使います")
+            field_only = t3.toggle("現場写真だけを使う", value=True)
+            lk = linked_all if by_date else linked_all[linked_all["結びつけ方"] == "日誌ID"]
+            lk = lk.assign(キー=[dv.key(p, ROOT) for p in lk["パス"]])
+            sig = dv.image_signals(lk, ai_res, threshold=thr, field_only=field_only)
+            img_tab = dv.text_image_table(judged, sig)
+            if img_tab.empty:
+                st.info("突き合わせられる日誌がありません（写真が日誌に結びついていないか、タグが付いていません）。")
+            else:
+                vc = img_tab["突き合わせ"].value_counts().rename_axis("突き合わせ").reset_index(name="組")
+                order = ["両方で困りごと", "テキストだけ", "写真だけ（原文を読み直す）", "写真だけ（書かれていない？）", "どちらにも無い"]
+                fig_v = px.bar(vc, x="組", y="突き合わせ", orientation="h", category_orders={"突き合わせ": order},
+                               color="突き合わせ", color_discrete_map={
+                                   "両方で困りごと": "#c2410c", "テキストだけ": "#f59e0b",
+                                   "写真だけ（原文を読み直す）": "#7c3aed", "写真だけ（書かれていない？）": "#a78bfa",
+                                   "どちらにも無い": "#e5e7eb"})
+                fig_v.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+                st.plotly_chart(fig_v, width="stretch")
+                look = img_tab[img_tab["突き合わせ"].str.startswith(("写真だけ", "テキストだけ"))]
+                st.dataframe(look.merge(df[["ID", "本文"]], on="ID"), hide_index=True, width="stretch")
+                st.caption("単位は「日誌×困りごとの種類」。**写真だけ**＝写真に手がかりがあるのに、テキストでは否定・保留・語なし → "
+                           "原文を読み直すか、現場に聞く。**テキストだけ**＝書かれているが写真では見えない（人手・遅れは写りにくい）。"
+                           "写真が無い日誌は対象外です。")
+            st.download_button("画像分析の結果をCSVで保存", sg.safe_csv(ai_res), "日誌_写真のタグ.csv", "text/csv")
+            st.caption("保存したCSVを `data/sample_photo_ai.csv` に置きかえると、次から記入例として読み込まれます。")
+
 syn = dtx.synonym_hits(df)
 with st.expander(f"検索の漏れ：3語では拾えない言い換え（{len(syn)} 件）"):
     st.dataframe(syn, hide_index=True, width="stretch")
@@ -463,6 +682,10 @@ st.caption("棒の全長が「検索で一致した日誌の件数」、濃い�
 # ------------------------------------------------------------
 st.header("③ 自分の条件で判断する：AIエージェントを最初に入れる作業")
 st.caption("答えは法人ごとに違います。候補は困りごとの種類からの**仮置き**です。損失時間は日誌に書かれていないので、現場で聞いて入れます。")
+photo_both = img_tab[img_tab["突き合わせ"] == "両方で困りごと"]["語"].value_counts() if len(img_tab) else pd.Series(dtype=int)
+photo_only = img_tab[img_tab["突き合わせ"].str.startswith("写真だけ")]["語"].value_counts() if len(img_tab) else pd.Series(dtype=int)
+w_photo = st.slider("写真だけで見つかった困りごとの重み（0＝数えない、1＝テキストと同じに数える）", 0.0, 1.0, 0.5, 0.1,
+                    help="写真の手がかりは Claude の候補なので、人が確かめるまでは割り引いて数えます")
 rows = []
 cols = st.columns(max(1, len(keywords)))
 counts = confirmed["語"].value_counts() if not confirmed.empty else pd.Series(dtype=int)
@@ -474,16 +697,21 @@ for kw, c in zip(keywords, cols):
         ready = st.slider("データの準備度", 0.0, 1.0, {"遅れ": 1.0}.get(kw, 0.5), 0.1, key=f"ready_{kw}")
     agent, need = CANDIDATES.get(kw, ("（自分で書く）", "（自分で書く）"))
     n = int(counts.get(kw, 0))
-    rows.append({"語": kw, "確認済みの件数": n, "損失時間の見込み(h)": n * loss,
-                 "優先度": round(n * loss * ready, 1), "エージェント候補": agent, "必要なデータ": need})
-st.latex(r"\text{優先度} = \text{確認済みの件数} \times \text{1件あたりの損失時間} \times \text{データの準備度}")
+    n_po, n_both = int(photo_only.get(kw, 0)), int(photo_both.get(kw, 0))
+    n_eff = n + w_photo * n_po
+    rows.append({"語": kw, "確認済みの件数": n, "写真で裏づけ": n_both, "写真だけ": n_po,
+                 "損失時間の見込み(h)": round(n_eff * loss, 1),
+                 "優先度": round(n_eff * loss * ready, 1), "エージェント候補": agent, "必要なデータ": need})
+st.latex(r"\text{優先度} = (\text{確認済みの件数} + w \times \text{写真だけの件数}) \times "
+         r"\text{1件あたりの損失時間} \times \text{データの準備度}")
 decide = pd.DataFrame(rows).sort_values("優先度", ascending=False)
 st.dataframe(decide, hide_index=True, width="stretch")
 if len(decide) and decide["優先度"].max() > 0:
     top = decide.iloc[0]
     st.success(f"今の条件では「{top['語']}」が最上位：{top['エージェント候補']}（前提：{top['必要なデータ']}）")
 st.info("この判断に必要なのに日誌に無いもの：困りごとで**止まった時間**・**影響した量**。"
-        "次の一手は、自由記述を残したまま「止まった時間（分）」「影響（出荷・作業・品質）」の2欄を日誌に足すこと。")
+        "次の一手は、自由記述を残したまま「止まった時間（分）」「影響（出荷・作業・品質）」の2欄を日誌に足すこと。"
+        "写真の側では、**困りごとがあった日に1枚撮る**（日誌IDで結びつく）ことが、写真で裏づけられる件数を増やす一番の近道です。")
 
 # ------------------------------------------------------------
 # 3行の報告（第1回 E09）：観測と解釈を分け、解釈にはIDと原文を根拠として付ける
