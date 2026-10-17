@@ -8,6 +8,10 @@
  *   3. 「集計」シートで、作業×月の件数・「遅れ」「故障」「人手」の回数と件数・止まった時間を自動集計する
  *   4. メニュー「作業日誌 → 解析用CSVを作る」で、氏名・取引先名を伏せた CSV を Drive に保存する
  *      → スマートパン屋農家ダッシュボード「🔤 作業日誌テキスト分析」に読み込める
+ *   5. 写真（任意・最大5枚）を受け付ける。届いた写真は日誌IDの名前（D012_1.jpg）に付け替えて
+ *      「作業日誌_写真/YYYYMMDD」フォルダに移す（Googleが付ける回答者名をファイル名から消すため）
+ *   6. メニュー「作業日誌 → 写真をZIPで保存（assets用）」で、月ごとの写真を diary/YYYYMMDD/D012_1.jpg の形でZIPにする
+ *      → ダッシュボードの「写真をassetsに取り込む」で位置情報を消してから、リポジトリの assets/ に置く
  *
  * 使い方（最初の1回だけ）
  *   1. Google スプレッドシートを新しく作る（名前は例えば「work_diary_202610」）
@@ -15,10 +19,18 @@
  *   3. 関数「setup」を選んで ▶ 実行 → 権限を許可する
  *   4. スプレッドシートを再読み込みすると、メニューに「作業日誌」が出る
  *   5. 「設定」シートで記入者・匿名化辞書を直し、「作業日誌 → フォームの選択肢を更新」
+ *   6. 写真の設問だけは Apps Script から作れない（Google の制限）ので、フォームの編集画面で1問足す：
+ *      「＋」→ 質問の種類「ファイルのアップロード」→ タイトルを「写真（任意）」→
+ *      特定のファイル形式のみ：画像／ファイルの最大数：5／最大サイズ：10MB → 必須はオフ
+ *      → メニュー「作業日誌 → 写真の設問を確かめる」で、正しく足せたかを確かめる
  *
  * 方針
  *   - フォームはメールアドレスを集めない（記入者は仮名で選ぶ）
  *   - 日誌の原文は、このスクリプトから外部の生成AIに送らない
+ *   - 写真の設問があるフォームは、回答者に Google アカウントでのログインを求める（Google の仕様）。
+ *     写真のファイル名には回答者名が付くので、届いたらすぐ日誌IDの名前に付け替える
+ *   - 写真には位置情報（GPS）が残ることがある。公開リポジトリに置く前に必ず消す（ダッシュボード側で消せる）
+ *   - 人の顔・車のナンバー・取引先の看板は写さない
  */
 
 // ===== 設定（setup のときの初期値。あとは「設定」シートで直す） =====
@@ -27,6 +39,8 @@ const CONFIG = {
   sheetDiary: '日誌',
   sheetSummary: '集計',
   sheetSettings: '設定',
+  photoFolder: '作業日誌_写真',
+  maxPhotos: 5,
   idPrefix: 'D',
   writers: ['記入者A', '記入者B', '記入者C', '記入者D', '記入者E'],
   tasks: ['播種', '育苗', '除草', '収穫', '出荷', '機械整備', 'その他'],
@@ -40,8 +54,11 @@ const CONFIG = {
   },
 };
 
-const HEADERS = ['ID', '日付', '記入者', '作業', '本文', '止まった時間(分)', '影響', '備考', '月', '受付時刻'];
-const EXPORT_COLS = 8; // CSV に出すのは ID〜備考 まで
+// 写真の2列は末尾に足す（既存の列の位置を変えると集計の数式がずれるため）
+const HEADERS = ['ID', '日付', '記入者', '作業', '本文', '止まった時間(分)', '影響', '備考', '月', '受付時刻', '写真', '写真の説明'];
+const EXPORT_IDX = [0, 1, 2, 3, 4, 5, 6, 7, 10, 11]; // CSV に出す列：ID〜備考、写真、写真の説明
+const COL_PHOTO = 11;   // K列（1始まり）
+const COL_PHOTO_NOTE = 12;
 const Q = { // フォームの設問タイトル（集計とトリガーがこの名前で読む）
   date: '日付',
   writer: '記入者',
@@ -50,6 +67,8 @@ const Q = { // フォームの設問タイトル（集計とトリガーがこ�
   stop: '止まった時間（分）',
   impact: '影響',
   note: '備考',
+  photo: '写真（任意）',
+  photoNote: '写真の説明（任意）',
 };
 
 // ===================================================================
@@ -61,6 +80,9 @@ function onOpen() {
     .addItem('解析用CSVを作る（匿名化）', 'exportCsv')
     .addItem('フォームの選択肢を更新', 'refreshChoices')
     .addItem('フォームのURLを表示', 'showFormUrl')
+    .addSeparator()
+    .addItem('写真の設問を確かめる', 'checkPhotoItem')
+    .addItem('写真をZIPで保存（assets用）', 'exportPhotosZip')
     .addSeparator()
     .addItem('集計シートを作り直す', 'buildSummary')
     .addToUi();
@@ -94,7 +116,8 @@ function setup() {
   form.setDescription(
     '1日1件、その日の作業を記入してください。\n' +
     '・本文には氏名や取引先名を書かず、「担当」「取引先」などと書いてください。\n' +
-    '・困りごとがなかった日も「特に問題なし」と記入してください（分母になります）。'
+    '・困りごとがなかった日も「特に問題なし」と記入してください（分母になります）。\n' +
+    '・写真は任意です（最大5枚）。人の顔・車のナンバー・取引先の看板は写さないでください。'
   );
   form.setCollectEmail(false);
   form.setAllowResponseEdits(false);
@@ -109,7 +132,8 @@ function setup() {
   SpreadsheetApp.flush();
   SpreadsheetApp.getUi().alert(
     'フォームを作りました。\n\n入力用URL：\n' + form.getPublishedUrl() +
-    '\n\n「設定」シートで記入者と匿名化辞書を直したら、メニュー「作業日誌 → フォームの選択肢を更新」を実行してください。'
+    '\n\n「設定」シートで記入者と匿名化辞書を直したら、メニュー「作業日誌 → フォームの選択肢を更新」を実行してください。' +
+    '\n\n写真の設問は、フォームの編集画面で手で1問足します（手順はメニュー「作業日誌 → 写真の設問を確かめる」）。'
   );
 }
 
@@ -130,6 +154,9 @@ function buildQuestions_(form) {
   form.addMultipleChoiceItem().setTitle(Q.impact).setChoiceValues(CONFIG.impacts).setRequired(true)
     .setHelpText('困りごとが何に響いたか、いちばん大きいものを1つ');
   form.addParagraphTextItem().setTitle(Q.note).setRequired(false);
+  // 写真の設問（ファイルのアップロード）は Apps Script では作れないので、編集画面で足す。説明欄だけ先に作る
+  form.addTextItem().setTitle(Q.photoNote).setRequired(false)
+    .setHelpText('何を写したか。例：除草前の畝／故障した草刈機の刃');
 }
 
 function buildSettings_(ss) {
@@ -165,10 +192,19 @@ function onFormSubmit(e) {
   lock.waitLock(30000);
   try {
     const ans = {};
-    e.response.getItemResponses().forEach(r => { ans[r.getItem().getTitle()] = r.getResponse(); });
+    let photoIds = [];
+    e.response.getItemResponses().forEach(r => {
+      const item = r.getItem();
+      if (item.getType() === FormApp.ItemType.FILE_UPLOAD) {
+        photoIds = photoIds.concat(r.getResponse() || []); // 写真はファイルIDの配列で届く
+      } else {
+        ans[item.getTitle()] = r.getResponse();
+      }
+    });
 
     const ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(getSsId_());
     const diary = ss.getSheetByName(CONFIG.sheetDiary);
+    ensureHeaders_(diary);
     const last = diary.getLastRow();
     const used = last < 2 ? [] : diary.getRange(2, 1, last - 1, 1).getValues()
       .map(r => parseInt(String(r[0]).replace(CONFIG.idPrefix, ''), 10)).filter(x => !isNaN(x));
@@ -179,13 +215,57 @@ function onFormSubmit(e) {
     const month = Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM');
     const stop = Number(ans[Q.stop] || 0);
 
+    const photos = photoIds.length ? movePhotos_(ss, photoIds, id, d) : [];
+
     diary.appendRow([
       id, d, ans[Q.writer] || '', ans[Q.task] || '', clean_(ans[Q.body]), stop,
       ans[Q.impact] || '', clean_(ans[Q.note]), "'" + month, e.response.getTimestamp(),
+      photos.join(';'), clean_(ans[Q.photoNote]),
     ]);
   } finally {
     lock.releaseLock();
   }
+}
+
+// 以前の setup で作った日誌シートにも、写真の2列の見出しを足す
+function ensureHeaders_(diary) {
+  const h = diary.getRange(1, COL_PHOTO, 1, 2).getValues()[0];
+  if (h[0] !== HEADERS[COL_PHOTO - 1] || h[1] !== HEADERS[COL_PHOTO_NOTE - 1]) {
+    diary.getRange(1, COL_PHOTO, 1, 2).setValues([[HEADERS[COL_PHOTO - 1], HEADERS[COL_PHOTO_NOTE - 1]]])
+      .setFontWeight('bold').setBackground('#f3ead7');
+  }
+}
+
+// 写真を「作業日誌_写真/YYYYMMDD/D012_1.jpg」に付け替える（回答者名の入ったファイル名を残さない）
+function movePhotos_(ss, ids, diaryId, d) {
+  const day = Utilities.formatDate(d, 'Asia/Tokyo', 'yyyyMMdd');
+  const folder = childFolder_(photoRoot_(ss), day);
+  const names = [];
+  ids.slice(0, CONFIG.maxPhotos).forEach((fid, k) => {
+    try {
+      const f = DriveApp.getFileById(fid);
+      const ext = (f.getName().match(/\.(jpe?g|png|webp|heic)$/i) || ['.jpg'])[0].toLowerCase();
+      const name = diaryId + '_' + (k + 1) + ext;
+      f.setName(name);
+      f.setDescription('作業日誌 ' + diaryId);
+      f.moveTo(folder);
+      names.push(name);
+    } catch (err) {
+      console.warn('写真を移せませんでした: ' + err); // 写真が無くても日誌の記録は止めない
+    }
+  });
+  return names;
+}
+
+function photoRoot_(ss) {
+  const parents = DriveApp.getFileById(ss.getId()).getParents();
+  const base = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
+  return childFolder_(base, CONFIG.photoFolder);
+}
+
+function childFolder_(parent, name) {
+  const it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
 }
 
 function getSsId_() {
@@ -306,12 +386,14 @@ function exportCsv() {
   const names = readList_(set, 4);
   const partners = readList_(set, 5);
 
-  const rows = diary.getRange(1, 1, last, EXPORT_COLS).getValues();
+  ensureHeaders_(diary);
+  const rows = diary.getRange(1, 1, last, HEADERS.length).getValues()
+    .map(r => EXPORT_IDX.map(j => r[j]));
   let masked = 0;
   const out = rows.map((r, i) => r.map((v, j) => {
     if (i === 0) return v;
     if (j === 1 && v instanceof Date) return Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd');
-    if (j === 4 || j === 7) {
+    if (j === 4 || j === 7 || j === 9) { // 本文・備考・写真の説明
       const m = mask_(String(v), names, partners);
       if (m !== String(v)) masked++;
       return m;
@@ -320,7 +402,7 @@ function exportCsv() {
   }));
 
   // 匿名化のあとに辞書の語が残っていないか
-  const joined = out.slice(1).map(r => r[4] + ' ' + r[7]).join('\n');
+  const joined = out.slice(1).map(r => r[4] + ' ' + r[7] + ' ' + r[9]).join('\n');
   const left = names.concat(partners).filter(w => joined.indexOf(w) !== -1);
   if (left.length) {
     SpreadsheetApp.getUi().alert('匿名化のあとに残った語があります：' + left.join('、') + '\nCSVは作りませんでした。');
@@ -391,4 +473,82 @@ function resetSetup() {
 function showFormUrl() {
   const form = FormApp.openById(PropertiesService.getDocumentProperties().getProperty('FORM_ID'));
   SpreadsheetApp.getUi().alert('入力用URL：\n' + form.getPublishedUrl() + '\n\n編集用URL：\n' + form.getEditUrl());
+}
+
+// ===================================================================
+// 写真
+// ===================================================================
+// 写真の設問（ファイルのアップロード）が足されているかを確かめる
+function checkPhotoItem() {
+  const form = FormApp.openById(PropertiesService.getDocumentProperties().getProperty('FORM_ID'));
+  const ups = form.getItems(FormApp.ItemType.FILE_UPLOAD);
+  const ui = SpreadsheetApp.getUi();
+  if (!ups.length) {
+    ui.alert(
+      '写真の設問がまだありません。\n\n' +
+      'フォームの編集画面（下のURL）で：\n' +
+      '1. 「＋」で質問を足し、種類を「ファイルのアップロード」にする\n' +
+      '2. タイトル：' + Q.photo + '\n' +
+      '3. 特定のファイル形式のみ許可：画像\n' +
+      '4. ファイルの最大数：' + CONFIG.maxPhotos + '／最大ファイルサイズ：10MB\n' +
+      '5. 「必須」はオフ。「' + Q.photoNote + '」の上に移動する\n\n' +
+      '※ この設問を足すと、回答者は Google アカウントでのログインが必要になります。\n\n' + form.getEditUrl()
+    );
+    return;
+  }
+  const item = ups[0];
+  const title = item.getTitle();
+  ui.alert('写真の設問があります：「' + title + '」\n' +
+    (title === Q.photo ? '' : 'タイトルは「' + Q.photo + '」にそろえると説明と合います（動作はタイトルに関係なく動きます）。\n') +
+    '\n届いた写真は「' + CONFIG.photoFolder + '/日付」フォルダに、日誌IDの名前で入ります。');
+}
+
+// 指定した月の写真を diary/YYYYMMDD/D012_1.jpg の形でZIPにし、スプレッドシートと同じフォルダに保存する
+function exportPhotosZip() {
+  const ui = SpreadsheetApp.getUi();
+  const def = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM');
+  const res = ui.prompt('写真をZIPで保存', 'どの月の写真ですか（例：' + def + '）。空欄なら今月。', ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+  const month = (res.getResponseText().trim() || def);
+  if (!/^\d{4}-\d{2}$/.test(month)) { ui.alert('「2026-10」の形で入力してください。'); return; }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const diary = ss.getSheetByName(CONFIG.sheetDiary);
+  ensureHeaders_(diary);
+  const last = diary.getLastRow();
+  if (last < 2) { ui.alert('日誌がまだありません。'); return; }
+  const rows = diary.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  const root = photoRoot_(ss);
+  const blobs = [];
+  let missing = 0;
+  rows.forEach(r => {
+    const d = r[1] instanceof Date ? r[1] : new Date(r[1]);
+    if (Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM') !== month || !r[COL_PHOTO - 1]) return;
+    const day = Utilities.formatDate(d, 'Asia/Tokyo', 'yyyyMMdd');
+    const dayFolders = root.getFoldersByName(day);
+    const folder = dayFolders.hasNext() ? dayFolders.next() : null;
+    String(r[COL_PHOTO - 1]).split(';').filter(String).forEach(name => {
+      const it = folder ? folder.getFilesByName(name) : null;
+      if (it && it.hasNext()) {
+        blobs.push(it.next().getBlob().setName('diary/' + day + '/' + name));
+      } else {
+        missing++;
+      }
+    });
+  });
+  if (!blobs.length) { ui.alert(month + ' の写真はありません。'); return; }
+
+  const zipName = 'diary_photos_' + month.replace('-', '') + '.zip';
+  const zip = Utilities.zip(blobs, zipName);
+  const file = DriveApp.createFile(zip);
+  const parents = DriveApp.getFileById(ss.getId()).getParents();
+  if (parents.hasNext()) file.moveTo(parents.next());
+  ui.alert(
+    'ZIPを保存しました：' + zipName + '（写真 ' + blobs.length + ' 枚' + (missing ? '／見つからない写真 ' + missing + ' 枚' : '') + '）\n\n' +
+    file.getUrl() + '\n\n' +
+    '次の手順：\n' +
+    '1. ダッシュボード「🔤 作業日誌テキスト分析」の「写真をassetsに取り込む」でこのZIPを読み込み、位置情報を消したZIPを保存\n' +
+    '2. 写真を目で確かめる（人の顔・車のナンバー・看板が写っていないか）\n' +
+    '3. 保存したZIPを展開し、diary フォルダごとリポジトリの assets/ にアップロード'
+  );
 }
