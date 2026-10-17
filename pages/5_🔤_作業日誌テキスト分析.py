@@ -14,6 +14,9 @@
   - 日誌の原文は、このページから外部の生成AIに送らない（AI呼び出しは一切ない）。
   - アップロードした日誌はそのセッション内だけで使い、サーバーには残さない。
   - 初期表示は架空の日誌36件（data/sample_work_diary.csv）。
+  - 写真はリポジトリの assets/ に取り込み済みのものだけを参照する（diary_photos.py）。
+    日誌IDの名前（assets/diary/YYYYMMDD/D012_1.jpg）か、日付フォルダ（assets/YYYYMMDD/）で結びつけ、
+    画面には位置情報（Exif）を外して縮小した画像だけを出す。
 """
 from pathlib import Path
 
@@ -21,12 +24,15 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+import diary_photos as dp
 import diary_text as dtx
 import security_guard as sg
 
 st.set_page_config(page_title="作業日誌テキスト分析", page_icon="🔤", layout="wide")
 
 DATA = Path(__file__).parent.parent / "data"
+ASSETS = Path(__file__).parent.parent / "assets"
+MAX_PHOTO_ZIP = 100 * 1024 * 1024
 SAMPLE = DATA / "sample_work_diary.csv"
 SAMPLE_LABELS = DATA / "sample_work_diary_labels.csv"
 SAMPLE_NAMES = ["山田", "佐藤"]            # 架空データ用の匿名化辞書
@@ -84,15 +90,40 @@ with f1:
 with f2:
     st.markdown(
         "| 段 | どこで | すること |\n|---|---|---|\n"
-        "| 1 入力 | Googleフォーム | 日付・記入者（仮名）・作業・本文・止まった時間・影響 |\n"
+        "| 1 入力 | Googleフォーム | 日付・記入者（仮名）・作業・本文・止まった時間・影響・**写真（任意・5枚まで）** |\n"
         "| 2 集計 | 法人のスプレッドシート | 「日誌」シートに D001… で自動追記、「集計」シートが自動更新 |\n"
         "| 3 匿名化 | 同じスプレッドシート | メニュー「作業日誌 → 解析用CSVを作る」で氏名・取引先名を伏せたCSVを保存 |\n"
-        "| 4 分析 | このページ | 左のサイドバーで「自分の日誌CSVを読み込む」→ そのCSVを選ぶ |"
+        "| 4 分析 | このページ | 左のサイドバーで「自分の日誌CSVを読み込む」→ そのCSVを選ぶ |\n"
+        "| 5 写真 | 同じスプレッドシート → このページ → GitHub | 「写真をZIPで保存（assets用）」→ 下の「写真をassetsに取り込む」で位置情報を消す → `assets/` に置く |"
     )
 with st.expander("フォームをこの画面の中で開く"):
     st.iframe(FORM_URL + "?embedded=true", height=900)
 st.caption("フォームの回答はこのページには届かず、このページから回答を読みに行くこともしません。"
            "分析に使うのは、手順3で匿名化したCSVだけです。")
+
+with st.expander("📷 写真をassetsに取り込む（位置情報を消してから置く）"):
+    st.markdown(
+        "フォームに届いた写真は、スプレッドシートのメニュー「作業日誌 → **写真をZIPで保存（assets用）**」で、"
+        "`diary/20261018/D012_1.jpg` の形のZIPになります。スマホの写真には**撮った場所（GPS）**が残ることがあるので、"
+        "公開リポジトリに置く前にここで消します。\n\n"
+        "1. ZIPを読み込む → 2. 位置情報を消して縮小したZIPを保存 → 3. 写真を目で確かめる（人の顔・車のナンバー・看板） → "
+        "4. 展開して `diary` フォルダごと、リポジトリの `assets/` にアップロード"
+    )
+    zup = st.file_uploader("写真のZIP（diary_photos_YYYYMM.zip）", type="zip", key="photo_zip")
+    if zup is not None and sg.check_upload(zup, MAX_PHOTO_ZIP, page="diary", kind="photo_zip"):
+        try:
+            cleaned, rep_df = dp.clean_zip(zup.getvalue())
+        except Exception as e:  # noqa: BLE001  壊れたZIP・上限超え
+            sg.log_event("photo_zip_rejected", "WARNING", page="diary", error=type(e).__name__)
+            st.error(f"ZIPを処理できませんでした：{e}" if isinstance(e, ValueError) else "ZIPを開けませんでした。")
+        else:
+            ok = rep_df[rep_df["結果"] == "入れた"]
+            st.success(f"{len(ok)} 枚を入れました（位置情報を消した写真：{int((ok['メモ'] == '位置情報を消した').sum())} 枚）。")
+            st.dataframe(rep_df, hide_index=True, width="stretch")
+            st.download_button("位置情報を消したZIPを保存", cleaned, "diary_photos_clean.zip", "application/zip")
+    st.caption("読み込んだZIPはこのセッションの中だけで処理し、サーバーには残しません。"
+               "iPhoneの HEIC 形式は読めないので、カメラの設定（フォーマット → 互換性優先）で JPEG にしてください。"
+               "撮るときに位置情報をオフにしておくのが、いちばん確実です。")
 
 # ------------------------------------------------------------
 # サイドバー：データの選択
@@ -107,6 +138,14 @@ with st.sidebar:
         up = st.file_uploader("日誌CSV", type="csv", key="diary_up")
         st.caption("読み込んだ日誌はこのセッションの中だけで使い、サーバーには残りません。"
                    "このページは外部の生成AIを呼び出しません。")
+    st.divider()
+    show_photos = st.toggle("取り込み済みの写真（assets）を参照する", value=True,
+                            help="assets/diary/日付/日誌ID_番号.jpg と、日付フォルダ assets/YYYYMMDD/ の写真を日誌に結びつけます")
+    photo_days = 0
+    if show_photos:
+        photo_days = st.slider("日付フォルダの写真を何日ずれまで結びつけるか", 0, 3,
+                               2 if source.startswith("架空") else 0,
+                               help="0 なら同じ日だけ。日誌IDの名前の写真は、日付に関係なく結びつきます")
     st.divider()
     st.link_button("📝 作業日誌フォーム", FORM_URL, width="stretch")
     st.caption("同じ手順を Google Colab で：`notebooks/text_analysis_work_diary.ipynb`")
@@ -155,7 +194,10 @@ if use_nfkc:
     partner_list = [dtx.normalize(w) for w in partner_list]
 pre_mask = df["本文"].copy()
 df["本文"] = [dtx.mask(t, name_list, partner_list) for t in df["本文"]]
-left = dtx.residual(df["本文"], name_list + partner_list)
+if "写真の説明" in df.columns:
+    df["写真の説明"] = [dtx.mask(t, name_list, partner_list) for t in df["写真の説明"].fillna("").astype(str)]
+left = dtx.residual(list(df["本文"]) + (list(df["写真の説明"]) if "写真の説明" in df.columns else []),
+                    name_list + partner_list)
 changed = int((pre_mask != df["本文"]).sum())
 if left:
     st.error(f"匿名化のあとに残っている語があります：{', '.join(left)}。ここで止めます。")
@@ -248,6 +290,61 @@ if len(judged):
             st.dataframe(miss[["ID", "語", "本文", "規則の判定", "人の判定"]], hide_index=True, width="stretch")
 st.caption("「人手が足り**ない**」は「ない」を含むのに困りごと。否定の規則は**語ごとに逆向き**になります。"
            "規則は手元のデータを見て作った後付けなので、別の月・別の法人の日誌で一致率を確かめ直します。")
+
+# ------------------------------------------------------------
+# 📷 原文と一緒に写真で確かめる（assets に取り込み済みの写真）
+# ------------------------------------------------------------
+@st.cache_data(show_spinner=False, ttl=600)
+def _scan_assets(root: str) -> pd.DataFrame:
+    return dp.scan(Path(root))
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _photo(path: str):
+    return dp.clean_image(Path(path), max_side=900)
+
+
+if show_photos:
+    st.subheader("📷 写真で確かめる（取り込み済みの assets）")
+    photos = _scan_assets(str(ASSETS))
+    linked = dp.link(df, photos, days=photo_days)
+    if linked.empty:
+        st.info("この日誌に結びつく写真は、まだ assets にありません。"
+                "フォームの写真は上の「📷 写真をassetsに取り込む」の手順で置くと、日誌IDで結びつきます。")
+    else:
+        per = linked.groupby("ID").size()
+        hit_ids = [i for i in dict.fromkeys(edited["ID"]) if i in per.index]
+        p1, p2, p3 = st.columns(3)
+        p1.metric("写真のある日誌", f"{per.size} 件 / {len(df)} 件")
+        p2.metric("結びついた写真", f"{len(linked)} 枚")
+        p3.metric("そのうち困りごと候補の日誌", f"{len(hit_ids)} 件", help="①の検索語を含む日誌")
+        only_hits = st.toggle("困りごと候補（検索語を含む日誌）だけを選ぶ", value=bool(hit_ids))
+        ids = hit_ids if only_hits and hit_ids else list(per.index)
+        pick_id = st.selectbox("日誌を選ぶ", ids,
+                               format_func=lambda i: f"{i}（写真 {per[i]} 枚）", key="photo_pick")
+        row = df[df["ID"] == pick_id].iloc[0]
+        st.markdown(f"**{pick_id}｜{row['日付']}｜{row.get('作業', '')}**　{row['本文']}")
+        if "写真の説明" in df.columns and str(row.get("写真の説明", "")).strip():
+            st.caption(f"写真の説明：{row['写真の説明']}")
+        sel = linked[linked["ID"] == pick_id]
+        cols = st.columns(3)
+        for k, (_, ph) in enumerate(sel.iterrows()):
+            with cols[k % 3]:
+                try:
+                    st.image(_photo(str(ph["パス"])), width="stretch")
+                except Exception:  # noqa: BLE001
+                    st.warning(f"表示できませんでした：{Path(ph['パス']).name}")
+                    continue
+                st.caption(f"{ph['説明']}｜{ph['結びつけ方']}｜`{Path(ph['パス']).relative_to(ASSETS.parent)}`")
+        if any(dp.has_gps(Path(p)) for p in sel["パス"]):
+            st.warning("この中に位置情報（GPS）が残った写真があります。画面では消して表示していますが、"
+                       "リポジトリのファイルには残っています。`python diary_photos.py --strip assets` で消してください。")
+        st.caption("「同じ日」「近い日」は日付だけで結びつけたもので、その作業の写真とは限りません。"
+                   "日誌IDで結びついた写真（フォームから取り込んだもの）を根拠に使います。")
+        with st.expander("結びつけの一覧（CSVで保存できます）"):
+            out = linked.assign(パス=[str(Path(p).relative_to(ASSETS.parent)) for p in linked["パス"]])
+            st.dataframe(out, hide_index=True, width="stretch")
+            st.download_button("日誌と写真の対応をCSVで保存", sg.safe_csv(out), "日誌_写真の対応.csv", "text/csv")
 
 syn = dtx.synonym_hits(df)
 with st.expander(f"検索の漏れ：3語では拾えない言い換え（{len(syn)} 件）"):
