@@ -82,7 +82,7 @@ with st.sidebar:
 st.title("🌾 自給家計簿")
 st.caption("記録する → 見せる → 自分の条件で判断する")
 
-tab_h, tab_c, tab_w = st.tabs(["収穫を記録", "支出を記録", "作業日誌"])
+tab_h, tab_c, tab_w, tab_p = st.tabs(["収穫を記録", "支出を記録", "作業日誌", "計画と比べる"])
 
 with tab_h:
     st.write("収穫した量と、**同じものを買った場合の単価**を入れます。")
@@ -93,7 +93,7 @@ with tab_h:
         column_config={
             "日付": st.column_config.DateColumn(required=True),
             "品目": st.column_config.SelectboxColumn(
-                options=["米", "小麦", "野菜", "果物", "卵", "その他"], required=True
+                options=["米", "小麦", "大豆", "芋", "野菜", "果物", "卵", "その他"], required=True
             ),
             "数量": st.column_config.NumberColumn(min_value=0.0, step=0.1),
             "単位": st.column_config.SelectboxColumn(options=["kg", "個", "束", "本"]),
@@ -125,6 +125,35 @@ with tab_w:
         column_config={"日付": st.column_config.DateColumn(required=True)},
         key="ed_work",
     )
+
+with tab_p:
+    st.write("自給シミュレーターの**計画値**と、ここに記録した**実績**を品目ごとに比べます。"
+             "同じブラウザでシミュレーターを開いていれば自動で入ります。別の日は計画CSVを読み込みます。")
+    up_plan = st.file_uploader("自給計画のCSVを読み込む", type="csv", key="up_plan")
+    if up_plan is not None:
+        _plan = sg.read_csv_safely(up_plan, page="kakeibo", kind="plan")
+        if _plan is not None:
+            st.session_state["jikyu_plan"] = to_date(_plan)
+    plan = st.session_state.get("jikyu_plan")
+    if plan is None or len(plan) == 0:
+        st.info("まだ計画がありません。左メニュー「自給と防災の畑」の⑤タブで計画を作ってください。")
+    else:
+        _p = to_date(plan).dropna(subset=["日付"])
+        _a = to_date(st.session_state["harvest"]).dropna(subset=["日付"])
+        _p_year = int(pd.to_datetime(_p["日付"]).dt.year.mode().iloc[0])
+        _a = _a[pd.to_datetime(_a["日付"]).dt.year == _p_year]
+        _a = _a[_a["単位"].fillna("kg") == "kg"]
+        cmp = pd.DataFrame({
+            "計画(kg)": _p.groupby("品目")["数量"].sum(),
+            "実績(kg)": _a.groupby("品目")["数量"].sum() if not _a.empty else pd.Series(dtype=float),
+        }).fillna(0)
+        cmp["達成率"] = (cmp["実績(kg)"] / cmp["計画(kg)"].where(cmp["計画(kg)"] > 0)).fillna(0)
+        st.caption(f"{_p_year}年の計画と、同じ年の実績（単位が kg の記録）を比べています。")
+        st.dataframe(cmp.style.format({"計画(kg)": "{:,.1f}", "実績(kg)": "{:,.1f}", "達成率": "{:.0%}"}),
+                     width="stretch")
+        st.bar_chart(cmp[["計画(kg)", "実績(kg)"]])
+        st.caption("実績が計画を大きく下回る品目は、シミュレーターの収量の係数を実測値に置き換えると、"
+                   "翌年の計画が現実に近づきます（「④ 探究フィールドワーク」の記録CSVを使います）。")
 
 # ------------------------------------------------------------
 # 集計（計算する）

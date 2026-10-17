@@ -69,6 +69,10 @@ def _defaults() -> dict:
                   if k in PLACEHOLDER})
     except Exception:  # noqa: BLE001  secrets.toml が無い環境
         pass
+    # 自給シミュレーター（pages/15）を同じセッションで開いていれば、その計算結果を「C 自給」の初期値にする
+    link = st.session_state.get("jikyu_link")
+    if link:
+        d.update({k: int(link[k]) for k in ("saving_step", "saving_cap") if k in link})
     return d
 
 
@@ -76,6 +80,8 @@ def render_income_structure_tab():
     d = _defaults()
     st.header("収入構造シミュレーター")
     st.caption("計算 → 可視化 → 自分の条件で判断。既定値は Secrets の [income]（未登録なら仮置き）です。")
+    if st.session_state.get("jikyu_link"):
+        st.info("「C 自給」の初期値は、自給と防災の畑シミュレーターの計算結果（全部買う場合との差）を使っています。")
 
     c1, c2, c3 = st.columns(3)
     with c1:
