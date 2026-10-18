@@ -5,5 +5,5 @@ numpy>=2.5,<3
 plotly>=7.1,<8
 pillow>=12.3,<13
 pypdfium2>=5.14,<6   # PDFをページ画像にして表示
-anthropic>=1.12,<2   # 任意：生成AI（Claude）で雑草候補・日誌写真のタグを付ける場合
+anthropic>=1.15.0,<2   # 任意：生成AI（Claude）で雑草候補・日誌写真のタグを付ける場合
 Authlib>=1.3.2,<2   # Googleログイン（所有者専用ページ）に必要
