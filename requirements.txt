@@ -1,5 +1,5 @@
 # 下限＋メジャー上限で固定（予期しない大型更新を防ぎ、更新は Dependabot のPRで確認してから入れる）
-streamlit>=1.65,<2
+streamlit>=1.66.0,<2
 pandas>=3.0,<4
 numpy>=2.5,<3
 plotly>=7.1,<8
