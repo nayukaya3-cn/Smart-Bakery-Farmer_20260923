@@ -1,0 +1,1123 @@
+From 4ff0c90c1ccf070294e18e8b751fe951b50faf05 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 20 Oct 2026 04:18:06 +0900
+Subject: [PATCH] =?UTF-8?q?=E6=8E=A2=E7=A9=B6=E5=AD=A6=E7=BF=92=E3=82=B3?=
+ =?UTF-8?q?=E3=83=BC=E3=83=8A=E3=83=BC=E3=80=8C=E6=A9=9F=E6=A2=B0=E5=AD=A6?=
+ =?UTF-8?q?=E7=BF=92=E3=81=A7=E8=A6=8B=E3=81=A4=E3=81=91=E3=82=8B=E3=80=8D?=
+ =?UTF-8?q?=E3=82=92=E8=BF=BD=E5=8A=A0=EF=BC=88=E6=A9=9F=E6=A2=B0=E5=AD=A6?=
+ =?UTF-8?q?=E7=BF=92=E3=81=AE=E5=9F=BA=E7=A4=8E=20=E5=85=A815=E5=9B=9E?=
+ =?UTF-8?q?=E3=82=92=E6=97=A5=E8=AA=8C=E3=83=BB=E5=86=99=E7=9C=9F=E3=83=BB?=
+ =?UTF-8?q?=E7=B3=96=E5=BA=A6=E3=83=BB=E9=9B=86=E8=90=BD=E3=83=87=E3=83=BC?=
+ =?UTF-8?q?=E3=82=BF=E3=81=AB=E9=81=A9=E7=94=A8=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- pages/16: 0匿名化→①前処理→②判別(決定木・混同行列・P-R・FI・交差検証)→✅検証(DNCLトレース表・sklearn照合)→③教師なし(PCA×k-means)→④回帰→⑤DID→⑥適用シナリオと3行報告
+- ml_insight.py: numpyのみの決定木・PCA・k-means・重回帰・DID
+- notebooks/ml_insight_practice.ipynb: scikit-learnとの答え合わせ
+- data/sample_work_diary_truth.csv: 人の判定（架空）
+- app.py: 🔬 研究・実証 に登録 / README 追記
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01ANR4q3MqXafxHGBJr6RAJL
+---
+ README.md                                     |  21 +-
+ app.py                                        |   1 +
+ data/sample_work_diary_truth.csv              |  37 ++
+ ml_insight.py                                 | 340 ++++++++++++
+ notebooks/ml_insight_practice.ipynb           | 116 ++++
+ ...13\343\201\244\343\201\221\343\202\213.py" | 508 ++++++++++++++++++
+ 6 files changed, 1022 insertions(+), 1 deletion(-)
+ create mode 100644 data/sample_work_diary_truth.csv
+ create mode 100644 ml_insight.py
+ create mode 100644 notebooks/ml_insight_practice.ipynb
+ create mode 100644 "pages/16_\360\237\247\240_\346\251\237\346\242\260\345\255\246\347\277\222\343\201\247\350\246\213\343\201\244\343\201\221\343\202\213.py"
+
+diff --git a/README.md b/README.md
+index 0c13d8f..af3a158 100644
+--- a/README.md
++++ b/README.md
+@@ -26,7 +26,7 @@ conda create が "Solving environment" のまま長時間止まる場合は、An
+ | 🌾 スマートパン屋農家 | ホーム |
+ | 🎓 学校向けの探究 | 記録が残る探究／比べて確かめる探究／中学理科 量の計算／メタバース工房 |
+ | 🎮 探究コーナー | ゲーム運営の目で見る（ゲーム特化型データ分析を軸にした探究）／異常検知の実践知／衛星データ解析（Python実装）／自給と防災の畑（二毛作の比較・停電断水時のかまど・石窯） |
+-| 🔬 研究・実証 | 作業日誌テキスト＋画像分析／地元の農業法人での農作業（ファイルを置くと出る）／自給家計簿 |
++| 🔬 研究・実証 | 作業日誌テキスト＋画像分析／機械学習で見つける（探究学習コーナー）／地元の農業法人での農作業（ファイルを置くと出る）／自給家計簿 |
+ | 🔒 管理 | セキュリティログ（管理者専用） |
+ 
+ **ホームのタブ（5つ）** — `home.py` の `MAIN_GROUPS`・`DETAIL_GROUPS`
+@@ -58,6 +58,7 @@ conda create が "Solving environment" のまま長時間止まる場合は、An
+ | docs/ | 表紙ページ（GitHub Pages）、研究メモ、画面の写真（`docs/img/`） |
+ | media_gallery.py | 画像・動画・PDF・テキスト・ノートブックの表示部品、Colab リンク |
+ | notebooks/ | Google Colab 用ノートブック |
++| ml_insight.py | 探究学習コーナー「機械学習で見つける」の計算（日誌の特徴量・決定木（CART）・混同行列とF値・交差検証・Feature Importance・z標準化・PCA・k-means・エルボー・重回帰・R²/RMSE/MAE・差の差）。numpy だけで書き、`notebooks/ml_insight_practice.ipynb` で scikit-learn と答えを照合 |
+ | diary_text.py | 作業日誌のテキスト分析（匿名化・回数と件数・KWIC・否定の規則・言い換え） |
+ | diary_vision.py | 作業日誌の画像分析（手元の数値：明るさ・ピント・緑・白の割合／Claude への固定の指示文／答えの語彙検査／テキストとの突き合わせ）。`python diary_vision.py` で自己チェック |
+ | diary_photos.py | 作業日誌と assets の写真の結びつけ（日誌ID・日付フォルダ）、写真ZIPの位置情報の削除、GPSの残りの確認。`python diary_photos.py` で自己チェック、`--check assets` / `--strip assets` |
+@@ -262,6 +263,24 @@ CSVは Excel やメモ帳で直接書き足しても構いません（列は `
+ 4. **ページで参照**：サイドバー「使うデータ」の下の「取り込み済みの写真（assets）を参照する」で、日誌IDの名前の写真と、日付フォルダ（`assets/YYYYMMDD/`）の写真を日誌に結びつけて表示します。日付だけの結びつけは「同じ日／近い日」と表示し、根拠には日誌IDの写真を使います。
+ 5. **安全網**：`security-scan` ワークフローが、push のたびに `assets/` の写真に位置情報が残っていないかを調べ、残っていれば Issue で知らせます。
+ 
++#### 🧠 機械学習で見つける（探究学習コーナー）
++「機械学習の基礎」（全15回）の一本道 ── データ準備 → 教師あり（判別／回帰）→ 教師なし → 相関と因果 → 自分の研究への適用 ── を、このリポジトリのデータで歩き直すページです。骨格は 🔤 作業日誌テキスト分析＋画像分析 と同じ（0 匿名化 → 計算 → ✅ 検証 → 可視化 → 判断 → 3行の報告）。
++
++| 段 | 授業 | 題材 | 見つけるインサイト |
++|---|---|---|---|
++| 0 匿名化 | 第1回 ELSI | 作業日誌36件 | 氏名がモデルの手がかりにならないよう、学習の前に伏せる |
++| ① 前処理 | 第5〜6回 | 日誌 → 7つの特徴量、人の判定 → 0/1 | 「保留」の正解をどう付けるかは人が決める。日付で分けると本番に近い |
++| ② 判別 | 第7〜10回 | 困りごとあり／なし | 素の検索・人の規則・決定木を**テスト用**の混同行列・P/R/F値・P-R曲線で比べる。決定木は「否定」と「**文字数**」を使う（短い＝「特に問題なし」の**ショートカット学習**）。外れた日誌の原文から次の特徴量を考える |
++| ✅ 検証 | 第2〜4回 | 混同行列 | for文のトレース表（DNCL）で1件ずつ数え、scikit-learn の `DecisionTreeClassifier` と一致を確かめる |
++| ③ 教師なし | 第13〜14回 | 写真のタグ（Claude） | z標準化 → PCA → k-means（エルボー法）で「似た場面」をまとめ、**人がクラスターに名前を付ける**（撮影リスト・作業予定の単位に） |
++| ④ 回帰 | 第11〜12回 | ホウレンソウの糖度 | 糖度 ~ 週 + 寒さ + 週×寒さ。最後の測定日をテストにして「1週先」を当てられるかを R²・RMSE・MAE で |
++| ⑤ 相関と因果 | 第15回 | 集落の交付金 | 単純比較（+4.0 ha）は選択バイアス。差の差（DID）では −0.34 ha。平行トレンドの仮定を明示する |
++| ⑥ 適用シナリオ | 第15回 終了課題 | 自分の課題 | 課題・目的変数・説明変数・手法・評価指標・限界/ELSI の表と、3行の報告（観測／解釈と根拠／限界）を保存 |
++
++- 画面：`pages/16_🧠_機械学習で見つける.py`（左メニュー「🔬 研究・実証」）。自分の日誌CSV（`ID,日付,作業,本文`）と正解CSV（`ID,困りごと`＝あり／なし／保留）を読み込めます。セッション内だけで使い、保存しません。
++- Colab：`notebooks/ml_insight_practice.ipynb`。自作の決定木・PCA・重回帰が scikit-learn と同じ答えになることを確かめます。
++- 正解データ `data/sample_work_diary_truth.csv`（36件・あり18／なし15／保留3）は、人が原文を読んで付けた**架空**の判定です。外部の生成AIは呼び出しません。
++
+ #### 🌾 地元の農業法人での農作業（あやめの郷）
+ ※ このページのファイル（`pages/2_…_農作業.py`）は、まだリポジトリに入っていません。置くと左メニューの「🔬 研究・実証」に自動で出ます。
+ 
+diff --git a/app.py b/app.py
+index 024dcb4..7ac852d 100644
+--- a/app.py
++++ b/app.py
+@@ -40,6 +40,7 @@ NAV = {
+     ],
+     "🔬 研究・実証": [
+         ("5", "作業日誌テキスト＋画像分析", "🔤"),
++        ("16", "機械学習で見つける（探究）", "🧠"),
+         ("2", "地元の農業法人での農作業", "🌾"),
+     ],
+     "🔒 管理": [
+diff --git a/data/sample_work_diary_truth.csv b/data/sample_work_diary_truth.csv
+new file mode 100644
+index 0000000..e729490
+--- /dev/null
++++ b/data/sample_work_diary_truth.csv
+@@ -0,0 +1,37 @@
++﻿ID,困りごと,根拠
++D01,あり,雨で除草が遅れた
++D02,なし,遅れはない（否定）
++D03,あり,草刈機が故障
++D04,あり,暑さで遅れ・人手不足
++D05,なし,人手は足りた（否定）
++D06,なし,故障はなかった（否定）
++D07,あり,手が足りない（言い換え）
++D08,あり,箱詰めで出荷が遅れた
++D09,なし,特に問題なし
++D10,あり,草刈機がまた故障
++D11,なし,暑さ対策をした報告（困りごとの記述なし）
++D12,あり,納品が1時間遅れた
++D13,あり,人手不足で延期
++D14,あり,人手を増やしてほしい（要望）
++D15,あり,ポンプが動かなくなった（言い換え）
++D16,なし,予定どおり
++D17,あり,遅れを取り戻すため応援を依頼
++D18,なし,遅れはない（否定）
++D19,あり,トラクターの故障で半日止まった
++D20,なし,順調
++D21,あり,雨で播種が遅れた
++D22,あり,休みで人手が足りず出荷が遅れた
++D23,あり,換気扇が壊れた（言い換え）
++D24,なし,故障かと思ったが種詰まり
++D25,なし,人手が足りた（否定）
++D26,保留,作業ではなく苗の生育の遅れ
++D27,保留,足りないかもしれない（予測）
++D28,なし,特に問題なし
++D29,保留,修理から戻った＝解消の報告
++D30,あり,播種が2日遅れ
++D31,なし,人手は十分（否定）
++D32,なし,遅延なし（否定）
++D33,なし,遅れなし（否定）
++D34,あり,出荷の遅れで取引先に連絡
++D35,なし,故障なし（否定）
++D36,あり,除草の遅れ・人手不足
+diff --git a/ml_insight.py b/ml_insight.py
+new file mode 100644
+index 0000000..c4199aa
+--- /dev/null
++++ b/ml_insight.py
+@@ -0,0 +1,340 @@
++"""
++ml_insight.py — 「機械学習の基礎」（全15回）の手法を、作業日誌・写真・糖度のデータに当てはめる小さな部品
++
++画面は pages/16_🧠_機械学習で見つける.py。テキストの下ごしらえは diary_text.py を使う。
++
++方針
++  - 中身が追えるように numpy だけで書く（決定木・k-means・PCA・重回帰）。
++    授業の scikit-learn と同じ答えになるかは notebooks/ml_insight_practice.ipynb で確かめる。
++  - 外部の生成AIには何も送らない。日誌は diary_text.mask で匿名化したものを渡す前提。
++  - 教師ありの「正解」は人が原文を読んで付けたもの（data/sample_work_diary_truth.csv）。
++    モデルは正解を真似るだけで、正解の付け方を決めるのは人。
++
++授業との対応
++  第5〜6回 前処理（特徴量・train/test）   → features(), split_by()
++  第7〜10回 判別（決定木・混同行列・FI・交差検証） → fit_tree(), confusion(), scores(), cross_val_predict()
++  第11〜12回 回帰（重回帰・R²/RMSE/MAE・時系列の分け方） → fit_ols(), reg_scores()
++  第13〜14回 教師なし（z標準化・PCA・k-means・エルボー） → zscore(), pca(), kmeans(), elbow()
++  第15回 相関と因果（DID）               → did()
++"""
++from __future__ import annotations
++
++import re
++from collections.abc import Iterable, Sequence
++
++import numpy as np
++import pandas as pd
++
++import diary_text as dtx
++
++# ------------------------------------------------------------
++# 前処理：日誌の本文 → 特徴量（第5〜6回）
++# ------------------------------------------------------------
++# 推量・予測の言い方（確定した困りごとではない候補）
++GUESS = r"かもしれない|かと思った|ようだ|らしい"
++
++FEATURE_NOTES = {
++    "語_遅れ": "本文に「遅れ」を含む（0/1）",
++    "語_故障": "本文に「故障」を含む（0/1）",
++    "語_人手": "本文に「人手」を含む（0/1）",
++    "否定": "「遅れはない」「故障なし」「人手は足りた」などの打ち消し・充足の形（0/1）",
++    "言い換え": "「遅延」「壊れ」「動かなくなっ」「手が足り」などの言い換え（0/1）",
++    "推量": "「かもしれない」「かと思った」などの推量（0/1）",
++    "文字数": "本文の長さ（字）",
++}
++
++
++def features(df: pd.DataFrame, col: str = "本文") -> pd.DataFrame:
++    """日誌1件 → 1行の特徴量。文字列の一致だけで作る（意味は人が決める）。"""
++    rows = []
++    for text in df[col].astype(str).map(dtx.normalize):
++        row = {f"語_{k}": int(k in text) for k in dtx.KEYWORDS}
++        row["否定"] = int(any(re.search(p, text) for p in dtx.NEG_PATTERNS.values()))
++        row["言い換え"] = int(any(re.search(p, text) for ps in dtx.SYNONYMS.values() for p in ps))
++        row["推量"] = int(bool(re.search(GUESS, text)))
++        row["文字数"] = len(text)
++        rows.append(row)
++    return pd.DataFrame(rows, index=df.index)
++
++
++def truth_vector(truth: pd.Series, hold: str = "除く") -> pd.Series:
++    """人の判定（あり／なし／保留）→ 1/0。保留の扱いは人が選ぶ：除く（NaN）・なし（0）・あり（1）。"""
++    m = {"あり": 1.0, "なし": 0.0, "保留": {"除く": np.nan, "なし": 0.0, "あり": 1.0}[hold]}
++    return truth.map(m)
++
++
++def rule_baseline(feat: pd.DataFrame) -> np.ndarray:
++    """第1段の規則：3語のどれかに一致したら困りごと（テキスト分析①の素の検索と同じ）"""
++    return (feat[[f"語_{k}" for k in dtx.KEYWORDS]].sum(axis=1) > 0).astype(int).to_numpy()
++
++
++def rule_handmade(feat: pd.DataFrame) -> np.ndarray:
++    """人が書いた規則：（3語に一致 かつ 否定でない）または 言い換え"""
++    hit = rule_baseline(feat).astype(bool)
++    return ((hit & (feat["否定"] == 0).to_numpy()) | (feat["言い換え"] == 1).to_numpy()).astype(int)
++
++
++# ------------------------------------------------------------
++# 判別：決定木（CART・ジニ不純度）（第7・9回）
++# ------------------------------------------------------------
++def gini(counts: Sequence[int]) -> float:
++    """ジニ不純度 = 1 − Σ p²。全部同じクラスなら0、半々なら0.5。"""
++    n = sum(counts)
++    return 0.0 if n == 0 else 1.0 - sum((c / n) ** 2 for c in counts)
++
++
++def _best_split(X: np.ndarray, y: np.ndarray, min_leaf: int):
++    n, best = len(y), None
++    parent = gini([int((y == 0).sum()), int((y == 1).sum())])
++    for j in range(X.shape[1]):
++        vals = np.unique(X[:, j])
++        for a, b in zip(vals[:-1], vals[1:]):
++            thr = (a + b) / 2
++            left = X[:, j] <= thr
++            nl, nr = int(left.sum()), int((~left).sum())
++            if nl < min_leaf or nr < min_leaf:
++                continue
++            gl = gini([int((y[left] == 0).sum()), int((y[left] == 1).sum())])
++            gr = gini([int((y[~left] == 0).sum()), int((y[~left] == 1).sum())])
++            gain = parent - (nl / n) * gl - (nr / n) * gr
++            # 同点なら先の列を残す（結果が毎回同じになるように）
++            if gain > 1e-12 and (best is None or gain > best[0] + 1e-12):
++                best = (gain, j, thr)
++    return best
++
++
++def fit_tree(X: np.ndarray, y: np.ndarray, max_depth: int = 2, min_leaf: int = 1, depth: int = 0) -> dict:
++    """決定木を作る。葉には「困りごと(1)」の割合を持たせる。"""
++    X, y = np.asarray(X, float), np.asarray(y, int)
++    node = {"n": len(y), "n1": int(y.sum()), "p": float(y.mean()) if len(y) else 0.0,
++            "gini": gini([int((y == 0).sum()), int((y == 1).sum())])}
++    if depth >= max_depth or node["gini"] == 0.0:
++        return node
++    best = _best_split(X, y, min_leaf)
++    if best is None:
++        return node
++    gain, j, thr = best
++    left = X[:, j] <= thr
++    node.update(feature=j, thr=thr, gain=gain,
++                left=fit_tree(X[left], y[left], max_depth, min_leaf, depth + 1),
++                right=fit_tree(X[~left], y[~left], max_depth, min_leaf, depth + 1))
++    return node
++
++
++def predict_proba(tree: dict, X: np.ndarray) -> np.ndarray:
++    out = []
++    for x in np.asarray(X, float):
++        node = tree
++        while "feature" in node:
++            node = node["left"] if x[node["feature"]] <= node["thr"] else node["right"]
++        out.append(node["p"])
++    return np.array(out)
++
++
++def feature_importance(tree: dict, n_features: int) -> np.ndarray:
++    """不純度の減少量（件数で重みづけ）の合計を、全体が1になるようにそろえる（第9回 FI）"""
++    imp = np.zeros(n_features)
++
++    def walk(node):
++        if "feature" in node:
++            l, r = node["left"], node["right"]
++            imp[node["feature"]] += node["n"] * node["gini"] - l["n"] * l["gini"] - r["n"] * r["gini"]
++            walk(l)
++            walk(r)
++    walk(tree)
++    return imp / imp.sum() if imp.sum() > 0 else imp
++
++
++def tree_rules(tree: dict, names: Sequence[str]) -> list[str]:
++    """木を「もし〜ならば」の文に直す（人が読んで確かめられる形）"""
++    lines = []
++
++    def cond(j, thr, left):
++        name = names[j]
++        if name == "文字数":
++            return f"{name} ≦ {thr:g}" if left else f"{name} > {thr:g}"
++        return f"「{name}」なし" if left else f"「{name}」あり"
++
++    def walk(node, path):
++        if "feature" not in node:
++            when = " かつ ".join(path) if path else "すべて"
++            lines.append(f"もし {when} ならば → 困りごと {node['n1']}/{node['n']}件"
++                         f"（{node['p']:.0%}）→ 判定：{'困りごと' if node['p'] >= 0.5 else '困りごとなし'}")
++            return
++        walk(node["left"], path + [cond(node["feature"], node["thr"], True)])
++        walk(node["right"], path + [cond(node["feature"], node["thr"], False)])
++    walk(tree, [])
++    return lines
++
++
++# ------------------------------------------------------------
++# 評価：混同行列・Precision/Recall/F値（第8回）、交差検証（第10回）
++# ------------------------------------------------------------
++def confusion(y: Iterable[int], yhat: Iterable[int]) -> dict:
++    """for文で1件ずつ数える（DNCLのトレース表と同じ手順）"""
++    tp = fp = fn = tn = 0
++    for t, p in zip(y, yhat):
++        if p == 1 and t == 1:
++            tp += 1
++        elif p == 1 and t == 0:
++            fp += 1
++        elif p == 0 and t == 1:
++            fn += 1
++        else:
++            tn += 1
++    return {"TP": tp, "FP": fp, "FN": fn, "TN": tn}
++
++
++def scores(cm: dict) -> dict:
++    tp, fp, fn, tn = cm["TP"], cm["FP"], cm["FN"], cm["TN"]
++    prec = tp / (tp + fp) if tp + fp else 0.0
++    rec = tp / (tp + fn) if tp + fn else 0.0
++    f1 = 2 * prec * rec / (prec + rec) if prec + rec else 0.0
++    acc = (tp + tn) / max(1, tp + fp + fn + tn)
++    return {"正解率": acc, "適合率(Precision)": prec, "再現率(Recall)": rec, "F値": f1}
++
++
++def trace_confusion(y: Sequence[int], yhat: Sequence[int], ids: Sequence[str]) -> pd.DataFrame:
++    """混同行列を数える for文 の、1回ごとの変数の値（トレース表）"""
++    tp = fp = fn = tn = 0
++    rows = []
++    for i, (t, p, d) in enumerate(zip(y, yhat, ids)):
++        if p == 1 and t == 1:
++            tp, branch = tp + 1, "TP"
++        elif p == 1 and t == 0:
++            fp, branch = fp + 1, "FP"
++        elif p == 0 and t == 1:
++            fn, branch = fn + 1, "FN"
++        else:
++            tn, branch = tn + 1, "TN"
++        rows.append({"i": i, "ID": d, "正解[i]": int(t), "予測[i]": int(p), "通った分岐": branch,
++                     "TP": tp, "FP": fp, "FN": fn, "TN": tn})
++    return pd.DataFrame(rows)
++
++
++def cross_val_predict(X: np.ndarray, y: np.ndarray, k: int, seed: int = 0, **tree_kw) -> np.ndarray:
++    """k分割交差検証：各日誌を「学習に使わなかった木」で予測した確率を返す（k=件数なら1つ抜き）"""
++    n = len(y)
++    order = np.random.default_rng(seed).permutation(n)
++    out = np.zeros(n)
++    for fold in np.array_split(order, k):
++        train = np.setdiff1d(order, fold)
++        tree = fit_tree(X[train], y[train], **tree_kw)
++        out[fold] = predict_proba(tree, X[fold])
++    return out
++
++
++# ------------------------------------------------------------
++# 教師なし：z標準化・PCA・k-means（第13〜14回）
++# ------------------------------------------------------------
++def zscore(X: np.ndarray) -> np.ndarray:
++    """列ごとに平均0・標準偏差1へ。ばらつきが0の列は0のまま（距離に効かない）。"""
++    X = np.asarray(X, float)
++    sd = X.std(axis=0)
++    sd[sd == 0] = 1.0
++    return (X - X.mean(axis=0)) / sd
++
++
++def pca(Z: np.ndarray, n_comp: int = 2) -> dict:
++    """特異値分解で主成分を求める。寄与率と負荷量（各変数が軸にどれだけ効くか）も返す。"""
++    Z = np.asarray(Z, float) - np.asarray(Z, float).mean(axis=0)
++    U, S, Vt = np.linalg.svd(Z, full_matrices=False)
++    var = S ** 2 / max(1, len(Z) - 1)
++    ratio = var / var.sum() if var.sum() > 0 else var
++    # 向きをそろえる（各主成分で絶対値最大の負荷量を正に）→ 毎回同じ図になる
++    signs = np.sign(Vt[np.arange(len(Vt)), np.abs(Vt).argmax(axis=1)])
++    signs[signs == 0] = 1
++    Vt = Vt * signs[:, None]
++    return {"scores": Z @ Vt[:n_comp].T, "ratio": ratio[:n_comp], "loadings": Vt[:n_comp].T}
++
++
++def _init_centers(X: np.ndarray, k: int, rng: np.random.Generator) -> np.ndarray:
++    """k-means++：遠い点ほど次の中心に選ばれやすくする"""
++    centers = [X[rng.integers(len(X))]]
++    for _ in range(1, k):
++        d2 = np.min([((X - c) ** 2).sum(axis=1) for c in centers], axis=0)
++        p = d2 / d2.sum() if d2.sum() > 0 else np.full(len(X), 1 / len(X))
++        centers.append(X[rng.choice(len(X), p=p)])
++    return np.array(centers)
++
++
++def kmeans(X: np.ndarray, k: int, seed: int = 0, n_init: int = 50, max_iter: int = 100) -> dict:
++    """割り当て → 重心の移動 をくり返す。初期値を変えて n_init 回やり、クラスター内平方和(WSS)が最小のものを返す。"""
++    X = np.asarray(X, float)
++    rng, best = np.random.default_rng(seed), None
++    for _ in range(n_init):
++        c = _init_centers(X, k, rng)
++        history = []
++        for _ in range(max_iter):
++            lab = ((X[:, None, :] - c[None]) ** 2).sum(axis=2).argmin(axis=1)
++            new = np.array([X[lab == j].mean(axis=0) if (lab == j).any() else c[j] for j in range(k)])
++            history.append(float(((X - new[lab]) ** 2).sum()))
++            if np.allclose(new, c):
++                break
++            c = new
++        wss = float(((X - c[lab]) ** 2).sum())
++        if best is None or wss < best["wss"] - 1e-9:
++            best = {"labels": lab, "centers": c, "wss": wss, "history": history}
++    # 番号を「大きいクラスター順」にそろえる（毎回同じ色になる）
++    order = np.argsort(-np.bincount(best["labels"], minlength=k), kind="stable")
++    remap = np.empty(k, int)
++    remap[order] = np.arange(k)
++    best["labels"], best["centers"] = remap[best["labels"]], best["centers"][order]
++    return best
++
++
++def elbow(X: np.ndarray, ks: Iterable[int], seed: int = 0) -> pd.DataFrame:
++    return pd.DataFrame([{"k": k, "WSS": kmeans(X, k, seed)["wss"]} for k in ks])
++
++
++def trace_assign(points: Sequence[float], centers: Sequence[float]) -> pd.DataFrame:
++    """k-means の「割り当て」1回分を1点ずつ追う（1次元の小さな例・DNCLのトレース表）"""
++    rows = []
++    for i, x in enumerate(points):
++        d = [abs(x - c) for c in centers]
++        best = 0
++        for j in range(1, len(centers)):
++            if d[j] < d[best]:
++                best = j
++        rows.append({"i": i, "x[i]": x, **{f"|x−c{j}|": round(v, 2) for j, v in enumerate(d)}, "所属": f"c{best}"})
++    return pd.DataFrame(rows)
++
++
++def photo_matrix(photo: pd.DataFrame, col: str = "写っているもの") -> pd.DataFrame:
++    """写真の「写っているもの」（・区切り）→ 0/1 の表。Claude のタグを特徴量にする。"""
++    tags = photo[col].fillna("").astype(str).str.split("・")
++    vocab = sorted({t for ts in tags for t in ts if t})
++    return pd.DataFrame([[int(v in ts) for v in vocab] for ts in tags], columns=vocab, index=photo.index)
++
++
++# ------------------------------------------------------------
++# 回帰：重回帰・R²/RMSE/MAE（第11〜12回）
++# ------------------------------------------------------------
++def fit_ols(X: np.ndarray, y: np.ndarray) -> np.ndarray:
++    """最小二乗法。先頭に切片の列を足して係数を返す（[切片, 係数1, …]）"""
++    A = np.column_stack([np.ones(len(X)), np.asarray(X, float)])
++    return np.linalg.lstsq(A, np.asarray(y, float), rcond=None)[0]
++
++
++def predict_ols(beta: np.ndarray, X: np.ndarray) -> np.ndarray:
++    return beta[0] + np.asarray(X, float) @ beta[1:]
++
++
++def reg_scores(y: np.ndarray, yhat: np.ndarray) -> dict:
++    y, yhat = np.asarray(y, float), np.asarray(yhat, float)
++    err = y - yhat
++    ss_tot = ((y - y.mean()) ** 2).sum()
++    return {"R²": 1 - (err ** 2).sum() / ss_tot if ss_tot > 0 else 0.0,
++            "RMSE": float(np.sqrt((err ** 2).mean())), "MAE": float(np.abs(err).mean())}
++
++
++# ------------------------------------------------------------
++# 相関と因果：差分の差分（第15回）
++# ------------------------------------------------------------
++def did(df: pd.DataFrame, unit: str, time: str, treat: str, y: str) -> dict:
++    """（処置群の前後差）−（対照群の前後差）。2時点・2群の最小の形。"""
++    t0, t1 = sorted(df[time].unique())[:2]
++    m = df.pivot_table(index=treat, columns=time, values=y, aggfunc="mean")
++    d_t, d_c = m.loc[1, t1] - m.loc[1, t0], m.loc[0, t1] - m.loc[0, t0]
++    return {"前": t0, "後": t1, "処置群の変化": float(d_t), "対照群の変化": float(d_c), "DID": float(d_t - d_c),
++            "単純比較（後の差）": float(m.loc[1, t1] - m.loc[0, t1]), "表": m}
+diff --git a/notebooks/ml_insight_practice.ipynb b/notebooks/ml_insight_practice.ipynb
+new file mode 100644
+index 0000000..e7bef4d
+--- /dev/null
++++ b/notebooks/ml_insight_practice.ipynb
+@@ -0,0 +1,116 @@
++{
++ "nbformat": 4,
++ "nbformat_minor": 5,
++ "metadata": {
++  "kernelspec": {
++   "name": "python3",
++   "display_name": "Python 3"
++  },
++  "language_info": {
++   "name": "python"
++  }
++ },
++ "cells": [
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": "# 機械学習で見つける ── 作業日誌・写真・糖度・集落のデータで「機械学習の基礎」を歩き直す\n\n画面：`pages/16_🧠_機械学習で見つける.py`／部品：`ml_insight.py`（numpyだけで書いた決定木・PCA・k-means・重回帰・DID）。\nこのノートでは、**部品の答えが授業と同じ scikit-learn の答えと一致するか**を確かめます（第2〜4回：AIのコードは動いても正しいとは限らない）。\n\n> Colab ではリポジトリを clone してから実行します。"
++  },
++  {
++   "cell_type": "code",
++   "metadata": {},
++   "source": "# !git clone https://github.com/nayukaya3-cn/Smart-Bakery-Farmer_20260923.git\n# %cd Smart-Bakery-Farmer_20260923\nimport numpy as np, pandas as pd\nimport ml_insight as ml\nDATA = 'data/'",
++   "execution_count": null,
++   "outputs": []
++  },
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": "## ① 前処理（第5〜6回）：本文 → 特徴量、正解 → 0/1"
++  },
++  {
++   "cell_type": "code",
++   "metadata": {},
++   "source": "d = pd.read_csv(DATA+'sample_work_diary.csv', encoding='utf-8-sig').merge(\n    pd.read_csv(DATA+'sample_work_diary_truth.csv', encoding='utf-8-sig'), on='ID')\nF = ml.features(d)\ny = ml.truth_vector(d['困りごと'], hold='除く')\nm = y.notna()\nX, yy = F[m].to_numpy(float), y[m].astype(int).to_numpy()\nF[m].assign(正解=yy).head()",
++   "execution_count": null,
++   "outputs": []
++  },
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": "## ② 判別（第7〜10回）：決定木を自作版と scikit-learn で比べる"
++  },
++  {
++   "cell_type": "code",
++   "metadata": {},
++   "source": "from sklearn.tree import DecisionTreeClassifier\nfrom sklearn.metrics import confusion_matrix, f1_score\ntree = ml.fit_tree(X, yy, max_depth=2)\nmine = (ml.predict_proba(tree, X) >= 0.5).astype(int)\nsk = DecisionTreeClassifier(max_depth=2, random_state=0).fit(X, yy).predict(X)\nprint('一致した件数:', (mine == sk).sum(), '/', len(yy))\nprint('自作の混同行列:', ml.confusion(yy, mine))\nprint('sklearn:', confusion_matrix(yy, sk).ravel(), '(TN, FP, FN, TP)')\nprint('\\n'.join(ml.tree_rules(tree, list(F.columns))))",
++   "execution_count": null,
++   "outputs": []
++  },
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": "**問い**：木は「文字数」を使っていますか？ 「特に問題なし。」が短いことを使った近道（ショートカット学習）です。`文字数` の列を落として F値の変化を確かめましょう。"
++  },
++  {
++   "cell_type": "code",
++   "metadata": {},
++   "source": "Xn = F[m].drop(columns='文字数').to_numpy(float)\nfor name, XX in [('全特徴量', X), ('文字数なし', Xn)]:\n    p = ml.cross_val_predict(XX, yy, k=5, max_depth=2)\n    print(name, '交差検証のF値:', round(ml.scores(ml.confusion(yy, (p >= .5).astype(int)))['F値'], 3))\nprint('人の規則のF値:', round(ml.scores(ml.confusion(yy, ml.rule_handmade(F[m])))['F値'], 3))",
++   "execution_count": null,
++   "outputs": []
++  },
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": "## ✅ トレース表（DNCL）：混同行列を1件ずつ数える"
++  },
++  {
++   "cell_type": "code",
++   "metadata": {},
++   "source": "ml.trace_confusion(yy[:8], mine[:8], d.loc[m, 'ID'].head(8).tolist())",
++   "execution_count": null,
++   "outputs": []
++  },
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": "## ③ 教師なし（第13〜14回）：写真のタグ → z標準化 → PCA → k-means"
++  },
++  {
++   "cell_type": "code",
++   "metadata": {},
++   "source": "from sklearn.decomposition import PCA\nph = pd.read_csv(DATA+'sample_photo_ai.csv', encoding='utf-8-sig')\nph = ph[ph['種類'] == '現場写真'].reset_index(drop=True)\nM = ml.photo_matrix(ph); M = M.loc[:, M.sum() > 0]\nZ = ml.zscore(M.to_numpy())\nprint('自作PCAの寄与率:', ml.pca(Z)['ratio'].round(3))\nprint('sklearn PCAの寄与率:', PCA(2).fit(Z).explained_variance_ratio_.round(3))\nprint(ml.elbow(Z, range(1, 6)))\nkm = ml.kmeans(Z, 3)\nM.assign(クラスター=km['labels']).groupby('クラスター').mean().round(2).T.sort_values(0, ascending=False).head(10)",
++   "execution_count": null,
++   "outputs": []
++  },
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": "## ④ 回帰（第11〜12回）：糖度 ~ 週 + 寒さ + 週×寒さ（最後の測定日をテストに）"
++  },
++  {
++   "cell_type": "code",
++   "metadata": {},
++   "source": "from sklearn.linear_model import LinearRegression\nb = pd.read_csv(DATA+'sample_spinach_brix.csv', encoding='utf-8-sig')\nb['週'] = (pd.to_datetime(b['測定日']) - pd.to_datetime(b['測定日']).min()).dt.days / 7\nb['寒さ'] = (b['区'] == '寒さに当てる区').astype(int); b['週×寒さ'] = b['週'] * b['寒さ']\nxs = ['週', '寒さ', '週×寒さ']; last = b['測定日'].max()\ntr, te = b[b['測定日'] != last], b[b['測定日'] == last]\nbeta = ml.fit_ols(tr[xs].to_numpy(), tr['糖度'])\nlr = LinearRegression().fit(tr[xs], tr['糖度'])\nprint('自作:', beta.round(3)); print('sklearn:', np.r_[lr.intercept_, lr.coef_].round(3))\nprint(ml.reg_scores(te['糖度'], ml.predict_ols(beta, te[xs].to_numpy())))",
++   "execution_count": null,
++   "outputs": []
++  },
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": "## ⑤ 相関と因果（第15回）：差の差（DID）"
++  },
++  {
++   "cell_type": "code",
++   "metadata": {},
++   "source": "r = ml.did(pd.read_csv(DATA+'sample_shuraku_did.csv', encoding='utf-8-sig'), '集落', '年', '交付金', '経営耕地_ha')\nprint({k: round(v, 2) for k, v in r.items() if isinstance(v, float)})\nr['表']",
++   "execution_count": null,
++   "outputs": []
++  },
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": "**3行の報告**：観測（数えた事実・単位と分母）／解釈（根拠のIDと原文）／限界（件数・正解の付け方・平行トレンド）に分けて書きましょう。"
++  }
++ ]
++}
+\ No newline at end of file
+diff --git "a/pages/16_\360\237\247\240_\346\251\237\346\242\260\345\255\246\347\277\222\343\201\247\350\246\213\343\201\244\343\201\221\343\202\213.py" "b/pages/16_\360\237\247\240_\346\251\237\346\242\260\345\255\246\347\277\222\343\201\247\350\246\213\343\201\244\343\201\221\343\202\213.py"
+new file mode 100644
+index 0000000..08d18a6
+--- /dev/null
++++ "b/pages/16_\360\237\247\240_\346\251\237\346\242\260\345\255\246\347\277\222\343\201\247\350\246\213\343\201\244\343\201\221\343\202\213.py"
+@@ -0,0 +1,508 @@
++"""
++探究学習コーナー ─ AI・データサイエンス＝機械学習の目で、作業日誌・写真・糖度・集落のデータからインサイトを見つける
++配置先: pages/16_🧠_機械学習で見つける.py （Streamlit のマルチページ構成）
++
++「機械学習の基礎」（全15回）の一本道 ── データ準備 → 教師あり（判別／回帰）→ 教師なし → 相関と因果 → 自分の研究への適用
++を、このリポジトリのデータに当てはめたもの。骨格は 🔤 作業日誌テキスト分析＋画像分析 と同じ：
++  0 匿名化 → ① 前処理 → ② 判別 → ✅ 検証（トレース表・DNCL） → ③ 教師なし → ④ 回帰 → ⑤ 相関と因果 → ⑥ 適用シナリオと3行報告
++
++計算は ml_insight.py（numpy だけで書いた決定木・PCA・k-means・重回帰・DID）。
++scikit-learn が入っていれば、授業と同じライブラリで答えが一致するかを ✅ で確かめる。
++
++方針
++  - 外部の生成AIには何も送らない。日誌は匿名化してから特徴量にする。
++  - 教師ありの「正解」は人が原文を読んで付けたもの。モデルは正解を真似るだけ。
++  - 初期表示はすべて教材用の架空データ。アップロードしたCSVはセッション内だけで使い、サーバーには残さない。
++"""
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++import plotly.express as px
++import plotly.graph_objects as go
++import streamlit as st
++
++import diary_text as dtx
++import ml_insight as ml
++import security_guard as sg
++
++st.set_page_config(page_title="機械学習で見つける（探究学習コーナー）", page_icon="🧠", layout="wide")
++
++DATA = Path(__file__).parent.parent / "data"
++SAMPLE = DATA / "sample_work_diary.csv"
++SAMPLE_TRUTH = DATA / "sample_work_diary_truth.csv"
++SAMPLE_PHOTO_AI = DATA / "sample_photo_ai.csv"
++SAMPLE_BRIX = DATA / "sample_spinach_brix.csv"
++SAMPLE_DID = DATA / "sample_shuraku_did.csv"
++SAMPLE_NAMES = ["山田", "佐藤"]
++SAMPLE_PARTNERS = ["みどり青果", "ひかり製パン"]
++REQUIRED = ["ID", "日付", "作業", "本文"]
++COLORS = ["#15803d", "#c2410c", "#7c3aed", "#0369a1", "#b45309", "#64748b"]
++
++try:
++    import sklearn  # noqa: F401
++    HAS_SKLEARN = True
++except ImportError:
++    HAS_SKLEARN = False
++
++st.title("🧠 機械学習で見つける ── 探究学習コーナー")
++st.caption("モデルは正解を真似る。正解を決めるのも、結果の意味を読むのも人。 ── 「機械学習の基礎」全15回を、畑のデータで歩き直す")
++
++with st.container(border=True):
++    st.markdown(
++        "**探究メモ**：🔤 作業日誌テキスト分析では、人が原文を読んで「困りごと」かどうかを判定し、"
++        "規則（否定の形・言い換え）を手で作った。ここでは同じ日誌と人の判定を**正解ラベル**にして、"
++        "**機械学習は人の規則より上手に、あるいは別の手がかりで判定できるか**を確かめる。"
++        "さらに、写真のタグ（Claude が付けたもの）を**教師なし学習**でまとめ、"
++        "ホウレンソウの糖度を**回帰**で見積もり、集落の交付金の効果を**差の差（DID）**で読む。"
++        "注意点は四つある。第一に、件数が36件と少ないので、**学習に使わなかったデータ**で評価する（train/test・交差検証）。"
++        "第二に、困りごとは約半分だが、実際の日誌では少数派になる（**不均衡**）ので、正解率ではなく適合率・再現率・F値を見る。"
++        "第三に、モデルが使った手がかりが**意味のある理由か**を、木のルールと重要度で人が確かめる。"
++        "第四に、**相関は因果ではない**。効果を言うには比べ方を設計する。"
++    )
++
++with st.expander("このページの道のり：授業の15回と、人・AI・Pythonの役割", expanded=False):
++    st.markdown(
++        "| 授業 | 内容 | このページのどこ | 題材 | 担当 |\n|---|---|---|---|---|\n"
++        "| 第1回 | ML/AI概論・CRISP-DM・ELSI | 探究メモ・0 匿名化 | 作業日誌 | 人 |\n"
++        "| 第2〜4回 | Python基礎・生成AI援用コーディング・動作検査 | ✅ 検証（手計算・トレース表・scikit-learn） | 作業日誌 | 人・Python |\n"
++        "| 第5〜6回 | データ品質・train-test split・エンコーディング | ① 前処理 | 作業日誌 → 特徴量 | 人が決め、Pythonが作る |\n"
++        "| 第7〜8回 | 決定木・混同行列・Precision/Recall/F値・P-R曲線 | ② 判別 | 困りごとの判定 | Python → 人 |\n"
++        "| 第9〜10回 | Feature Importance・交差検証・不均衡データ | ② 判別（重要度・交差検証） | 困りごとの判定 | Python → 人 |\n"
++        "| 第11〜12回 | 重回帰・R²/RMSE/MAE・時系列の分け方 | ④ 回帰 | ホウレンソウの糖度 | Python → 人 |\n"
++        "| 第13〜14回 | z標準化・PCA・k-means・エルボー法・主成分クラスター分析 | ③ 教師なし | 写真のタグ | Python → 人が意味づけ |\n"
++        "| 第15回 | 手法選定・相関と因果（DID）・自分の研究への適用 | ⑤ 因果・⑥ 適用シナリオ | 集落の交付金 | 人 |\n\n"
++        "**手法の選び方（第15回）**：目的変数があるか → ある：出力が離散なら**判別**、連続なら**回帰**／"
++        "ない：変数を減らすなら**PCA**、似たものをまとめるなら**クラスター分析**／効果を言いたいなら**因果推論**。"
++    )
++    st.caption("計算は `ml_insight.py`（numpy だけで書いた決定木・PCA・k-means・重回帰・DID）。"
++               "中身が追えるように小さく書き、✅ で scikit-learn の答えと照らし合わせています。")
++
++# ------------------------------------------------------------
++# サイドバー：データの選択
++# ------------------------------------------------------------
++with st.sidebar:
++    st.header("日誌のデータ")
++    source = st.radio("使うデータ", ["架空の記入例（36件）", "自分の日誌CSVを読み込む"])
++    up = up_t = None
++    if source.startswith("自分"):
++        st.caption("日誌CSV：`ID,日付,作業,本文`。正解CSV：`ID,困りごと`（あり／なし／保留）。"
++                   "🔤 作業日誌テキスト分析で保存した匿名化済みのCSVを使います。")
++        up = st.file_uploader("日誌CSV", type="csv", key="ml_diary")
++        up_t = st.file_uploader("正解CSV（人の判定）", type="csv", key="ml_truth")
++    st.divider()
++    hold = st.radio("「保留」の日誌の扱い", ["除く", "なし", "あり"], horizontal=True,
++                    help="本文だけでは決められなかった日誌。正解をどう付けるかは人が決める（モデルは決めない）")
++    seed = st.number_input("乱数の種（train/test・k-means）", 0, 999, 0)
++    st.caption("このページは外部の生成AIを呼び出しません。読み込んだCSVはセッションの中だけで使います。")
++
++if source.startswith("自分"):
++    if up is None or up_t is None:
++        st.info("左のサイドバーから、日誌CSVと正解CSVの2つを読み込んでください。")
++        st.stop()
++    raw = sg.read_csv_safely(up, page="ml", kind="diary")
++    truth = sg.read_csv_safely(up_t, page="ml", kind="truth")
++    if raw is None or truth is None:
++        st.stop()
++    missing = [c for c in REQUIRED if c not in raw.columns] + [c for c in ["ID", "困りごと"] if c not in truth.columns]
++    if missing:
++        st.error(f"列が足りません：{', '.join(missing)}")
++        st.stop()
++    default_names, default_partners = "", ""
++else:
++    raw = pd.read_csv(SAMPLE, encoding="utf-8-sig")
++    truth = pd.read_csv(SAMPLE_TRUTH, encoding="utf-8-sig")
++    default_names, default_partners = "\n".join(SAMPLE_NAMES), "\n".join(SAMPLE_PARTNERS)
++    st.warning("表示しているのは**教材用の架空データ**です（実在の法人・従業員・取引先・集落ではありません）。")
++
++raw["ID"] = raw["ID"].astype(str)
++truth["ID"] = truth["ID"].astype(str)
++
++# ------------------------------------------------------------
++# 0 匿名化（第1回 ELSI）
++# ------------------------------------------------------------
++st.header("0｜学習の前に匿名化する（第1回 ELSI）")
++a1, a2 = st.columns(2)
++names = [dtx.normalize(w.strip()) for w in a1.text_area("氏名（1行に1つ）", default_names, height=80).splitlines() if w.strip()]
++partners = [dtx.normalize(w.strip()) for w in a2.text_area("取引先名（1行に1つ）", default_partners, height=80).splitlines() if w.strip()]
++df = raw.copy()
++df["本文"] = [dtx.mask(dtx.normalize(str(t)), names, partners) for t in df["本文"]]
++left = dtx.residual(df["本文"], names + partners)
++if left:
++    st.error(f"匿名化のあとに残っている語があります：{', '.join(left)}。ここで止めます。")
++    st.stop()
++df = df.drop(columns=[c for c in ["記入者"] if c in df.columns]).merge(truth[["ID", "困りごと"]], on="ID", how="left")
++st.success(f"日誌 {len(df)} 件を匿名化しました（辞書の語の残り：0 件）。正解が付いた日誌：{int(df['困りごと'].notna().sum())} 件")
++st.caption("モデルは本文の**特徴量**だけを見ます。氏名がモデルの手がかりになる（「山田さんの日は困りごと」）ことも防げます。")
++
++# ------------------------------------------------------------
++# ① 前処理（第5〜6回）
++# ------------------------------------------------------------
++st.header("① 前処理：本文 → 特徴量、正解 → 0/1、学習用とテスト用に分ける（第5〜6回）")
++feat = ml.features(df)
++y_all = ml.truth_vector(df["困りごと"], hold)
++use = y_all.notna().to_numpy()
++p1, p2, p3 = st.columns(3)
++p1.metric("学習に使える日誌", f"{int(use.sum())} / {len(df)} 件", help=f"保留の扱い：{hold}")
++p2.metric("困りごと(1)の割合", f"{y_all[use].mean():.0%}", help="1が少ないほど不均衡。正解率だけでは評価できない")
++p3.metric("特徴量の数", f"{feat.shape[1]} 個")
++with st.expander("特徴量の表（モデルが見るのはこの表だけ）", expanded=False):
++    show = pd.concat([df[["ID", "作業", "本文", "困りごと"]], feat], axis=1)
++    st.dataframe(show, hide_index=True, width="stretch")
++    st.markdown("| 特徴量 | 作り方 |\n|---|---|\n" + "\n".join(f"| {k} | {v} |" for k, v in ml.FEATURE_NOTES.items()))
++    st.caption("特徴量を決めるのは人です。ここに無い手がかり（写真・止まった時間）は、モデルには見えません。")
++
++dfu, Fu = df[use].reset_index(drop=True), feat[use].reset_index(drop=True)
++X, y = Fu.to_numpy(float), y_all[use].astype(int).to_numpy()
++names_f = list(Fu.columns)
++
++s1, s2 = st.columns([2, 3])
++split = s1.radio("分け方", ["日付で分ける（前を学習・後をテスト）", "ランダムに分ける（層化）"],
++                 help="日誌は時間順に増えていく。未来の日誌で使えるかを見るなら、日付で分けるのが本番に近い（第12回）")
++test_ratio = s2.slider("テストに回す割合", 0.2, 0.5, 0.3, 0.05)
++if split.startswith("日付"):
++    order = np.argsort(pd.to_datetime(dfu["日付"], errors="coerce").fillna(pd.Timestamp.max).to_numpy(), kind="stable")
++    n_test = max(2, int(round(len(order) * test_ratio)))
++    te_idx, tr_idx = order[-n_test:], order[:-n_test]
++else:
++    rng = np.random.default_rng(int(seed))
++    te_idx = np.concatenate([rng.permutation(np.where(y == c)[0])[: max(1, int(round((y == c).sum() * test_ratio)))]
++                             for c in (0, 1)])
++    tr_idx = np.setdiff1d(np.arange(len(y)), te_idx)
++te_idx, tr_idx = np.sort(te_idx), np.sort(tr_idx)
++st.caption(f"学習用 {len(tr_idx)} 件（困りごと {int(y[tr_idx].sum())}）／テスト用 {len(te_idx)} 件（困りごと {int(y[te_idx].sum())}）。"
++           "テスト用はモデルを作るときに一度も見せません。")
++if len(set(y[tr_idx])) < 2:
++    st.error("学習用に困りごと(1)となし(0)の両方が入っていません。割合か分け方を変えてください。")
++    st.stop()
++
++# ------------------------------------------------------------
++# ② 判別（第7〜10回）
++# ------------------------------------------------------------
++st.header("② 判別：人の規則と決定木、どちらが困りごとを当てるか（第7〜10回）")
++d1, d2, d3 = st.columns(3)
++depth = d1.slider("木の深さ（max_depth）", 1, 5, 2, help="深いほど学習用に合わせ込む（過学習）")
++min_leaf = d2.slider("葉の最小件数（min_samples_leaf）", 1, 6, 1)
++thr = d3.slider("困りごととみなす確率のしきい値", 0.1, 0.9, 0.5, 0.05,
++                help="下げると見逃し(FN)が減り、誤報(FP)が増える。どちらを避けたいかは現場が決める")
++drop_len = st.toggle("特徴量から「文字数」を外す", value=False,
++                     help="「短い日誌＝特に問題なし」という近道（ショートカット）を使わせない")
++cols_use = [j for j, n in enumerate(names_f) if not (drop_len and n == "文字数")]
++names_use = [names_f[j] for j in cols_use]
++Xu = X[:, cols_use]
++
++tree = ml.fit_tree(Xu[tr_idx], y[tr_idx], max_depth=depth, min_leaf=min_leaf)
++prob_te = ml.predict_proba(tree, Xu[te_idx])
++prob_tr = ml.predict_proba(tree, Xu[tr_idx])
++preds = {
++    "素の検索（3語のどれか）": ml.rule_baseline(Fu.iloc[te_idx]),
++    "人の規則（否定を除く＋言い換え）": ml.rule_handmade(Fu.iloc[te_idx]),
++    f"決定木（深さ{depth}）": (prob_te >= thr).astype(int),
++}
++rows = []
++for name, p in preds.items():
++    cm = ml.confusion(y[te_idx], p)
++    rows.append({"モデル": name, **cm, **{k: round(v, 2) for k, v in ml.scores(cm).items()}})
++cmp = pd.DataFrame(rows)
++st.dataframe(cmp, hide_index=True, width="stretch")
++f_tr = ml.scores(ml.confusion(y[tr_idx], (prob_tr >= thr).astype(int)))["F値"]
++f_te = cmp.iloc[2]["F値"]
++st.caption(f"すべて**テスト用 {len(te_idx)} 件**での値。決定木のF値：学習用 {f_tr:.2f} ／ テスト用 {f_te:.2f}"
++           + ("　→ 学習用だけ高い＝**過学習の兆し**" if f_tr - f_te > 0.15 else "") +
++           "。件数が少ないので、1件の違いで値が大きく動きます（下の交差検証で確かめます）。")
++
++g1, g2 = st.columns([2, 3])
++with g1:
++    st.markdown("**決定木を「もし〜ならば」で読む**")
++    for line in ml.tree_rules(tree, names_use):
++        st.markdown(f"- {line}")
++    fi = pd.DataFrame({"特徴量": names_use, "重要度": ml.feature_importance(tree, len(names_use))})
++    fi = fi[fi["重要度"] > 0].sort_values("重要度")
++    if len(fi):
++        fig_fi = px.bar(fi, x="重要度", y="特徴量", orientation="h", color_discrete_sequence=[COLORS[0]])
++        fig_fi.update_layout(height=60 + 40 * len(fi), margin=dict(l=10, r=10, t=10, b=10))
++        st.plotly_chart(fig_fi, width="stretch")
++        st.caption("Feature Importance（第9回）＝その特徴量で分けたときに不純度がどれだけ減ったか。"
++                   "**効いた順であって、原因の順ではありません。**")
++with g2:
++    cm_t = ml.confusion(y[te_idx], preds[f"決定木（深さ{depth}）"])
++    z = [[cm_t["TN"], cm_t["FP"]], [cm_t["FN"], cm_t["TP"]]]
++    fig_cm = px.imshow(z, x=["予測：なし", "予測：困りごと"], y=["正解：なし", "正解：困りごと"], text_auto=True,
++                       color_continuous_scale="Greens", aspect="auto")
++    fig_cm.update_layout(height=260, margin=dict(l=10, r=10, t=30, b=10), coloraxis_showscale=False,
++                         title_text="混同行列（決定木・テスト用）", title_font_size=14)
++    st.plotly_chart(fig_cm, width="stretch")
++    # P-R曲線（しきい値を動かしたときの軌跡）
++    pr = []
++    for t in np.unique(np.r_[prob_te, 0.0, 1.01]):
++        s = ml.scores(ml.confusion(y[te_idx], (prob_te >= t).astype(int)))
++        pr.append({"しきい値": round(float(t), 2), "再現率": s["再現率(Recall)"], "適合率": s["適合率(Precision)"]})
++    pr = pd.DataFrame(pr)
++    fig_pr = px.line(pr, x="再現率", y="適合率", markers=True, hover_data=["しきい値"], range_x=[-0.02, 1.02], range_y=[-0.02, 1.02])
++    fig_pr.update_traces(line_color=COLORS[1])
++    fig_pr.update_layout(height=260, margin=dict(l=10, r=10, t=30, b=10), title_text="P-R曲線（しきい値を動かす）", title_font_size=14)
++    st.plotly_chart(fig_pr, width="stretch")
++
++if "文字数" in names_use and fi["特徴量"].eq("文字数").any():
++    st.warning("💡 **インサイト**：木が「文字数」を手がかりにしています。困りごとがない日は「特に問題なし。」と短く書かれるため、"
++               "**長さで当てる近道（ショートカット学習）**ができてしまう。記入の仕方が変わる（困りごとの日も短く書く）と崩れます。"
++               "上の「文字数を外す」と下の交差検証の線で、外しても当たり方が落ちないか（落ちないなら近道は要らない）を確かめてください。")
++
++miss = dfu.iloc[te_idx].assign(正解=y[te_idx], 予測=preds[f"決定木（深さ{depth}）"], 確率=prob_te.round(2))
++miss = miss[miss["正解"] != miss["予測"]]
++with st.expander(f"テスト用で外れた日誌 {len(miss)} 件の原文（モデルが見ていない手がかりを探す）", expanded=bool(len(miss))):
++    st.dataframe(miss[["ID", "日付", "作業", "本文", "正解", "予測", "確率"]], hide_index=True, width="stretch")
++    st.caption("FN（見逃し）＝困りごとなのに「なし」。言い換え・推量・解消の報告など、特徴量に無い言い方が多い。"
++               "FP（誤報）＝「なし」なのに「困りごと」。外れた原文から、次に足す特徴量を人が考えます。")
++
++st.subheader("交差検証：分け方の運を減らす（第10回）")
++k1, k2 = st.columns([1, 3])
++k = k1.slider("分割数 k", 2, min(10, len(y)), min(5, len(y)))
++cv_rows = []
++for name, cidx in [("全特徴量", list(range(len(names_f)))),
++                   ("文字数なし", [j for j, n in enumerate(names_f) if n != "文字数"])]:
++    for dpt in range(1, 5):
++        pcv = ml.cross_val_predict(X[:, cidx], y, k=k, seed=int(seed), max_depth=dpt, min_leaf=min_leaf)
++        s = ml.scores(ml.confusion(y, (pcv >= thr).astype(int)))
++        cv_rows.append({"特徴量": name, "深さ": dpt, "F値": round(s["F値"], 3), "再現率": round(s["再現率(Recall)"], 3)})
++for name, fn in [("人の規則", ml.rule_handmade), ("素の検索", ml.rule_baseline)]:
++    s = ml.scores(ml.confusion(y, fn(Fu)))
++    cv_rows += [{"特徴量": name, "深さ": d, "F値": round(s["F値"], 3), "再現率": round(s["再現率(Recall)"], 3)} for d in range(1, 5)]
++cvd = pd.DataFrame(cv_rows)
++fig_cv = px.line(cvd, x="深さ", y="F値", color="特徴量", markers=True, color_discrete_sequence=COLORS)
++fig_cv.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10), yaxis_range=[0, 1.05])
++k2.plotly_chart(fig_cv, width="stretch")
++k1.caption(f"{k}分割：各日誌を「その日誌を学習に使わなかった木」で予測し、{len(y)} 件全部でF値を出す。"
++           "人の規則は学習しないので横一直線（ただし規則はこのデータを見て作った後付け）。")
++
++# ------------------------------------------------------------
++# ✅ 検証（第2〜4回）：トレース表・DNCL・scikit-learn
++# ------------------------------------------------------------
++st.header("✅ 検証する：混同行列を手で数え、ライブラリの答えと照らし合わせる")
++v1, v2 = st.columns([3, 2])
++with v1:
++    tr_tab = ml.trace_confusion(y[te_idx], preds[f"決定木（深さ{depth}）"], dfu["ID"].iloc[te_idx].tolist())
++    st.dataframe(tr_tab, hide_index=True, width="stretch")
++with v2:
++    st.code(
++        "TP = 0, FP = 0, FN = 0, TN = 0\n"
++        "i を 0 から 要素数(正解)-1 まで 1 ずつ増やしながら繰り返す:\n"
++        "│ もし 予測[i] = 1 かつ 正解[i] = 1 ならば:\n"
++        "│ │ TP = TP + 1\n"
++        "│ そうでなくもし 予測[i] = 1 ならば:\n"
++        "│ │ FP = FP + 1\n"
++        "│ そうでなくもし 正解[i] = 1 ならば:\n"
++        "│ │ FN = FN + 1\n"
++        "│ そうでなければ:\n"
++        "│ └ TN = TN + 1\n"
++        "適合率 = TP ÷ (TP + FP)\n"
++        "再現率 = TP ÷ (TP + FN)\n"
++        "表示する(適合率, 再現率)", language="text")
++    last = tr_tab.iloc[-1] if len(tr_tab) else None
++    if last is not None:
++        ok = {kk: int(last[kk]) for kk in ["TP", "FP", "FN", "TN"]} == cm_t
++        st.markdown(f"トレース表の最終行 = 上の混同行列：{'✅ 一致' if ok else '❌ 不一致'}")
++    st.caption("共通テスト『情報Ⅰ』のDNCLと同じ形。分岐の順番を入れかえる（「正解[i]=1」を先に調べる）と、"
++               "FPとFNの数がどう変わるかをトレース表で確かめてみましょう。")
++
++if HAS_SKLEARN:
++    from sklearn.tree import DecisionTreeClassifier
++    sk = DecisionTreeClassifier(max_depth=depth, min_samples_leaf=min_leaf, random_state=0).fit(Xu[tr_idx], y[tr_idx])
++    p_sk = (sk.predict_proba(Xu[te_idx])[:, 1] >= thr).astype(int) if len(sk.classes_) == 2 else np.zeros(len(te_idx), int)
++    same = int((p_sk == preds[f"決定木（深さ{depth}）"]).sum())
++    st.markdown(f"**scikit-learn（授業と同じ `DecisionTreeClassifier`）との一致**：テスト用 {same} / {len(te_idx)} 件"
++                + ("　✅" if same == len(te_idx) else "　⚠️ 同点の分け方の選び方が違うと、ずれることがあります"))
++else:
++    st.caption("scikit-learn が入っていないので、ライブラリとの照合は省きました（Colab の `notebooks/` で確かめられます）。")
++
++# ------------------------------------------------------------
++# ③ 教師なし（第13〜14回）：写真のタグ → z標準化 → PCA → k-means
++# ------------------------------------------------------------
++st.header("③ 教師なし：写真のタグから「似た場面」をまとめる（第13〜14回）")
++st.caption("正解ラベルは使いません。評価の軸は「当たったか」ではなく、**内は似て外は違うか・人が意味づけできるか**。")
++photo = pd.read_csv(SAMPLE_PHOTO_AI, encoding="utf-8-sig")
++photo = photo[photo["種類"] == "現場写真"].reset_index(drop=True) if st.toggle("現場写真だけを使う", value=True) else photo
++M = ml.photo_matrix(photo)
++num_cols = [c for c in ["遅れ", "故障", "人手"] if c in photo.columns]
++if st.toggle("困りごとの確信度（遅れ・故障・人手）も特徴量に入れる", value=False):
++    M = pd.concat([M, photo[num_cols].astype(float)], axis=1)
++M = M.loc[:, M.sum() > 0]
++if len(M) < 4 or M.shape[1] < 2:
++    st.info("まとめられる写真のタグがまだ足りません。🔤 作業日誌テキスト分析の画像分析でタグを付けてください。")
++else:
++    zs = st.toggle("z標準化する（平均0・標準偏差1）", value=True,
++                   help="単位や頻度の大きい列が距離を支配しないように（第14回）")
++    Z = ml.zscore(M.to_numpy()) if zs else M.to_numpy(float)
++    u1, u2 = st.columns([1, 3])
++    kmax = min(6, len(M) - 1)
++    el = ml.elbow(Z, range(1, kmax + 1), seed=int(seed))
++    fig_el = px.line(el, x="k", y="WSS", markers=True)
++    fig_el.update_traces(line_color=COLORS[2])
++    fig_el.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10))
++    u1.plotly_chart(fig_el, width="stretch")
++    u1.caption("エルボー法：WSS（クラスター内のばらつき）の下がり方が鈍る k を探す。はっきり折れないことも多い。")
++    kk = u1.slider("クラスター数 k", 2, max(2, kmax), min(3, kmax))
++    km = ml.kmeans(Z, kk, seed=int(seed))
++    pc = ml.pca(Z, 2)
++    sc = pd.DataFrame(pc["scores"], columns=["第1主成分", "第2主成分"]).assign(
++        クラスター=[f"C{c + 1}" for c in km["labels"]], 写真=photo["パス"].map(lambda p: Path(p).name),
++        場面=photo["場面"], 写っているもの=photo["写っているもの"])
++    fig_pc = px.scatter(sc, x="第1主成分", y="第2主成分", color="クラスター", hover_data=["写真", "場面", "写っているもの"],
++                        color_discrete_sequence=COLORS, symbol="クラスター")
++    fig_pc.update_traces(marker_size=11)
++    fig_pc.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10))
++    u2.plotly_chart(fig_pc, width="stretch")
++    u2.caption(f"主成分クラスター分析：{M.shape[1]} 個のタグを2軸に要約（寄与率 第1 {pc['ratio'][0]:.0%}・第2 {pc['ratio'][1]:.0%}）。"
++               "色は k-means の結果で、PCAの軸で分けたわけではありません。")
++
++    load = pd.DataFrame(pc["loadings"], index=M.columns, columns=["第1主成分", "第2主成分"]).round(2)
++    prof = M.assign(クラスター=sc["クラスター"]).groupby("クラスター").mean().round(2)
++    w1, w2 = st.columns(2)
++    with w1:
++        st.markdown("**クラスターごとのタグの割合（意味づけの材料）**")
++        top = {c: "・".join(prof.loc[c].sort_values(ascending=False).head(4).index) for c in prof.index}
++        sizes = sc["クラスター"].value_counts()
++        st.dataframe(pd.DataFrame({"クラスター": list(top), "写真の枚数": [int(sizes[c]) for c in top],
++                                   "多いタグ": list(top.values()),
++                                   "場面（多い順）": [" / ".join(sc.loc[sc["クラスター"] == c, "場面"].value_counts().head(3).index) for c in top]}),
++                     hide_index=True, width="stretch")
++        st.session_state.setdefault("cluster_names", {})
++        for c in top:
++            st.session_state.cluster_names[c] = st.text_input(f"{c} に名前を付ける（人の仕事）",
++                                                              st.session_state.cluster_names.get(c, ""), key=f"cn_{c}_{kk}")
++    with w2:
++        st.markdown("**主成分の負荷量（どのタグが軸を作っているか）**")
++        st.dataframe(load.reindex(load["第1主成分"].abs().sort_values(ascending=False).index).head(8), width="stretch")
++    st.caption("名前を付けられないクラスターは、k が合っていないか、タグ（特徴量）が場面を表していないサイン。"
++               "例：「通路の雑草」「果樹の株元」「パン用小麦の畝」のように付けられれば、エージェントの撮影リストや作業予定の単位になります。")
++
++    with st.expander("トレース表：k-means の「割り当て」を1点ずつ追う（1次元の小さな例・DNCL）"):
++        pts_txt = st.text_input("点（カンマ区切り）", "1, 2, 3, 8, 9, 15")
++        cen_txt = st.text_input("中心（カンマ区切り）", "2, 9")
++        try:
++            pts = [float(v) for v in pts_txt.split(",") if v.strip()]
++            cen = [float(v) for v in cen_txt.split(",") if v.strip()]
++            st.dataframe(ml.trace_assign(pts, cen), hide_index=True, width="stretch")
++        except ValueError:
++            st.error("数字をカンマで区切って入れてください。")
++        st.code(
++            "i を 0 から 要素数(x)-1 まで 1 ずつ増やしながら繰り返す:\n"
++            "│ 所属 = 0\n"
++            "│ j を 1 から 要素数(c)-1 まで 1 ずつ増やしながら繰り返す:\n"
++            "│ │ もし |x[i] − c[j]| < |x[i] − c[所属]| ならば:\n"
++            "│ └ └ 所属 = j\n"
++            "│ 表示する(i, 所属)\n"
++            "（全員の所属が決まったら、各中心を所属した点の平均に動かし、変わらなくなるまでくり返す）", language="text")
++        st.caption("15 は c1=9 に近いが、次の「重心の移動」で c1 が 15 側に引っぱられる。外れ値に弱いことが手で確かめられます。")
++
++# ------------------------------------------------------------
++# ④ 回帰（第11〜12回）：ホウレンソウの糖度
++# ------------------------------------------------------------
++st.header("④ 回帰：寒さに当てると、糖度は週にどれだけ上がるか（第11〜12回）")
++brix = pd.read_csv(SAMPLE_BRIX, encoding="utf-8-sig")
++day0 = pd.to_datetime(brix["測定日"]).min()
++brix["週"] = (pd.to_datetime(brix["測定日"]) - day0).dt.days / 7
++brix["寒さ"] = (brix["区"] == "寒さに当てる区").astype(int)
++brix["週×寒さ"] = brix["週"] * brix["寒さ"]
++cand = ["週", "寒さ", "週×寒さ", "列"]
++r1, r2 = st.columns([1, 2])
++xs = r1.multiselect("説明変数", cand, default=["週", "寒さ", "週×寒さ"],
++                    help="「週×寒さ」＝寒さに当てた区だけの、週ごとの上乗せ（交互作用）")
++r_split = r1.radio("分け方", ["最後の測定日をテストに（時系列）", "全部で学習（当てはまりだけ）"])
++if not xs:
++    st.info("説明変数を1つ以上選んでください。")
++else:
++    last_day = brix["測定日"].max()
++    trn = brix[brix["測定日"] != last_day] if r_split.startswith("最後") else brix
++    tst = brix[brix["測定日"] == last_day] if r_split.startswith("最後") else brix
++    beta = ml.fit_ols(trn[xs].to_numpy(float), trn["糖度"])
++    pred = ml.predict_ols(beta, tst[xs].to_numpy(float))
++    rs = ml.reg_scores(tst["糖度"], pred)
++    m1, m2, m3 = r1.columns(3)
++    m1.metric("R²", f"{rs['R²']:.2f}")
++    m2.metric("RMSE", f"{rs['RMSE']:.2f}")
++    m3.metric("MAE", f"{rs['MAE']:.2f}")
++    r1.dataframe(pd.DataFrame({"項": ["切片"] + xs, "係数": np.round(beta, 3)}), hide_index=True, width="stretch")
++    if "週×寒さ" in xs:
++        r1.success(f"💡 寒さに当てた区は、覆いをかけた区より**週に {beta[1 + xs.index('週×寒さ')]:+.2f} 度**多く上がる見込み"
++                   "（この畑・この冬・3回の測定での値）。")
++    avg = brix.groupby(["週", "区"], as_index=False)["糖度"].mean()
++    fig_r = px.scatter(brix, x="週", y="糖度", color="区", opacity=0.45, color_discrete_sequence=[COLORS[3], COLORS[5]])
++    grid = pd.DataFrame([{"週": w, "区": z} for w in np.linspace(0, brix["週"].max(), 20) for z in brix["区"].unique()])
++    grid["寒さ"] = (grid["区"] == "寒さに当てる区").astype(int)
++    grid["週×寒さ"] = grid["週"] * grid["寒さ"]
++    grid["列"] = brix["列"].mean()
++    grid["予測"] = ml.predict_ols(beta, grid[xs].to_numpy(float))
++    for z, col in zip(brix["区"].unique(), [COLORS[3], COLORS[5]]):
++        g = grid[grid["区"] == z]
++        fig_r.add_trace(go.Scatter(x=g["週"], y=g["予測"], mode="lines", line=dict(color=col, width=3), name=f"{z}（モデル）"))
++    fig_r.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="最初の測定からの週")
++    r2.plotly_chart(fig_r, width="stretch")
++    r2.caption("時系列のデータは、ランダムに分けると「未来の測定」で学習してしまう。最後の測定日をテストに回すと、"
++               "**1週先を当てられるか**が見える（第12回）。外挿（測っていない週）は、気温が変われば当たりません。")
++
++# ------------------------------------------------------------
++# ⑤ 相関と因果（第15回）：差の差（DID）
++# ------------------------------------------------------------
++st.header("⑤ 相関と因果：交付金を受けた集落は、耕地の減りを抑えられたか（第15回）")
++sh = pd.read_csv(SAMPLE_DID, encoding="utf-8-sig")
++dd = ml.did(sh, "集落", "年", "交付金", "経営耕地_ha")
++c1, c2, c3 = st.columns(3)
++c1.metric(f"単純比較（{dd['後']}年の差）", f"{dd['単純比較（後の差）']:+.1f} ha", help="受けた集落 − 受けていない集落")
++c2.metric("前後差（受けた集落）", f"{dd['処置群の変化']:+.1f} ha", help=f"{dd['後']}年 − {dd['前']}年")
++c3.metric("差の差（DID）", f"{dd['DID']:+.2f} ha", help="（受けた集落の変化）−（受けていない集落の変化）")
++tab = dd["表"].rename(index={0: "受けていない", 1: "受けた"})
++fig_d = go.Figure()
++for g_name, col in zip(tab.index, [COLORS[5], COLORS[1]]):
++    fig_d.add_trace(go.Scatter(x=[str(c) for c in tab.columns], y=tab.loc[g_name], mode="lines+markers",
++                               name=f"交付金を{g_name}集落", line=dict(color=col, width=3)))
++ctrl = tab.loc["受けていない"]
++fig_d.add_trace(go.Scatter(x=[str(c) for c in tab.columns],
++                           y=[tab.loc["受けた"].iloc[0], tab.loc["受けた"].iloc[0] + (ctrl.iloc[1] - ctrl.iloc[0])],
++                           mode="lines", name="受けなかったら（平行の仮定）", line=dict(color=COLORS[1], dash="dot")))
++fig_d.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), yaxis_title="経営耕地の平均（ha）")
++st.plotly_chart(fig_d, width="stretch")
++st.markdown(
++    f"- **単純比較**では、受けた集落のほうが {dd['単純比較（後の差）']:.1f} ha 広い。しかし**もともと広い集落が交付金を受けていた**ので、これは効果ではない（選択バイアス）。\n"
++    f"- **DID** では {dd['DID']:+.2f} ha。両方とも耕地は減っており、受けた集落の減りは**小さくなっていない**。\n"
++    "- DIDが効果と言えるのは「交付金がなければ、両群は同じ傾きで変化した」（**平行トレンド**）ときだけ。2時点では確かめられないので、2020年より前の年も集めて確かめる。"
++)
++st.caption("機械学習（判別・回帰）は「当てる」ための道具で、「変えたらどうなるか」は教えてくれない。"
++           "冬の落葉処分・寒さに当てる・交付金のような**手を打つ判断**には、比べ方の設計（RCT・DID・傾向スコア）が要る。")
++
++# ------------------------------------------------------------
++# ⑥ 適用シナリオ（第15回 終了課題）と3行の報告
++# ------------------------------------------------------------
++st.header("⑥ 自分の課題に当てはめる：ML適用シナリオと3行の報告（第15回 終了課題）")
++sc_default = pd.DataFrame([
++    {"課題": "日誌の困りごとを毎日拾う", "目的変数": "困りごと（あり/なし）", "説明変数": "語・否定・言い換え・推量",
++     "手法": "決定木 → 人の確認", "評価指標": "再現率（見逃さない）を優先", "限界・ELSI": "書かれない困りごとは拾えない／氏名は匿名化"},
++    {"課題": "写真の撮影リストを場面ごとに組む", "目的変数": "なし（教師なし）", "説明変数": "写真のタグ",
++     "手法": "z標準化 → PCA → k-means", "評価指標": "人が名前を付けられるか", "限界・ELSI": "タグは Claude の候補／顔・ナンバーを除く"},
++    {"課題": "ホウレンソウの出荷日を決める", "目的変数": "糖度（連続値）", "説明変数": "週・寒さ・交互作用",
++     "手法": "重回帰", "評価指標": "RMSE（何度ずれるか）", "限界・ELSI": "この冬の気温でだけ成り立つ"},
++    {"課題": "交付金の効果を確かめる", "目的変数": "経営耕地（ha）", "説明変数": "交付金×年",
++     "手法": "差の差（DID）", "評価指標": "平行トレンドの確認", "限界・ELSI": "2時点では仮定を確かめられない"},
++])
++plan = st.data_editor(sc_default, num_rows="dynamic", hide_index=True, width="stretch", key="ml_plan")
++st.caption("行を足して、自分の研究・探究の課題で埋めてください。「目的変数があるか」「出力は離散か連続か」で手法の列が決まります。")
++
++best = cmp.sort_values("F値", ascending=False).iloc[0]
++draft = (
++    f"観測：匿名化した作業日誌{int(use.sum())}件（困りごと{int(y.sum())}件）をテスト用{len(te_idx)}件で評価すると、"
++    f"F値は人の規則{cmp.iloc[1]['F値']:.2f}・決定木{cmp.iloc[2]['F値']:.2f}・素の検索{cmp.iloc[0]['F値']:.2f}だった（最上位：{best['モデル']}）。\n"
++    f"解釈：決定木は{'「' + '」「'.join(fi.sort_values('重要度', ascending=False)['特徴量'].head(2)) + '」' if len(fi) else '（分岐なし）'}を手がかりにした。"
++    "否定の形は意味のある手がかりだが、文字数は書き方の癖による近道の可能性がある（外れた日誌の原文で確認）。\n"
++    f"限界：件数が少なく、1件でF値が大きく動く。正解は1人の判定で、保留は「{hold}」として扱った。別の月・別の法人の日誌で確かめ直す。"
++)
++report = st.text_area("3行の報告（観測／解釈と根拠／限界）。下書きを自分の言葉に書きかえる", draft, height=170,
++                      key=f"ml_rep_{depth}_{drop_len}_{thr}_{split}")
++e1, e2, e3 = st.columns(3)
++e1.download_button("3行の報告を保存（.txt）", report.encode("utf-8"), "3行報告_機械学習.txt", "text/plain", width="stretch")
++e2.download_button("適用シナリオをCSVで保存", sg.safe_csv(plan), "ML適用シナリオ.csv", "text/csv", width="stretch")
++e3.download_button("特徴量と正解をCSVで保存（匿名化済み）", sg.safe_csv(pd.concat([df[["ID", "作業", "困りごと"]], feat], axis=1)),
++                   "日誌_特徴量.csv", "text/csv", width="stretch")
++
++st.divider()
++st.caption("© スマートパン屋農家プロジェクト ｜ 初期表示は教材用の架空データです。"
++           "同じ手順を Colab で：`notebooks/ml_insight_practice.ipynb`")
+-- 
+2.43.0
+
