@@ -50,6 +50,21 @@ LABELS = ["未判定", "困りごと", "否定", "保留"]
 # 入力用の Google フォーム（回答は法人のスプレッドシートに入り、ここには来ない）
 FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSenOoiE1iYKvD_dQeR9VUhPt-8q955rsvA4G_Gl7nY0FuXIuQ/viewform"
 
+# 写真の「圃場の観察」→ AIエージェント候補・必要なデータ（③で使う。仮置き）
+OBS_AGENTS = {
+    "病害の疑い": ("感染期（5〜6月）の前に防除の時期を知らせ、病斑の面積率を写真の時系列で追う", "同じ木の写真の時系列・降雨"),
+    "伝染源": ("冬の落葉・腐れ果の処分を作業予定に入れる", "落葉の写真・作業予定表"),
+    "着果過多": ("摘果の時期と量を知らせる（隔年結果を防ぐ）", "木ごとの着果数（ベイズ推定）・前年の収量"),
+    "収穫適期": ("色づきの分布から収穫の順番を組む（強化学習の題材）", "果実の色の写真・天気・人手"),
+    "獣害の誘因": ("取り残し・落果を減らす収穫と加工の段取りを組む", "未収穫の木の一覧・加工の受け入れ先"),
+    "雑草の繁茂": ("草刈りの時期を作業予定に入れる", "通路・株元の写真・作業予定表"),
+}
+# 観察の語が日誌の本文に書かれているかを確かめる語（テキストで拾えるか）
+OBS_WORDS = {
+    "病害の疑い": r"病|斑点|黄変|カビ|白い粉", "伝染源": r"落葉|落ち葉|腐", "着果過多": r"摘果|実が多|枝が(?:折|垂)",
+    "収穫適期": r"色づ|熟", "獣害の誘因": r"カラス|イノシシ|サル|獣|鳥", "雑草の繁茂": r"雑草|草が(?:伸|茂|生)",
+}
+
 # 仮置きの対応づけ（③で使う）。困りごとの種類 → AIエージェント候補・必要なデータ
 CANDIDATES = {
     "遅れ": ("天気予報と作業予定を突き合わせ、段取りの組み直し案を出す", "作業予定表・気象予報"),
@@ -363,6 +378,7 @@ if show_photos:
 # ------------------------------------------------------------
 ROOT = ASSETS.parent
 img_tab = pd.DataFrame(columns=["ID", "語", "テキストの判定", "写真の手がかり", "写真の確信度", "突き合わせ"])
+obs_hit = pd.DataFrame(columns=["パス", "観察", "確信度", "手がかり"])   # ③で使う（確信度がしきい値以上の観察）
 
 
 @st.cache_data(show_spinner=False, max_entries=256)
@@ -375,6 +391,11 @@ def _send_bytes(path: str) -> bytes:
     return dv.to_jpeg_bytes(dv.load_small(Path(path)))
 
 
+@st.cache_data(show_spinner=False, max_entries=16)
+def _batch_zip(paths: tuple[str, ...]) -> bytes:
+    return dv.batch_zip([Path(x) for x in paths])
+
+
 if show_photos:
     st.header("🖼️ 画像分析：写真を Claude で読み、テキストと突き合わせる")
     with st.container(border=True):
@@ -382,11 +403,13 @@ if show_photos:
             "| 段 | 担当 | すること |\n|---|---|---|\n"
             "| ① 手元で数える | Python | 明るさ・ピント・緑の割合・白い割合。**AIは使わない**。空白や資料らしい写真はここで外せる |\n"
             "| ① タグを付ける | Claude | 決まった語彙から「種類・場面・写っているもの・困りごとの手がかり・写り込み」を選ぶ |\n"
+            "| ① 圃場を観察する | Claude | 病害の疑い・伝染源・着果過多・収穫適期など**作物の状態**と、判定を確かにする**次に撮る1枚**・見える果実数 |\n"
             "| ✅ 確かめる | 人 | Claude のタグが合っているかを見て、一致率を出す |\n"
             "| ② 突き合わせる | Python → 人 | テキストの判定と写真の手がかりを並べ、食い違った日誌の原文を読み直す |\n"
-            "| ③ 判断に足す | 人 | 写真で裏づけられた困りごとを、優先度の材料に加える |"
+            "| ② ベイズで見積もる | Python → 人 | 区画ごとの見える果実数から、木1本の果実数を**不確実性つき**で見積もる |\n"
+            "| ③ 判断に足す | 人 | 写真で裏づけられた困りごと・観察を、優先度とエージェント候補の材料に加える |"
         )
-        st.caption("Claude に渡すのは「位置情報を消して長い辺を1024pxに縮めた写真1枚」と「固定の指示文」だけです。"
+        st.caption(f"Claude に渡すのは「位置情報を消して長い辺を1024pxに縮めた写真（一度に{dv.MAX_BATCH}枚まで）」と「固定の指示文」だけです。"
                    "日誌の本文・ID・日付・ファイル名は渡しません。答えは語彙で検査し、語彙に無い答えや写真の中の文字による指示は捨てます。")
 
     photos_all = _scan_assets(str(ASSETS))
@@ -418,61 +441,106 @@ if show_photos:
         session = pd.DataFrame(list(st.session_state.photo_ai.values()), columns=dv.RESULT_COLS)
         ai_res = dv.merge_results(base, session)
 
-        st.subheader("Claude で1枚ずつ読む")
+        st.subheader("Claude で読む（1枚ずつ／まとめて）")
         keys = list(mt["キー"])
         done = set(ai_res["パス"])
-        pick_k = st.selectbox(
-            "写真を選ぶ", keys, key="img_pick",
-            format_func=lambda k: f"{'✅' if k in done else '　'} {k}（{mt.set_index('キー').at[k, '目安']}）")
+        flag = mt.set_index("キー")["目安"]
+        pick_k = st.selectbox("写真を見る", keys, key="img_pick",
+                              format_func=lambda k: f"{'✅' if k in done else '　'} {k}（{flag[k]}）")
         pick_p = paths[keys.index(pick_k)]
+        sendable = [k for k in keys if flag[k] == "送ってよい"]
+        def _fill_batch() -> None:
+            todo = [k for k in sendable if k not in done][:dv.MAX_BATCH]
+            st.session_state.img_batch = todo or [pick_k]
+            if not todo:
+                st.session_state["img_msg"] = "「送ってよい」写真は、すべて読み終わっています。"
+
+        if "img_batch" not in st.session_state:
+            st.session_state.img_batch = [pick_k]
+        st.session_state.img_batch = [k for k in st.session_state.img_batch if k in keys] or [pick_k]
+        batch = st.multiselect(
+            f"Claude に読ませる写真（{dv.MAX_BATCH}枚まで。貼る順＝番号）", keys,
+            max_selections=dv.MAX_BATCH, key="img_batch",
+            help="最初は上で見ている1枚。「送ってよい」写真だけを選ぶと、資料や空白で回数を使わずに済みます")
+        st.button(f"まだ読んでいない「送ってよい」写真を{dv.MAX_BATCH}枚まで選ぶ", key="img_fill", on_click=_fill_batch)
+        batch_p = [paths[keys.index(k)] for k in batch]
+        tag = f"{len(batch)}_{abs(hash(tuple(batch))) % 10**8}"
+
+        def _take(res: dict[int, dict], how: str) -> None:
+            for no, r in res.items():
+                k = batch[no - 1]
+                st.session_state.photo_ai[k] = {"パス": k, **r, "出どころ": how}
+
         v1, v2 = st.columns([2, 3])
         with v1:
             st.image(_photo(str(pick_p)), width="stretch")
             ids = linked_all.loc[linked_all["パス"] == pick_p, ["ID", "結びつけ方"]].drop_duplicates()
             if len(ids):
                 st.caption("結びついた日誌：" + "、".join(f"{a}（{b}）" for a, b in ids.itertuples(index=False)))
+            cur = ai_res[ai_res["パス"] == pick_k]
+            if len(cur):
+                r = cur.iloc[0]
+                ob = dv.obs_table(cur)
+                fr = r["見える果実数"]
+                st.markdown(
+                    f"**{r['種類']}｜{r['場面']}**　{r['説明']}  \n写っているもの：{r['写っているもの'] or '—'}  \n"
+                    f"困りごとの手がかり：{r['手がかり'] or 'なし'}  \n"
+                    f"圃場の観察：{'、'.join(f'{a} {b:.1f}（{c}）' for a, b, c in ob[['観察', '確信度', '手がかり']].itertuples(index=False)) or 'なし'}  \n"
+                    f"次に撮る1枚：{r['次の1枚'] or '—'}　見える果実数：{'—' if pd.isna(fr) else int(fr)}  \n"
+                    f"（{r['出どころ']}）")
         with v2:
+            if not batch:
+                st.info("読ませる写真を1枚以上選んでください。")
             tab_web, tab_api = st.tabs(["Claude.ai で読む（APIキー不要）", "API で読む（任意）"])
             with tab_web:
-                st.markdown("1. 位置情報を消した写真を保存する　2. Claude.ai に写真と指示文を貼る　3. 返ってきた JSON を下に貼る")
-                c1, c2 = st.columns(2)
-                c1.download_button("① 写真を保存（位置情報なし）", _send_bytes(str(pick_p)),
-                                   f"photo_{keys.index(pick_k):03d}.jpg", "image/jpeg", width="stretch")
-                c2.link_button("② Claude.ai を開く", CLAUDE_AI_URL, width="stretch")
-                st.code(dv.prompt(), language="text")
-                st.caption("右上のボタンで指示文をコピーできます。ファイル名は番号だけにしてあり、日誌の情報は含みません。")
-                reply = st.text_area("③ Claude の返事を貼る", height=120, key=f"reply_{pick_k}")
-                if st.button("検査して取り込む", key=f"take_{pick_k}") and reply.strip():
-                    try:
-                        r = dv.parse(reply)
-                    except (ValueError, json.JSONDecodeError) as e:
-                        st.error(f"取り込めませんでした：{e}")
+                if batch:
+                    st.markdown(f"1. 写真{'' if len(batch) == 1 else f'{len(batch)}枚（ZIP）'}を保存する　"
+                                "2. Claude.ai に写真と指示文を貼る（ZIPは展開して**番号順に**貼る）　3. 返事を下に貼る")
+                    c1, c2 = st.columns(2)
+                    if len(batch) == 1:
+                        c1.download_button("① 写真を保存（位置情報なし）", _send_bytes(str(batch_p[0])),
+                                           "01.jpg", "image/jpeg", width="stretch")
                     else:
-                        st.session_state.photo_ai[pick_k] = {"パス": pick_k, **r, "出どころ": "Claude.ai（貼り付け）"}
-                        sg.log_event("photo_ai_pasted", "INFO", page="diary")
-                        st.rerun()
+                        c1.download_button(f"① 写真{len(batch)}枚をZIPで保存（位置情報なし）",
+                                           _batch_zip(tuple(map(str, batch_p))), "claude_photos.zip",
+                                           "application/zip", width="stretch")
+                    c2.link_button("② Claude.ai を開く", CLAUDE_AI_URL, width="stretch")
+                    st.code(dv.prompt(len(batch)), language="text")
+                    st.caption("右上のボタンで指示文をコピーできます。写真の名前は番号（01.jpg…）だけで、日誌の情報もパスも含みません。")
+                    with st.expander("番号と写真の対応（手元の確認用。Claude には渡さない）"):
+                        st.dataframe(pd.DataFrame({"番号": range(1, len(batch) + 1), "写真": batch}),
+                                     hide_index=True, width="stretch")
+                    reply = st.text_area("③ Claude の返事を貼る", height=140, key=f"reply_{tag}")
+                    if st.button("検査して取り込む", key=f"take_{tag}") and reply.strip():
+                        try:
+                            res = dv.parse_many(reply, len(batch))
+                        except (ValueError, json.JSONDecodeError) as e:
+                            st.error(f"取り込めませんでした：{e}")
+                        else:
+                            _take(res, "Claude.ai（貼り付け）")
+                            sg.log_event("photo_ai_pasted", "INFO", page="diary", n=len(res))
+                            miss = len(batch) - len(res)
+                            st.session_state["img_msg"] = f"{len(res)} 枚を取り込みました" + (f"（{miss} 枚は番号が合わず捨てました）" if miss else "")
+                            st.rerun()
+                    if st.session_state.get("img_msg"):
+                        st.success(st.session_state.pop("img_msg"))
             with tab_api:
                 if not dv.ai_available():
                     st.info("APIキー（ANTHROPIC_API_KEY）が設定されていないので、この方法は使えません。"
                             "左の「Claude.ai で読む」を使ってください。")
-                else:
-                    st.caption(f"モデル：`{dv.AI_MODEL}`。1回の訪問で {sg.AI_CALLS_PER_SESSION} 回まで。"
-                               "空白・資料らしい写真は送らないでください。")
-                    if st.button("🤖 この写真を Claude に送る", key=f"api_{pick_k}") and sg.ai_quota_ok("diary_vision"):
+                elif batch:
+                    st.caption(f"モデル：`{dv.AI_MODEL}`。選んだ写真をまとめて1回で送ります（1回の訪問で "
+                               f"{sg.AI_CALLS_PER_SESSION} 回まで）。空白・資料らしい写真は送らないでください。")
+                    if st.button(f"🤖 選んだ {len(batch)} 枚を Claude に送る", key=f"api_{tag}") and sg.ai_quota_ok("diary_vision"):
                         with st.spinner("Claude が写真を読んでいます…"):
                             try:
-                                r = dv.analyze_api(dv.load_small(Path(pick_p)))
+                                res = dv.analyze_api([dv.load_small(Path(x)) for x in batch_p])
                             except Exception as e:  # noqa: BLE001  通信・JSONの失敗
                                 sg.log_event("photo_ai_failed", "WARNING", page="diary", error=type(e).__name__)
                                 st.error("Claude の結果を受け取れませんでした。Claude.ai で読む方法を使ってください。")
                             else:
-                                st.session_state.photo_ai[pick_k] = {"パス": pick_k, **r, "出どころ": "Claude API"}
+                                _take(res, "Claude API")
                                 st.rerun()
-            cur = ai_res[ai_res["パス"] == pick_k]
-            if len(cur):
-                r = cur.iloc[0]
-                st.markdown(f"**{r['種類']}｜{r['場面']}**　{r['説明']}  \n写っているもの：{r['写っているもの'] or '—'}  \n"
-                            f"困りごとの手がかり：{r['手がかり'] or 'なし'}　（{r['出どころ']}）")
 
         # ── ✅ 人が確かめる ──
         res_t = ai_res[ai_res["パス"].isin(keys)].copy()
@@ -562,6 +630,92 @@ if show_photos:
                 st.caption("単位は「日誌×困りごとの種類」。**写真だけ**＝写真に手がかりがあるのに、テキストでは否定・保留・語なし → "
                            "原文を読み直すか、現場に聞く。**テキストだけ**＝書かれているが写真では見えない（人手・遅れは写りにくい）。"
                            "写真が無い日誌は対象外です。")
+
+            # ── 🔎 圃場の観察（困りごと3語では拾えない、作物・圃場の状態） ──
+            st.subheader("🔎 圃場の観察：困りごと3語では拾えない「作物の状態」")
+            ot = dv.obs_table(res_t)
+            if ot.empty:
+                st.info("観察のタグが付いた写真がまだありません。Claude に読ませると「病害の疑い」などが付きます。")
+            else:
+                o1, o2 = st.columns([1, 2])
+                obs_thr = o1.slider("観察とみなす確信度", 0.1, 0.9, 0.5, 0.1, key="obs_thr")
+                obs_hit = ot[ot["確信度"] >= obs_thr]
+                per_obs = obs_hit.groupby("観察")["パス"].nunique().reindex(list(dv.OBS), fill_value=0)
+                o1.metric("観察のある写真", f"{obs_hit['パス'].nunique()} / {len(res_t)} 枚")
+                o1.metric("病害の疑いがある写真", f"{int(per_obs['病害の疑い'])} 枚")
+                fig_o = px.bar(per_obs.rename_axis("観察").reset_index(name="写真の枚数"), x="写真の枚数", y="観察",
+                               orientation="h", color="観察", color_discrete_sequence=px.colors.qualitative.Safe)
+                fig_o.update_layout(height=300, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
+                                    yaxis={"categoryorder": "array", "categoryarray": list(dv.OBS)[::-1]})
+                o2.plotly_chart(fig_o, width="stretch")
+                tbl = obs_hit.assign(写真=obs_hit["パス"].map(lambda x: Path(x).name),
+                                     対策の時期=obs_hit["観察"].map(lambda k: dv.OBS[k][1]))
+                st.dataframe(tbl[["写真", "観察", "確信度", "手がかり", "対策の時期"]].sort_values(["観察", "確信度"], ascending=[True, False]),
+                             hide_index=True, width="stretch")
+                with st.expander("「秋に見えるが、原因は初夏にある」：病害の因果の時間差（柿の円星落葉病の例）"):
+                    st.markdown(
+                        "```\n[前年の落葉を放置] → [5〜7月 胞子が飛び感染] → [潜伏] → [9〜10月 発病（斑点・黄変）]\n"
+                        "                                                        ↓\n"
+                        "                                  [早く落葉] → [実が軟らかく・糖度が下がる] → [翌年の花芽不足（隔年結果）]\n```\n"
+                        "| いま写真で見えるもの | 原因が起きた時期 | 打てる手と時期 |\n|---|---|---|\n"
+                        "| 葉の斑点・黄変（病害の疑い） | 5〜7月の感染 | 来年5〜6月の防除（症状が出てからでは遅い） |\n"
+                        "| 斑点のある落葉（伝染源） | いま | 冬に集めて処分（いちばん安く効く） |\n"
+                        "| 実が多く枝が垂れる（着果過多） | 7月ごろの摘果不足 | 今年は枝折れに注意・色づいた実から収穫 |\n\n"
+                        "**因果AIの問い**：「冬の落葉処分 → 翌年の発病率 → 果実の品質」の効果を、木ごとの違い（日当たり・樹齢）を"
+                        "調整して推定する。写真で毎年同じ木を撮っておくことが、そのままデータになります。")
+                    st.caption("病名は写真からの推定です。確定は県の農業技術センターやJAの営農指導員に確かめてください。")
+
+                nx = res_t[res_t["次の1枚"].astype(str).isin([x for x in dv.NEXT_SHOTS if x != "なし"])]
+                if len(nx):
+                    st.markdown("**📸 次に撮る1枚（判定を確かにするための撮影リスト）**")
+                    shot = nx.assign(写真=nx["パス"].map(lambda x: Path(x).name))[["写真", "場面", "次の1枚", "説明"]]
+                    st.dataframe(shot, hide_index=True, width="stretch")
+                    st.download_button("撮影リストをCSVで保存", sg.safe_csv(shot), "次に撮る写真.csv", "text/csv")
+                    st.caption("撮ったら作業日誌フォームに添付すると、日誌IDで結びつきます。例：葉の病斑のアップ＝病名の絞り込み、"
+                               "果実の断面＝甘柿・渋柿の判定（種のまわりの黒い点＝ゴマの有無）。")
+
+            # ── 🍊 ベイズで収量を見積もる ──
+            st.subheader("🍊 ベイズで収量を見積もる：見える果実から、木1本の果実数を区間で")
+            st.caption("写真では葉の陰の実が見えません。「見える割合」を1つの数に決めつけず、分布（Beta）で置くと、"
+                       "知らないことの大きさが区間の幅として出てきます。")
+            fr_src = res_t[res_t["見える果実数"].notna()]
+            b1, b2 = st.columns([2, 3])
+            with b1:
+                default_counts = [18, 25, 12, 30, 22, 15]
+                cnt = st.data_editor(pd.DataFrame({"区画": [f"区画{i + 1}" for i in range(len(default_counts))],
+                                                   "見える果実数": default_counts}),
+                                     num_rows="dynamic", hide_index=True, width="stretch", key="bayes_counts",
+                                     column_config={"見える果実数": st.column_config.NumberColumn(min_value=0, max_value=1000, step=1)})
+                if len(fr_src):
+                    st.caption("Claude が数えた見える果実数（参考）：" + "、".join(
+                        f"{Path(a).name} {int(b)}個" for a, b in fr_src[["パス", "見える果実数"]].itertuples(index=False)))
+                n_sec = st.number_input("樹冠全体の区画の数", 1, 100, 10, key="bayes_nsec",
+                                        help="木の写真を格子に分けたときの区画の総数。数えたのはその一部")
+                vis_m = st.slider("見える割合の見込み（平均）", 0.3, 0.95, 0.7, 0.05, key="bayes_vis")
+                vis_k = st.slider("その見込みの確からしさ（強さ）", 2, 200, 10, key="bayes_k",
+                                  help="1つの区画で、葉をかき分けて全部数えた数と写真で見えた数を比べると、強さを上げられます")
+            with b2:
+                try:
+                    by = dv.bayes_yield(cnt["見える果実数"].tolist(), int(n_sec), vis_m, float(vis_k))
+                except ValueError as e:
+                    st.info(str(e))
+                else:
+                    m1, m2 = st.columns(2)
+                    m1.metric("木1本の果実数（中央値）", f"{by['中央値']:.0f} 個")
+                    m2.metric("95%区間", f"{by['下限']:.0f}〜{by['上限']:.0f} 個")
+                    fig_h = px.histogram(pd.DataFrame({"果実数": by["samples"]}), x="果実数", nbins=60,
+                                         color_discrete_sequence=["#ea580c"])
+                    for xv, lab in [(by["下限"], "2.5%"), (by["上限"], "97.5%")]:
+                        fig_h.add_vline(x=xv, line_dash="dot", line_color="#7c2d12", annotation_text=lab)
+                    fig_h.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10), yaxis_title="サンプル数")
+                    st.plotly_chart(fig_h, width="stretch")
+                    st.caption(f"見える割合を {vis_m:.2f} に決めつけた場合の95%区間：{by['固定の下限']:.0f}〜{by['固定の上限']:.0f} 個。"
+                               "分布で置いた区間のほうが広いのは、見える割合を知らない分の不確実性を正直に足しているから。"
+                               f"数えた区画 {by['数えた区画']} 個、1区画あたりの事後平均 {by['λの事後平均']:.1f} 個。")
+                    st.code("λ ~ Gamma(2, 0.1) → 見える果実数 ~ Poisson(λ)  （事後も Gamma：共役）\n"
+                            "v ~ Beta(平均×強さ, (1−平均)×強さ)                （見える割合）\n"
+                            "木全体 = λ × 区画の総数 / v", language="text")
+
             st.download_button("画像分析の結果をCSVで保存", sg.safe_csv(ai_res), "日誌_写真のタグ.csv", "text/csv")
             st.caption("保存したCSVを `data/sample_photo_ai.csv` に置きかえると、次から記入例として読み込まれます。")
 
@@ -709,6 +863,20 @@ st.dataframe(decide, hide_index=True, width="stretch")
 if len(decide) and decide["優先度"].max() > 0:
     top = decide.iloc[0]
     st.success(f"今の条件では「{top['語']}」が最上位：{top['エージェント候補']}（前提：{top['必要なデータ']}）")
+if len(obs_hit):
+    st.subheader("写真の観察から出てきた候補（困りごと3語の外側）")
+    rows_o = []
+    for k, (agent, need) in OBS_AGENTS.items():
+        n_ph = int(obs_hit.loc[obs_hit["観察"] == k, "パス"].nunique())
+        n_tx = int(df["本文"].str.contains(OBS_WORDS[k], regex=True).sum())
+        if n_ph or n_tx:
+            rows_o.append({"観察": k, "写真の枚数": n_ph, "日誌に書かれた件数": n_tx, "対策の時期": dv.OBS[k][1],
+                           "エージェント候補": agent, "必要なデータ": need})
+    if rows_o:
+        st.dataframe(pd.DataFrame(rows_o).sort_values("写真の枚数", ascending=False), hide_index=True, width="stretch")
+        st.caption("「日誌に書かれた件数」が0で写真にだけある観察は、**テキスト分析だけでは見えない困りごとの種**です。"
+                   "日誌の検索語に足す（例：斑点・落葉）か、作業日誌フォームの『作業』に「果樹管理」を加えると、両方で数えられます。"
+                   "病害は写真が撮れる秋と手を打つ初夏がずれるので、エージェントの価値は「時期を忘れずに知らせる」ことにあります。")
 st.info("この判断に必要なのに日誌に無いもの：困りごとで**止まった時間**・**影響した量**。"
         "次の一手は、自由記述を残したまま「止まった時間（分）」「影響（出荷・作業・品質）」の2欄を日誌に足すこと。"
         "写真の側では、**困りごとがあった日に1枚撮る**（日誌IDで結びつく）ことが、写真で裏づけられる件数を増やす一番の近道です。")
