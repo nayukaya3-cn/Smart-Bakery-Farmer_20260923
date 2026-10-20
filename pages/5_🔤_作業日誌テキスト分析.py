@@ -41,6 +41,8 @@ ASSETS = Path(__file__).parent.parent / "assets"
 MAX_PHOTO_ZIP = 100 * 1024 * 1024
 SAMPLE = DATA / "sample_work_diary.csv"
 SAMPLE_LABELS = DATA / "sample_work_diary_labels.csv"
+PHOTO_AI = DATA / "photo_ai.csv"                 # /nisshi（Claude Code）で人が確定したタグ
+LOCAL_DIARY = DATA / "private" / "work_diary.csv"  # /nisshi の日誌（手元だけ・git に入れない）
 SAMPLE_PHOTO_AI = DATA / "sample_photo_ai.csv"   # 取り込み済みの写真に Claude が付けたタグ（記入例・人の確認前）
 CLAUDE_AI_URL = "https://claude.ai/new"
 SAMPLE_NAMES = ["山田", "佐藤"]            # 架空データ用の匿名化辞書
@@ -223,7 +225,10 @@ with st.sidebar:
                 "[4＋ 写真](#step4photo)・[5 見える化](#step5)・[6 決める](#step6)・[7 伝える](#step7)・[🧭 次の行動](#next)")
     st.divider()
     st.header("日誌のデータ")
-    source = st.radio("使うデータ", ["架空の記入例（36件）", "自分の日誌CSVを読み込む"])
+    _opts = ["架空の記入例（36件）", "自分の日誌CSVを読み込む"]
+    if LOCAL_DIARY.exists():
+        _opts.insert(0, "手元の日誌（Claude Code で記録）")
+    source = st.radio("使うデータ", _opts)
     up = None
     if source.startswith("自分"):
         st.caption("フォームのスプレッドシートで「作業日誌 → 解析用CSVを作る」を実行して保存したCSVを選びます。"
@@ -243,7 +248,10 @@ with st.sidebar:
     st.link_button("📝 作業日誌フォーム", FORM_URL, width="stretch")
     st.caption("同じ手順を Google Colab で：`notebooks/text_analysis_work_diary.ipynb`")
 
-if source.startswith("自分"):
+if source.startswith("手元"):
+    raw = pd.read_csv(LOCAL_DIARY, encoding="utf-8-sig", dtype=str).fillna("")
+    default_names, default_partners, sample_labels = "", "", None
+elif source.startswith("自分"):
     if up is None:
         st.info("左のサイドバーから日誌のCSVを読み込んでください。")
         st.stop()
@@ -517,7 +525,8 @@ if show_photos:
         st.session_state.setdefault("photo_ai", {})
         use_sample = st.toggle("記入例の解析結果（Claude が付けたタグ・人の確認前）を使う", value=True,
                                help=f"{SAMPLE_PHOTO_AI.relative_to(ROOT)}：assets の写真に、開発時に Claude が付けたタグ")
-        base = dv.load_results(SAMPLE_PHOTO_AI) if use_sample else None
+        base = dv.merge_results(dv.load_results(SAMPLE_PHOTO_AI) if use_sample else None,
+                                dv.load_results(PHOTO_AI))
         session = pd.DataFrame(list(st.session_state.photo_ai.values()), columns=dv.RESULT_COLS)
         ai_res = dv.merge_results(base, session)
 
