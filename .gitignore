@@ -3,3 +3,7 @@
 __pycache__/
 .DS_Store
 *.pdf
+# 作業日誌ルーティン：本文・辞書・未公開の写真はリポジトリに入れない
+inbox/
+.nisshi/
+data/private/
