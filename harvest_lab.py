@@ -13,6 +13,8 @@ harvest_lab.py — 探究コーナー「ハウス収穫ロボで安全安心な�
   ① 計算する   … 遅延のあいだに進む距離／AIの検出と色の読み違いのモデル（シミュレーターと同じ式）
   ② 可視化する … シミュレーターの記録CSVを読み、人とAIを比べる（ベイズで「AIのほうが取り残しが少ない確率」）
   ③ 判断する   … 取り残しと誤収穫の損失から、しきい値 τ を決める。実機に進む前の点検
+  大人の条件   … 収穫ロボが「産業用ロボット」にあたるか（80W）、どの作業に特別教育（安衛則36条31号・32号）が要るかを判定し、
+                  段ごとに生徒・見守る大人・ロボットを扱う大人（修了者）の役割を分ける。生徒には教示・点検をさせない
 
 方針
   - このページも部品も、ロボットを動かさない。ROS2のコードは表示するだけ。
@@ -254,6 +256,7 @@ NEXT_STAGE_CHECKS = [
     ("暑さ指数（WBGT）の中止基準と、休む場所を決めてある", True),
     ("農薬散布の記録を確かめ、立ち入りできる日である", True),
     ("見守る大人の数が、生徒の数に足りている", True),
+    ("ロボットの教示・点検をする大人と、組んで機器を操作する相棒が特別教育を修了し、記録がある（産業用ロボットにあたる場合）", True),
     ("カメラ映像を録画しない・映す範囲を、学校と取り決めてある", True),
     ("保険（傷害・賠償）の範囲を、学校と確かめてある", True),
     ("シミュレーターで、全員が1ラウンド以上を終えている", False),
@@ -304,6 +307,160 @@ def main():
 if __name__ == "__main__":
     main()
 '''
+
+# ============================================================
+# 6 ロボットを扱う大人の条件（労働安全衛生法：産業用ロボットの特別教育）
+# ============================================================
+# 生徒は特別教育の対象ではない（教示・点検をさせない）。この節は「受け入れ側の大人」の条件を決めるためのもの。
+# 2026年10月時点で確かめた範囲。条文・時間数の最新は e-Gov法令検索・労働基準監督署で確かめる。
+ROBOT_LAW = pd.DataFrame([
+    {"きまり": "労働安全衛生法 第59条第3項", "中身": "危険・有害な業務に労働者を就かせるとき、事業者は特別教育を行う",
+     "ハウスでの読み方": "義務を負うのは受け入れ先（事業者）。相手は働く大人"},
+    {"きまり": "安衛則 第36条第31号（教示等）",
+     "中身": "可動範囲内で、動作の順序・位置・速度を設定・変更・確認する業務。その人と組んで、可動範囲外で教示に係る機器を操作する業務も含む",
+     "ハウスでの読み方": "収穫位置を教える人だけでなく、通路で起動・停止を受け持つ相棒も対象"},
+    {"きまり": "安衛則 第36条第32号（検査等）",
+     "中身": "運転中に可動範囲内で行う検査・修理・調整とその結果の確認。組んで可動範囲外で機器を操作する業務も含む",
+     "ハウスでの読み方": "止めてから行う刃の交換・清掃は、第150条の5（起動装置の施錠・表示）で守る"},
+    {"きまり": "安全衛生特別教育規程 第18条・第19条", "中身": "教示等・検査等の特別教育の科目と時間（学科・実技）",
+     "ハウスでの読み方": "下の表。時間は「以上」"},
+    {"きまり": "安衛則 第37条・第38条", "中身": "十分な知識・技能がある人は科目を省略できる／受講者・科目の記録を3年間保存する",
+     "ハウスでの読み方": "修了証の確認と記録の保存は受け入れ先の仕事"},
+    {"きまり": "昭和58年労働省告示第51号", "中身": "駆動用原動機の定格出力が80W以下の機械、一つの動作を単調に繰り返す機械などは「産業用ロボット」から除く",
+     "ハウスでの読み方": "収穫ロボがそもそも対象かを、まずカタログで確かめる。対象外でも危険は残る"},
+    {"きまり": "安衛則 第150条の3", "中身": "教示等のときの措置（作業規程、異常時にすぐ止められる措置、作業中の表示）",
+     "ハウスでの読み方": "教示モードの速さの上限（ISO 10218-1：250 mm/s）と合わせて考える"},
+    {"きまり": "安衛則 第150条の4・平成25年 基発1224第2号", "中身": "運転中の接触防止（柵など）。リスクアセスメントで危険のおそれがないと評価できれば協働運転ができる",
+     "ハウスでの読み方": "段3「実機のそば」は、この評価と記録が前提"},
+])
+
+TOKUBETSU_HOURS = pd.DataFrame([
+    ("教示等（第31号）", "学科", "産業用ロボットに関する知識", 2),
+    ("教示等（第31号）", "学科", "産業用ロボットの教示等の作業に関する知識", 4),
+    ("教示等（第31号）", "学科", "関係法令", 1),
+    ("教示等（第31号）", "実技", "産業用ロボットの操作の方法", 1),
+    ("教示等（第31号）", "実技", "産業用ロボットの教示等の作業の方法", 2),
+    ("検査等（第32号）", "学科", "産業用ロボットに関する知識", 4),
+    ("検査等（第32号）", "学科", "産業用ロボットの検査等の作業に関する知識", 4),
+    ("検査等（第32号）", "学科", "関係法令", 1),
+    ("検査等（第32号）", "実技", "産業用ロボットの操作の方法", 1),
+    ("検査等（第32号）", "実技", "産業用ロボットの検査等の作業の方法", 3),
+], columns=["区分", "種別", "科目", "時間（以上）"])
+
+TEACH_MODE_SPEED = 0.25  # m/s：教示モードの速さの上限（ISO 10218-1 の 250 mm/s）
+
+
+def is_industrial_robot(power_w: float, manipulator: bool = True, memory: bool = True,
+                        single_motion: bool = False, in_development: bool = False) -> dict:
+    """その収穫ロボが、安衛則でいう「産業用ロボット」にあたるか（教育用の目安。最終確認はメーカー・労基署）。"""
+    if not (manipulator and memory):
+        return {"あたるか": False, "理由": "マニプレータと記憶装置の両方がない（定義にあてはまらない）"}
+    if in_development:
+        return {"あたるか": False, "理由": "研究開発中のものは定義から除かれる。ただし体験実習に使うなら同じ水準で守る"}
+    if power_w <= 80:
+        return {"あたるか": False, "理由": "定格出力80W以下（告示第51号）。特別教育の義務はないが、危険は残る"}
+    if single_motion:
+        return {"あたるか": False, "理由": "一つの動作を単調に繰り返すだけ（告示第51号）"}
+    return {"あたるか": True, "理由": "定格出力80W超で、マニプレータと記憶装置をもつ。教示等・検査等には特別教育が要る"}
+
+
+# 作業 → (区分, 説明, どの段で起こるか)
+HARVEST_TASKS = {
+    "収穫の位置・動作の順序を教える（ペンダントで、可動範囲内）":
+        ("教示等（第31号）", "教示等の本体", "準備（生徒が来る前）"),
+    "教える人と組み、通路（可動範囲外）で起動・非常停止を受け持つ":
+        ("教示等（第31号）", "「組んで可動範囲外で機器を操作」にあたる", "準備（生徒が来る前）"),
+    "運転中にレール上でハンドの位置を点検・調整する":
+        ("検査等（第32号）", "検査等の本体", "準備（生徒が来る前）"),
+    "点検する人と組み、可動範囲外で機器を操作する":
+        ("検査等（第32号）", "「組んで可動範囲外で機器を操作」にあたる", "準備（生徒が来る前）"),
+    "止めて鍵と表示をしてから、刃の交換・清掃をする":
+        (None, "特別教育の対象外。第150条の5の措置（起動装置の施錠・表示）で守る", "準備（生徒が来る前）"),
+    "教室から遠隔で走行・収穫ボタンを押す（ハウスに人がいない）":
+        (None, "教示ではなく運転。ハウスに人がいるときは行わない（2 ① 計算するの距離）", "段1"),
+    "ロボットを止めて電源を切ったハウスを見学する":
+        (None, "特別教育の対象外。温湯管・暑さ・農薬の対策が中心", "段2"),
+    "線の外から運転を見る（機器にさわらない）":
+        (None, "特別教育の対象外。非常停止を受け持つなら「組んで機器を操作」にあたるか受け入れ先で判断する", "段3"),
+}
+
+
+def training_need(task: str, robot: bool = True, is_worker: bool = True) -> dict:
+    """その人・その作業に、産業用ロボットの特別教育が要るか。"""
+    kind, why, stage = HARVEST_TASKS[task]
+    if not robot:
+        return {"判定": "対象外（産業用ロボットにあたらない）", "区分": None, "時間": 0, "段": stage,
+                "理由": "特別教育の義務はない。リスクアセスメントと作業手順は同じように行う"}
+    if kind is None:
+        return {"判定": "対象外（この作業）", "区分": None, "時間": 0, "段": stage, "理由": why}
+    hours = int(TOKUBETSU_HOURS.loc[TOKUBETSU_HOURS["区分"] == kind, "時間（以上）"].sum())
+    if not is_worker:
+        return {"判定": "生徒にはさせない作業", "区分": kind, "時間": hours, "段": stage,
+                "理由": f"{why}。特別教育は事業者が働く人に行うもの。修了した大人が、生徒が来る前に済ませる"}
+    return {"判定": "特別教育が必要", "区分": kind, "時間": hours, "段": stage, "理由": why}
+
+
+def staff_training_plan(teachers: int, partners: int, inspectors: int, backup: int = 1) -> pd.DataFrame:
+    """受け入れ先の大人が受ける特別教育の延べ時間。休みに備えて予備（backup）を区分ごとに足す。"""
+    hours = TOKUBETSU_HOURS.groupby("区分")["時間（以上）"].sum()
+    rows = []
+    for kind, n in [("教示等（第31号）", teachers + partners), ("検査等（第32号）", inspectors)]:
+        people = n + (backup if n > 0 else 0)
+        rows.append({"区分": kind, "受ける人数": people, "1人あたり_時間": int(hours[kind]),
+                     "延べ_時間": people * int(hours[kind])})
+    return pd.DataFrame(rows)
+
+
+# 段ごとの役割：生徒・見守る大人・ロボットを扱う大人
+STAGE_ROLES = pd.DataFrame([
+    {"段階": STAGES[0], "生徒": "シミュレーターで遠隔操作とAIを比べる", "見守る大人": "教員",
+     "ロボットを扱う大人": "いらない", "特別教育の修了者": "いらない"},
+    {"段階": STAGES[1], "生徒": "教室から走行・収穫ボタンを押す", "見守る大人": "教員",
+     "ロボットを扱う大人": "受け入れ先がハウスの外で監視（ハウス内は無人）", "特別教育の修了者": "事前の教示・点検をした人"},
+    {"段階": STAGES[2], "生徒": "通路を歩いて見学・質問", "見守る大人": "教員＋受け入れ先",
+     "ロボットを扱う大人": "電源を切り、起動装置に鍵と表示", "特別教育の修了者": "（止めているので運転はない）"},
+    {"段階": STAGES[3], "生徒": "線の外から運転を見る・収穫した果実を確かめる", "見守る大人": "教員＋受け入れ先",
+     "ロボットを扱う大人": "非常停止のそばで運転を受け持つ", "特別教育の修了者": "教示・点検とその相棒は修了者だけ"},
+])
+
+
+ROS2_TELEOP_PERMIT = '''# 遠隔操作の「許可」を出すノード（例：表示するだけ。安全機能ではない）
+# ハウスに人がいるとき、または受け入れ先の修了者が許可していないときは、教室からの操作を通さない。
+# 止める仕組みは、ロボット本体の非常停止とモード切替、5 の見張り役（ウォッチドッグ）で行う。
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Bool, String
+from geometry_msgs.msg import Twist
+
+TRAINED = {"staff_01", "staff_02"}   # 特別教育の修了者ID（記録は3年保存）。名前は持たない
+
+class TeleopPermit(Node):
+    def __init__(self):
+        super().__init__("teleop_permit")
+        self.person_in_house = True        # わからないときは「いる」とみなす
+        self.approver = ""
+        self.pub = self.create_publisher(Twist, "/classroom/cmd_vel_permitted", 10)
+        self.log = self.create_publisher(String, "/audit/teleop", 10)
+        self.create_subscription(Bool, "/house/person_detected", self.on_person, 10)  # 人感センサ・入口の記録
+        self.create_subscription(String, "/house/approver_id", self.on_approver, 10)  # 修了者のICカード
+        self.create_subscription(Twist, "/classroom/cmd_vel", self.on_cmd, 10)
+
+    def on_person(self, msg):
+        self.person_in_house = msg.data
+
+    def on_approver(self, msg):
+        self.approver = msg.data
+        self.log.publish(String(data=f"approver={msg.data},trained={msg.data in TRAINED}"))
+
+    def on_cmd(self, msg):
+        ok = (not self.person_in_house) and (self.approver in TRAINED)
+        self.pub.publish(msg if ok else Twist())   # 許可がなければ止まれ（速度0）
+
+def main():
+    rclpy.init()
+    rclpy.spin(TeleopPermit())
+'''
+
 
 # 実例（調べた範囲。出典はページの「出典・参考」に）
 CASES = pd.DataFrame([
@@ -363,4 +520,20 @@ if __name__ == "__main__":
     assert ok["判定"].startswith("実機の段階") and ok["準備度"] == 1
     one = next_stage_readiness([i != 2 for i in range(len(NEXT_STAGE_CHECKS))])
     assert one["判定"].startswith("まだ") and len(one["まだの必須"]) == 1
+    # 大人の条件：時間は教示等10h・検査等13h。80W以下は産業用ロボットにあたらない
+    h = TOKUBETSU_HOURS.groupby("区分")["時間（以上）"].sum()
+    assert h["教示等（第31号）"] == 10 and h["検査等（第32号）"] == 13
+    assert is_industrial_robot(400)["あたるか"] and not is_industrial_robot(60)["あたるか"]
+    assert not is_industrial_robot(400, memory=False)["あたるか"]
+    tasks = list(HARVEST_TASKS)
+    assert training_need(tasks[0])["判定"] == "特別教育が必要"
+    assert training_need(tasks[1])["区分"] == "教示等（第31号）"           # 通路で操作する相棒も対象
+    assert training_need(tasks[0], is_worker=False)["判定"].startswith("生徒には")
+    assert training_need(tasks[4])["区分"] is None                        # 止めてからの刃の交換は対象外
+    assert training_need(tasks[0], robot=False)["判定"].startswith("対象外（産業用")
+    assert all(HARVEST_TASKS[t][0] is None for t in tasks if HARVEST_TASKS[t][2] != "準備（生徒が来る前）")  # 生徒のいる段に教示・検査はない
+    sp = staff_training_plan(1, 1, 0)
+    assert sp.set_index("区分").loc["教示等（第31号）", "延べ_時間"] == 30 and sp["受ける人数"].iloc[1] == 0
+    assert list(STAGE_ROLES["段階"]) == STAGES
+    assert remote_distance(TEACH_MODE_SPEED, 0)["合計（これより近づいたら止める）"] > remote_distance(0.0, 0)["合計（これより近づいたら止める）"]
     print("harvest_lab.py：自己チェック OK")
