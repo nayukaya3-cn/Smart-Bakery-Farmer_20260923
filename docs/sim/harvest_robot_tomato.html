@@ -1,0 +1,690 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>ハウス収穫ロボ・シミュレーター</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=IBM+Plex+Mono:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: 左に3Dハウス（主役）＋搭載カメラ小窓、右に操作盤。下に探究ノート（①計算 ②可視化 ③判断）。狭い画面は縦積み */
+:root{
+  --bg:#eef1eb; --panel:#f9fbf7; --ink:#1c2920; --muted:#5a6a5f; --line:#d2dbd1; --soft:#e3e9e1;
+  --accent:#d9480f; --accent-ink:#ffffff;
+  --ok:#2b8a3e; --warn:#b06d00; --bad:#c92a2a;
+  --f-display:"Dela Gothic One","Zen Kaku Gothic New","Hiragino Sans",sans-serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111713; --panel:#18201a; --ink:#e2eae3; --muted:#94a698; --line:#2b372e; --soft:#212b23;
+  --accent:#ff7b39; --accent-ink:#1a0d05; --ok:#5ccf74; --warn:#f2b632; --bad:#ff6b6b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111713; --panel:#18201a; --ink:#e2eae3; --muted:#94a698; --line:#2b372e; --soft:#212b23;
+  --accent:#ff7b39; --accent-ink:#1a0d05; --ok:#5ccf74; --warn:#f2b632; --bad:#ff6b6b; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1320px;margin:0 auto;display:grid;gap:20px}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(22px,3.2vw,32px);line-height:1.2;margin:0;text-wrap:balance;letter-spacing:.01em}
+h2{font-size:15px;margin:0;font-weight:700}
+h3{font-size:13px;margin:0;font-weight:700}
+p{margin:0}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.lede{color:var(--muted);max-width:68ch;margin-top:6px}
+.top{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+.spec{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-family:var(--f-mono);font-size:11px;letter-spacing:.04em;border:1px solid var(--line);border-radius:4px;padding:2px 7px;color:var(--muted)}
+
+.app{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
+@media (max-width:900px){.app{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;height:clamp(380px,72vh,700px);border-radius:10px;overflow:hidden;background:#cfe0e3;border:1px solid var(--line)}
+@media (max-width:900px){.stage{height:clamp(320px,58vh,560px)}}
+.stage canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.stage-note{color:var(--muted);font-size:12px;margin-top:6px}
+.hud{position:absolute;display:flex;gap:6px;align-items:center;flex-wrap:wrap;pointer-events:none}
+.hud.tl{top:10px;left:10px;right:140px}
+.hud.tr{top:10px;right:10px;pointer-events:auto}
+.chip{background:#1c2920;color:#fff;font-size:12px;font-weight:700;border-radius:4px;padding:3px 8px}
+.chip.ai{background:#1d4e89}
+.hudtxt{background:rgba(255,255,255,.85);color:#1c2920;font-size:12px;border-radius:4px;padding:3px 8px}
+.camb{font:inherit;font-size:12px;border:1px solid rgba(0,0,0,.2);background:rgba(255,255,255,.85);color:#1c2920;border-radius:4px;padding:3px 9px;cursor:pointer}
+.camb[aria-pressed="true"]{background:#1c2920;color:#fff;border-color:#1c2920}
+.pip{position:absolute;pointer-events:none;border:2px solid #1c2920;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.pip-label{position:absolute;left:0;top:0;right:0;display:flex;gap:6px;align-items:center;font-size:11px;color:#fff;background:rgba(20,28,22,.72);padding:2px 6px}
+.rec{width:7px;height:7px;border-radius:50%;background:#ff4d3d}
+.reticle{position:absolute;border:2px dashed rgba(255,255,255,.85);border-radius:3px;transition:border-color .15s}
+.reticle.lock{border:2px solid #ffd43b;box-shadow:0 0 0 2px rgba(0,0,0,.3)}
+.toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:#1c2920;color:#fff;font-size:13px;border-radius:6px;padding:6px 12px;max-width:min(90%,420px);text-align:center;pointer-events:none}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:grid;min-width:0}
+.block{padding:14px 16px;display:grid;gap:10px;border-top:1px solid var(--line)}
+.block:first-child{border-top:0}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.field-row{display:grid;grid-template-columns:7.5em minmax(0,1fr) 4.2em;align-items:center;gap:8px}
+.field-row label{font-size:13px}
+.field-row output{font-family:var(--f-mono);font-size:12px;text-align:right}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=number],select{font:inherit;font-size:13px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:3px 6px;width:6.5em}
+button{font:inherit}
+.btn{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}
+.tab{border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);padding:10px;cursor:pointer;font-weight:700;font-size:13px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.pad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.pad .btn{padding:10px 0;font-size:15px;user-select:none;-webkit-user-select:none;touch-action:none}
+.pad .wide{grid-column:span 3}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:var(--bg);color:var(--muted);padding:6px;cursor:pointer;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--panel);font-weight:700}
+.keys{font-size:12px;color:var(--muted)}
+kbd{font-family:var(--f-mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:0 4px;background:var(--bg)}
+.legend{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.sw{display:inline-block;width:10px;height:10px;border:2px solid;margin-right:6px;vertical-align:-1px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.stat{display:grid;gap:2px}
+.stat .k{font-size:11px;color:var(--muted)}
+.stat .v{font-family:var(--f-mono);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.v.ok{color:var(--ok)} .v.bad{color:var(--bad)} .v.warn{color:var(--warn)}
+.log{list-style:none;margin:0;padding:0;font-size:12px;color:var(--muted);display:grid;gap:2px;max-height:9.5em;overflow:auto}
+.log li .t{font-family:var(--f-mono);margin-right:6px}
+
+.note{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:1000px){.note{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:10px;align-content:start;min-width:0}
+.step{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;color:var(--accent);font-weight:600}
+.eq{font-family:var(--f-mono);font-size:12.5px;background:var(--soft);border-radius:6px;padding:10px 12px;overflow-x:auto;white-space:pre;line-height:1.7}
+.muted{color:var(--muted);font-size:13px}
+.chart{width:100%;height:220px;display:block}
+.chips{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.dot{display:inline-block;width:10px;height:3px;margin-right:5px;vertical-align:3px}
+.verdict{font-size:13px;border-left:3px solid var(--accent);padding:4px 0 4px 10px}
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:500;font-size:11.5px}
+td{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);font-size:13px;padding:8px 0}
+textarea{width:100%;min-height:90px;font-family:var(--f-mono);font-size:12px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px}
+.foot{color:var(--muted);font-size:12px;max-width:80ch}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>ハウス収穫ロボ・シミュレーター</h1>
+      <p class="lede">レール走行式のトマト収穫ロボットを、教室から遠隔操作する。または AI に任せる。同じハウス・同じ果房で、人とAIの収穫を比べます。</p>
+    </div>
+    <div class="spec"><span class="tag">ハウス長 18 m</span><span class="tag">温湯管レール走行</span><span class="tag">収穫基準 着色度 ≥ 70%</span></div>
+  </header>
+
+  <main class="app">
+    <section style="min-width:0">
+      <div id="stage" class="stage">
+        <div class="hud tl"><span id="modeChip" class="chip">遠隔操作</span><span id="posText" class="hudtxt mono">x 1.20 m</span></div>
+        <div class="hud tr">
+          <button id="camFollow" class="camb" aria-pressed="true">追従</button>
+          <button id="camOver" class="camb" aria-pressed="false">俯瞰</button>
+        </div>
+        <div id="pip" class="pip"><div class="pip-label"><span class="rec"></span>ロボット搭載カメラ<span id="pipLat" class="mono" style="margin-left:auto"></span></div><div id="reticle" class="reticle"></div></div>
+        <div id="toast" class="toast" hidden></div>
+      </div>
+      <p class="stage-note">ドラッグで視点を回す／ホイール・ピンチで拡大。右下の小窓が、教室のモニターに映る映像です。黄色の実線枠になったらハンドが届きます。</p>
+    </section>
+
+    <aside class="panel">
+      <section class="block">
+        <h2>圃場の条件</h2>
+        <div class="field-row"><label for="occ">葉の遮蔽率</label><input id="occ" type="range" min="0" max="0.8" step="0.05" value="0.3"><output id="occOut">30%</output></div>
+        <div class="row"><label for="seed" class="muted">乱数シード</label><input id="seed" type="number" value="7" min="1" max="9999"><button id="resetField" class="btn">圃場をつくり直す</button></div>
+      </section>
+
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" id="tabRemote" aria-selected="true" aria-controls="paneRemote">遠隔操作（人）</button>
+        <button class="tab" role="tab" id="tabAi" aria-selected="false" aria-controls="paneAi">AI自動</button>
+      </div>
+
+      <section id="paneRemote" class="block" role="tabpanel" aria-labelledby="tabRemote">
+        <div class="seg" role="group" aria-label="作業する列">
+          <button id="sideA" aria-pressed="true">A列</button><button id="sideB" aria-pressed="false">B列</button>
+        </div>
+        <div class="pad">
+          <span></span><button class="btn hold" data-k="up" aria-label="アームを上げる">▲</button><span></span>
+          <button class="btn hold" data-k="left" aria-label="後退">◀</button><button class="btn hold" data-k="down" aria-label="アームを下げる">▼</button><button class="btn hold" data-k="right" aria-label="前進">▶</button>
+          <button id="harvestBtn" class="btn primary wide">収穫する</button>
+        </div>
+        <p class="keys"><kbd>A</kbd><kbd>D</kbd> 走行　<kbd>W</kbd><kbd>S</kbd> 上下　<kbd>Q</kbd> 列切替　<kbd>Space</kbd> 収穫</p>
+        <div class="field-row"><label for="lat">通信遅延</label><input id="lat" type="range" min="0" max="800" step="50" value="150"><output id="latOut">150 ms</output></div>
+      </section>
+
+      <section id="paneAi" class="block" role="tabpanel" aria-labelledby="tabAi" hidden>
+        <div class="field-row"><label for="tau">信頼度しきい値 τ</label><input id="tau" type="range" min="0.3" max="0.9" step="0.05" value="0.55"><output id="tauOut">0.55</output></div>
+        <div class="row"><label for="spd" class="muted">再生速度</label>
+          <select id="spd"><option value="1">×1</option><option value="2" selected>×2</option><option value="4">×4</option></select>
+          <button id="aiStart" class="btn primary">自動収穫を開始</button></div>
+        <div class="legend">
+          <span><span class="sw" style="border-color:#2fbf4f"></span>適期と判断 → 収穫へ</span>
+          <span><span class="sw" style="border-color:#f2b632"></span>見えたが色づき不足と判断 → 見送り</span>
+          <span><span class="sw" style="border-color:#ff4d3d"></span>答え合わせで判明した取り残し</span>
+        </div>
+        <p class="muted">枠が付かない果実は、葉に隠れて検出できなかったものです。</p>
+      </section>
+
+      <section class="block">
+        <div class="row" style="justify-content:space-between"><h2>このラウンド</h2><button id="checkBtn" class="btn">答え合わせ</button></div>
+        <div class="stats">
+          <div class="stat"><span class="k">適期収穫</span><span id="sGood" class="v ok">0</span></div>
+          <div class="stat"><span class="k">未熟誤収穫</span><span id="sBad" class="v bad">0</span></div>
+          <div class="stat"><span class="k">取り残し</span><span id="sMiss" class="v warn">—</span></div>
+          <div class="stat"><span class="k">秒／本</span><span id="sSpf" class="v">—</span></div>
+        </div>
+        <ul id="log" class="log"></ul>
+      </section>
+    </aside>
+  </main>
+
+  <section class="note" aria-label="探究ノート">
+    <article class="card">
+      <span class="step">① 現象を計算する</span>
+      <h2>AIの「見える／見えない」をモデル化</h2>
+      <div class="eq">検出スコア  s = 0.92 − 0.80·o + ε₁   ε₁~N(0, 0.08²)
+検出         s ≥ τ
+着色度推定  ĉ = c + ε₂   ε₂~N(0, (0.04+0.12·o)²)
+収穫判断    ĉ ≥ 0.70</div>
+      <p class="muted">o は果実ごとの葉の遮蔽率、c は着色度（緑 0 → 赤 1）、τ は信頼度しきい値。葉の陰に入るほど「見つからない」うえに「色を読み違える」。この2つの誤差が、取り残しと未熟果の誤収穫を生みます。</p>
+    </article>
+    <article class="card">
+      <span class="step">② 数値を可視化する</span>
+      <h2>遮蔽率と検出率</h2>
+      <canvas id="chart1" class="chart" aria-label="遮蔽率ごとの検出率と誤収穫率"></canvas>
+      <div class="chips"><span><span class="dot" style="background:var(--ok)"></span>適期果の収穫率</span><span><span class="dot" style="background:var(--bad)"></span>未熟果の誤収穫率</span><span><span class="dot" style="background:var(--accent)"></span>いまの圃場</span></div>
+      <p id="c1text" class="muted"></p>
+    </article>
+    <article class="card">
+      <span class="step">③ 自分の条件で判断する</span>
+      <h2>しきい値 τ をいくつにするか</h2>
+      <div class="row"><label for="cMiss" class="muted">取り残し1本の損失</label><input id="cMiss" type="number" min="0" step="5" value="40"><span class="muted">円</span></div>
+      <div class="row"><label for="cFalse" class="muted">誤収穫1本の損失</label><input id="cFalse" type="number" min="0" step="5" value="90"><span class="muted">円</span></div>
+      <canvas id="chart2" class="chart" aria-label="しきい値ごとの損失"></canvas>
+      <p id="verdict" class="verdict"></p>
+      <div class="row"><button id="applyTau" class="btn">この τ をAIに設定</button></div>
+    </article>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between"><h2>ラウンド記録（人とAIの比較）</h2><button id="copyCsv" class="btn">CSVをコピー</button></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>#</th><th>方式</th><th>遮蔽率</th><th>条件</th><th>適期収穫</th><th>誤収穫</th><th>取り残し</th><th>秒／本</th></tr></thead>
+      <tbody id="recBody"></tbody>
+    </table></div>
+    <p id="recEmpty" class="empty">「答え合わせ」を押すと、そのラウンドの結果がここに残ります。遠隔操作とAIを同じシードで1回ずつ試すと比較できます。</p>
+    <textarea id="csvOut" readonly hidden></textarea>
+  </section>
+
+  <p class="foot">教育用の単純化モデルです。実機のトマト収穫ロボットの性能や判定方式を再現したものではありません。誤収穫の損失は「その果実が育っていれば得られた売上＋出荷できない分」として、各自の条件で入れてください。</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const L=18, RIPE=0.70, REACH=0.07;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){let u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+const detect=(o,r)=>0.92-0.8*o+0.08*gauss(r);
+const estimate=(col,o,r)=>col+(0.04+0.12*o)*gauss(r);
+const C_GREEN=new THREE.Color(0x6aa84f),C_ORANGE=new THREE.Color(0xec9a2e),C_RED=new THREE.Color(0xd7261e);
+const tomatoColor=c=>c<0.5?C_GREEN.clone().lerp(C_ORANGE,c/0.5):C_ORANGE.clone().lerp(C_RED,(c-0.5)/0.5);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const step=(d,m)=>Math.abs(d)<=m?d:Math.sign(d)*m;
+
+/* ---------- state ---------- */
+let occLevel=0.3, seed=7, tau=0.55, latency=150, spd=2, mode='remote';
+const robot={x:1.2,h:1.0,side:1,ext:0,grip:0,busy:false,task:null};
+const stats={good:0,bad:0,whiff:0,missed:null,active:0,bin:0};
+const ai={running:false,pending:[],goal:null};
+const records=[];
+
+/* ---------- three ---------- */
+const stage=$('#stage');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+stage.insertBefore(renderer.domElement,stage.firstChild);
+const scene=new THREE.Scene();
+const SKY=0xd3e4e6; scene.background=new THREE.Color(SKY); scene.fog=new THREE.Fog(SKY,9,30);
+const cam=new THREE.PerspectiveCamera(50,1,0.05,100);
+const pipCam=new THREE.PerspectiveCamera(58,4/3,0.03,12);
+scene.add(new THREE.HemisphereLight(0xffffff,0x6f8a5a,0.95));
+const sun=new THREE.DirectionalLight(0xfff6e8,0.75); sun.position.set(6,10,4); scene.add(sun);
+const lam=c=>new THREE.MeshLambertMaterial({color:c});
+
+/* static greenhouse */
+(function(){
+  const soil=new THREE.Mesh(new THREE.PlaneGeometry(L+6,7),lam(0x8b7a62)); soil.rotation.x=-Math.PI/2; soil.position.set(L/2,0,0); scene.add(soil);
+  const aisle=new THREE.Mesh(new THREE.PlaneGeometry(L+1,0.56),lam(0xbdb8ad)); aisle.rotation.x=-Math.PI/2; aisle.position.set(L/2,0.002,0); scene.add(aisle);
+  const pipeG=new THREE.CylinderGeometry(0.025,0.025,L+1,10); pipeG.rotateZ(Math.PI/2);
+  const steel=new THREE.MeshPhongMaterial({color:0xb7bec2,shininess:80});
+  for(const z of [-0.14,0.14]){const p=new THREE.Mesh(pipeG,steel);p.position.set(L/2,0.07,z);scene.add(p)}
+  for(let x=0;x<=L;x+=1.5){const s=new THREE.Mesh(new THREE.BoxGeometry(0.04,0.06,0.36),lam(0x7a8186));s.position.set(x,0.03,0);scene.add(s)}
+  const slabG=new THREE.BoxGeometry(L,0.12,0.24);
+  for(const z of [-0.75,0.75]){const b=new THREE.Mesh(slabG,lam(0xeae6da));b.position.set(L/2,0.14,z);scene.add(b);
+    const st=new THREE.Mesh(new THREE.BoxGeometry(L,0.08,0.06),lam(0x5d6461));st.position.set(L/2,0.04,z);scene.add(st);
+    const w=new THREE.Mesh(new THREE.CylinderGeometry(0.006,0.006,L,4).rotateZ(Math.PI/2),lam(0x777777));w.position.set(L/2,2.38,z);scene.add(w)}
+  const frame=lam(0xdde4e6);
+  for(let x=0;x<=L;x+=3){
+    for(const z of [-2.4,2.4]){const p=new THREE.Mesh(new THREE.BoxGeometry(0.06,2.7,0.06),frame);p.position.set(x,1.35,z);scene.add(p)}
+    for(const s of [-1,1]){const r=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.05,2.7),frame);r.position.set(x,3.15,s*1.2);r.rotation.x=s*0.42;scene.add(r)}
+  }
+  for(const z of [-2.4,2.4]){const e=new THREE.Mesh(new THREE.BoxGeometry(L,0.05,0.05),frame);e.position.set(L/2,2.7,z);scene.add(e)}
+  const ridge=new THREE.Mesh(new THREE.BoxGeometry(L,0.06,0.06),frame);ridge.position.set(L/2,3.66,0);scene.add(ridge);
+})();
+
+/* shared geometries */
+const ls=new THREE.Shape(); ls.moveTo(0,-0.5); ls.quadraticCurveTo(0.6,-0.4,0.5,0.12); ls.quadraticCurveTo(0.42,0.32,0.22,0.28);
+ls.quadraticCurveTo(0.12,0.52,0,0.5); ls.quadraticCurveTo(-0.12,0.52,-0.22,0.28); ls.quadraticCurveTo(-0.42,0.32,-0.5,0.12); ls.quadraticCurveTo(-0.6,-0.4,0,-0.5);
+const leafGeo=new THREE.ShapeGeometry(ls,5);
+const leafMat=new THREE.MeshLambertMaterial({color:0xffffff,side:THREE.DoubleSide});
+const stemGeo=new THREE.CylinderGeometry(0.008,0.01,2.3,5);
+const stemMat=lam(0x5f8f3e);
+const fruitGeo=new THREE.SphereGeometry(1,16,12);
+const calyxGeo=new THREE.ConeGeometry(0.022,0.012,5);
+const calyxMat=lam(0x3d7a2a);
+const pedGeo=new THREE.CylinderGeometry(0.003,0.003,1,4); pedGeo.translate(0,0.5,0);
+const dummy=new THREE.Object3D();
+
+let field=null, fruits=[], disposables=[];
+function buildField(){
+  cancelTask(); stopAI(false);
+  fruits.forEach(f=>{if(f.g.parent)f.g.parent.remove(f.g)});
+  if(field){scene.remove(field)}
+  disposables.forEach(d=>d.dispose()); disposables=[];
+  field=new THREE.Group(); scene.add(field); fruits=[];
+  const r=mulberry32(seed);
+  const leafM=[],leafC=[],stemM=[];
+  const cLo=new THREE.Color(0x2c6a2a),cHi=new THREE.Color(0x5aa346);
+  for(const side of [-1,1]){
+    for(let x=0.6;x<L-0.4;x+=0.45){
+      const sx=x+(r()-0.5)*0.08;
+      dummy.position.set(sx,1.3,side*0.76); dummy.rotation.set(0,0,(r()-0.5)*0.05); dummy.scale.set(1,1,1); dummy.updateMatrix(); stemM.push(dummy.matrix.clone());
+      for(let k=0;k<7;k++){
+        dummy.position.set(sx+(r()-0.5)*0.36,0.4+k*0.28+r()*0.12,side*(0.79+r()*0.12));
+        dummy.rotation.set((r()-0.5)*0.5,(r()-0.5)*0.7,r()*Math.PI*2);
+        const s=0.2+r()*0.1; dummy.scale.set(s,s,s); dummy.updateMatrix(); leafM.push(dummy.matrix.clone());
+        leafC.push(cLo.clone().lerp(cHi,r()));
+      }
+      // 果房（花房）: 1株に0〜2房、1房に2〜4果。房の付け根に近い果実ほど早く色づく
+      const nt=r()<0.8?(r()<0.3?2:1):0;
+      for(let tr=0;tr<nt;tr++){
+       const trY=0.6+tr*0.55+r()*0.7, baseCol=r()*1.1, dir=r()<0.5?-1:1, nfr=2+Math.floor(r()*3);
+       for(let k=0;k<nfr;k++){
+        const rad=0.026+r()*0.01, fx=sx+dir*(0.03+k*0.075)+(r()-0.5)*0.015, cy=trY-0.04-k*0.02-r()*0.03;
+        const col=clamp(baseCol-k*0.18+(r()-0.5)*0.12,0,1);
+        const occ=Math.min(0.95,occLevel*(0.4+r()*1.2));
+        const g=new THREE.Group(); g.position.set(fx,cy,side*0.69);
+        const mat=new THREE.MeshPhongMaterial({color:tomatoColor(col),shininess:70,specular:0x333333}); disposables.push(mat);
+        const body=new THREE.Mesh(fruitGeo,mat); body.scale.set(rad,rad*0.86,rad); g.add(body);
+        const cal=new THREE.Mesh(calyxGeo,calyxMat); cal.position.y=rad*0.86; g.add(cal);
+        const ped=new THREE.Mesh(pedGeo,calyxMat); ped.position.y=rad*0.86; ped.scale.y=Math.max(0.02,trY-cy-rad*0.86); g.add(ped);
+        field.add(g);
+        const f={x:fx,rad,col,cy,side,occ,ripe:col>=RIPE,g,picked:false,seen:false,marker:null};
+        fruits.push(f);
+        if(occ>0.12){
+          dummy.position.set(fx+(1-occ)*0.1*(r()<0.5?-1:1),f.cy+(r()-0.5)*0.03,side*0.62);
+          dummy.rotation.set((r()-0.5)*0.3,(r()-0.5)*0.3,r()*Math.PI*2);
+          const s=0.13+occ*0.07; dummy.scale.set(s,s,s); dummy.updateMatrix(); leafM.push(dummy.matrix.clone());
+          leafC.push(cLo.clone().lerp(cHi,0.3+r()*0.5));
+        }
+       }
+      }
+    }
+  }
+  const stems=new THREE.InstancedMesh(stemGeo,stemMat,stemM.length); stemM.forEach((m,i)=>stems.setMatrixAt(i,m)); field.add(stems);
+  const leaves=new THREE.InstancedMesh(leafGeo,leafMat,leafM.length);
+  leafM.forEach((m,i)=>{leaves.setMatrixAt(i,m);leaves.setColorAt(i,leafC[i])}); field.add(leaves);
+  disposables.push(stems,leaves);
+  Object.assign(stats,{good:0,bad:0,whiff:0,missed:null,active:0,bin:0});
+  robot.x=clamp(robot.x,0.3,L-0.3);
+  logEl.innerHTML=''; addLog(`圃場を作成（果実 ${fruits.length} 本・適期 ${fruits.filter(f=>f.ripe).length} 本）`);
+  updateStats();
+}
+
+/* robot */
+const robotG=new THREE.Group(); scene.add(robotG);
+const mDark=lam(0x353d38), mOr=lam(0xe8590c), mSteel=new THREE.MeshPhongMaterial({color:0xaeb6b2,shininess:60});
+(function(){
+  const base=new THREE.Mesh(new THREE.BoxGeometry(0.62,0.12,0.42),mDark); base.position.y=0.2; robotG.add(base);
+  const cover=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.1,0.36),mOr); cover.position.y=0.31; robotG.add(cover);
+  const wg=new THREE.CylinderGeometry(0.045,0.045,0.035,14); wg.rotateX(Math.PI/2);
+  for(const x of [-0.22,0.22])for(const z of [-0.14,0.14]){const w=new THREE.Mesh(wg,mDark);w.position.set(x,0.14,z);robotG.add(w)}
+  const mast=new THREE.Mesh(new THREE.BoxGeometry(0.07,1.95,0.07),mSteel); mast.position.y=1.33; robotG.add(mast);
+  const bin=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.12,0.3),lam(0x2f63b0)); bin.position.set(0.2,0.42,0); robotG.add(bin);
+})();
+const lamp=new THREE.Mesh(new THREE.SphereGeometry(0.035,12,8),new THREE.MeshLambertMaterial({color:0x40c057,emissive:0x2b8a3e}));
+lamp.position.y=2.34; robotG.add(lamp);
+const carriage=new THREE.Group(); robotG.add(carriage);
+carriage.add(new THREE.Mesh(new THREE.BoxGeometry(0.16,0.12,0.16),mOr));
+const armPivot=new THREE.Group(); carriage.add(armPivot);
+const armGeo=new THREE.BoxGeometry(0.045,0.045,1); armGeo.translate(0,0,0.5);
+const arm=new THREE.Mesh(armGeo,mSteel); armPivot.add(arm);
+const gripper=new THREE.Group(); armPivot.add(gripper);
+gripper.add(new THREE.Mesh(new THREE.BoxGeometry(0.1,0.07,0.05),mDark));
+const lens=new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.02,10).rotateX(Math.PI/2),lam(0x111111)); lens.position.set(0,0.045,0.02); gripper.add(lens);
+const fingers=[-1,1].map(s=>{const f=new THREE.Mesh(new THREE.BoxGeometry(0.014,0.06,0.07),mOr);f.position.set(s*0.045,0,0.055);gripper.add(f);return f});
+
+function syncRobot(){
+  robotG.position.x=robot.x;
+  carriage.position.y=robot.h;
+  armPivot.rotation.y=robot.side>0?0:Math.PI;
+  arm.scale.z=0.08+robot.ext;
+  gripper.position.z=0.08+robot.ext;
+  fingers.forEach((f,i)=>f.position.x=(i?1:-1)*(0.045-0.022*robot.grip));
+  const c=ai.running?[0x4dabf7,0x1c7ed6]:robot.busy?[0xff922b,0xe8590c]:[0x40c057,0x2b8a3e];
+  lamp.material.color.setHex(c[0]); lamp.material.emissive.setHex(c[1]);
+}
+const binWorld=()=>robotG.localToWorld(new THREE.Vector3(0.2,0.5,0));
+
+/* markers */
+const MARK={green:0x2fbf4f,yellow:0xf2b632,red:0xff4d3d};
+function setMarker(f,kind){
+  if(f.marker){field.remove(f.marker)}
+  const b=f.rad*2+0.03, geo=new THREE.EdgesGeometry(new THREE.BoxGeometry(b,b,b)); const mat=new THREE.LineBasicMaterial({color:MARK[kind]});
+  disposables.push(geo,mat);
+  const m=new THREE.LineSegments(geo,mat); m.position.set(f.x,f.cy,f.side*0.69); field.add(m); f.marker=m;
+}
+function clearMarker(f){if(f.marker){field.remove(f.marker);f.marker=null}}
+
+/* ---------- harvest task ---------- */
+const D={extend:0.55,grip:0.3,retract:0.55,drop:0.45};
+const ORDER=['extend','grip','retract','drop'];
+function startHarvest(f){robot.busy=true;robot.task={phase:'extend',t:0,fruit:f,target:f?Math.abs(f.g.position.z)-0.12:0.5,attached:false}}
+function cancelTask(){const T=robot.task;if(T&&T.fruit&&T.attached&&T.fruit.g.parent)T.fruit.g.parent.remove(T.fruit.g);robot.task=null;robot.busy=false;robot.ext=0;robot.grip=0}
+function updateTask(dt){
+  const T=robot.task; if(!T)return; T.t+=dt;
+  const k=Math.min(1,T.t/D[T.phase]), e=k*k*(3-2*k);
+  if(T.phase==='extend')robot.ext=T.target*e;
+  else if(T.phase==='grip'){robot.grip=e; if(k>=1&&T.fruit&&!T.attached){T.attached=true;T.fruit.picked=true;clearMarker(T.fruit);syncRobot();gripper.updateMatrixWorld(true);gripper.attach(T.fruit.g)}}
+  else if(T.phase==='retract')robot.ext=T.target*(1-e);
+  else if(T.phase==='drop'){
+    if(T.fruit){if(!T.from){scene.attach(T.fruit.g);T.from=T.fruit.g.position.clone()} T.fruit.g.position.lerpVectors(T.from,binWorld(),e)}
+    robot.grip=1-e;
+  }
+  if(k>=1){
+    const i=ORDER.indexOf(T.phase);
+    if(T.phase==='grip'&&!T.fruit){T.phase='retract';T.t=0;return}
+    if(i<ORDER.length-1){T.phase=ORDER[i+1];T.t=0}
+    else finishHarvest(T);
+  }
+}
+function finishHarvest(T){
+  robot.task=null;robot.busy=false;robot.ext=0;robot.grip=0;
+  const f=T.fruit;
+  if(!f){stats.whiff++;addLog('空振り：届く範囲に果実がない');toast('空振り：ハンドが届く範囲に果実がありません');updateStats();return}
+  f.g.visible=false; stats.bin++;
+  const pc=Math.round(f.col*100);
+  if(f.ripe){stats.good++;addLog(`収穫 着色 ${pc}%（適期）`)}
+  else{stats.bad++;addLog(`誤収穫 着色 ${pc}%（未熟）`);if(mode==='remote')toast(`未熟果を取りました（着色 ${pc}% ＜ 70%）`)}
+  updateStats();
+}
+function reachable(){
+  let best=null,bd=1e9;
+  for(const f of fruits){if(f.picked||f.side!==robot.side)continue;
+    const dx=Math.abs(f.x-robot.x),dy=Math.abs(f.cy-robot.h);
+    if(dx<REACH&&dy<REACH&&dx+dy<bd){bd=dx+dy;best=f}}
+  return best;
+}
+
+/* ---------- remote input with latency ---------- */
+const held={left:0,right:0,up:0,down:0}, applied={left:0,right:0,up:0,down:0};
+const queue=[];
+function push(type,val){queue.push({t:performance.now(),type,val})}
+function setHeld(k,v){if(held[k]===v)return;held[k]=v;push('held',{...held})}
+function drainQueue(now){
+  while(queue.length&&now-queue[0].t>=latency){
+    const c=queue.shift();
+    if(mode!=='remote')continue;
+    if(c.type==='held')Object.assign(applied,c.val);
+    else if(c.type==='side'){if(!robot.busy)robot.side=c.val}
+    else if(c.type==='harvest'){if(!robot.busy)startHarvest(reachable())}
+  }
+}
+function setSide(s){$('#sideA').setAttribute('aria-pressed',s>0);$('#sideB').setAttribute('aria-pressed',s<0);push('side',s);sideWanted=s}
+let sideWanted=1;
+$('#sideA').onclick=()=>setSide(1); $('#sideB').onclick=()=>setSide(-1);
+$('#harvestBtn').onclick=()=>{if(mode==='remote')push('harvest')};
+document.querySelectorAll('.hold').forEach(b=>{
+  const k=b.dataset.k;
+  b.addEventListener('pointerdown',e=>{e.preventDefault();b.setPointerCapture(e.pointerId);setHeld(k,1)});
+  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>setHeld(k,0)));
+  b.addEventListener('contextmenu',e=>e.preventDefault());
+});
+const KEYMAP={KeyA:'left',ArrowLeft:'left',KeyD:'right',ArrowRight:'right',KeyW:'up',ArrowUp:'up',KeyS:'down',ArrowDown:'down'};
+function isField(t){return t&&(t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA')}
+window.addEventListener('keydown',e=>{
+  if(isField(e.target)||mode!=='remote')return;
+  if(KEYMAP[e.code]){e.preventDefault();setHeld(KEYMAP[e.code],1)}
+  else if(e.code==='Space'&&!e.repeat){if(e.target&&e.target.tagName==='BUTTON')return;e.preventDefault();push('harvest')}
+  else if(e.code==='KeyQ'&&!e.repeat)setSide(-sideWanted);
+});
+window.addEventListener('keyup',e=>{if(KEYMAP[e.code])setHeld(KEYMAP[e.code],0)});
+window.addEventListener('blur',()=>Object.keys(held).forEach(k=>setHeld(k,0)));
+
+/* ---------- AI ---------- */
+function startAI(){
+  if(robot.busy)return;
+  ai.running=true;ai.pending=[];ai.goal=null;
+  fruits.forEach(f=>{f.seen=f.picked||f.x<robot.x-0.02});
+  $('#aiStart').textContent='停止';
+  addLog(`AI走行開始（τ=${tau.toFixed(2)}）`);
+}
+function stopAI(log=true){
+  if(!ai.running)return; ai.running=false;ai.pending=[];ai.goal=null;
+  $('#aiStart').textContent='自動収穫を開始'; if(log)addLog('AI走行停止');
+}
+function updateAI(dt){
+  if(!ai.running||robot.busy)return;
+  const sp=dt*spd;
+  if(ai.goal){
+    const g=ai.goal; robot.side=g.fruit.side;
+    robot.h+=step(g.h-robot.h,0.7*sp); robot.x+=step(g.x-robot.x,0.5*sp);
+    if(Math.abs(g.h-robot.h)<1e-3&&Math.abs(g.x-robot.x)<1e-3){ai.goal=null;startHarvest(g.fruit)}
+    return;
+  }
+  if(ai.pending.length){const f=ai.pending.shift();if(!f.picked)ai.goal={fruit:f,x:f.x,h:f.cy};return}
+  robot.h+=step(1.2-robot.h,0.5*sp);
+  const nx=Math.min(L-0.3,robot.x+0.35*sp);
+  for(const f of fruits){
+    if(f.seen||f.picked||f.x>nx)continue;
+    f.seen=true;
+    if(detect(f.occ,Math.random)>=tau){
+      if(estimate(f.col,f.occ,Math.random)>=RIPE){setMarker(f,'green');ai.pending.push(f)}
+      else setMarker(f,'yellow');
+    }
+  }
+  robot.x=nx;
+  if(nx>=L-0.3&&!ai.pending.length){stopAI(false);addLog('ハウス端に到着');check()}
+}
+$('#aiStart').onclick=()=>{ai.running?stopAI():startAI()};
+
+/* ---------- answer check & records ---------- */
+function check(){
+  if(ai.running)stopAI(false);
+  let miss=0; fruits.forEach(f=>{if(!f.picked&&f.ripe){miss++;setMarker(f,'red')}});
+  stats.missed=miss; updateStats();
+  const spf=stats.good?stats.active/stats.good:null;
+  records.push({mode:mode==='ai'?'AI':'人（遠隔）',occ:occLevel,cond:mode==='ai'?`τ=${tau.toFixed(2)}・×${spd}`:`遅延 ${latency} ms`,good:stats.good,bad:stats.bad,miss,spf});
+  renderRecords();
+  addLog(`答え合わせ：取り残し ${miss} 本（赤枠）`);
+  toast(`取り残し ${miss} 本。次のラウンドは「圃場をつくり直す」から`);
+}
+$('#checkBtn').onclick=check;
+function renderRecords(){
+  $('#recEmpty').hidden=records.length>0;
+  $('#recBody').innerHTML=records.map((r,i)=>`<tr><td>${i+1}</td><td style="font-family:var(--f-body)">${r.mode}</td><td>${Math.round(r.occ*100)}%</td><td style="font-family:var(--f-body)">${r.cond}</td><td>${r.good}</td><td>${r.bad}</td><td>${r.miss}</td><td>${r.spf==null?'—':r.spf.toFixed(1)}</td></tr>`).join('');
+}
+
+/* ---------- UI bits ---------- */
+const logEl=$('#log');
+function addLog(s){const t=stats.active;const li=document.createElement('li');li.innerHTML=`<span class="t">${t.toFixed(1).padStart(5,' ')}s</span>${s}`;logEl.prepend(li);while(logEl.children.length>30)logEl.lastChild.remove()}
+function updateStats(){
+  $('#sGood').textContent=stats.good; $('#sBad').textContent=stats.bad;
+  $('#sMiss').textContent=stats.missed==null?'—':stats.missed;
+  $('#sSpf').textContent=stats.good?(stats.active/stats.good).toFixed(1):'—';
+}
+let toastTimer=0;
+function toast(s){const t=$('#toast');t.textContent=s;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.hidden=true,2600)}
+
+function selectTab(m){
+  mode=m; const r=m==='remote';
+  $('#tabRemote').setAttribute('aria-selected',r); $('#tabAi').setAttribute('aria-selected',!r);
+  $('#paneRemote').hidden=!r; $('#paneAi').hidden=r;
+  if(r)stopAI(); Object.keys(applied).forEach(k=>applied[k]=0); queue.length=0;
+  $('#modeChip').textContent=r?'遠隔操作':'AI自動'; $('#modeChip').classList.toggle('ai',!r);
+  $('#pipLat').textContent=r?`遅延 ${latency} ms`:'AI認識中';
+}
+$('#tabRemote').onclick=()=>selectTab('remote'); $('#tabAi').onclick=()=>selectTab('ai');
+
+$('#occ').oninput=e=>{occLevel=+e.target.value;$('#occOut').textContent=Math.round(occLevel*100)+'%';drawCharts()};
+$('#occ').onchange=()=>{buildField();toast('葉の量を変えて圃場をつくり直しました')};
+$('#seed').onchange=e=>{seed=clamp(Math.round(+e.target.value)||1,1,9999);e.target.value=seed;buildField();drawCharts()};
+$('#resetField').onclick=()=>{robot.x=1.2;robot.h=1.0;buildField()};
+$('#lat').oninput=e=>{latency=+e.target.value;$('#latOut').textContent=latency+' ms';if(mode==='remote')$('#pipLat').textContent=`遅延 ${latency} ms`};
+$('#tau').oninput=e=>{tau=+e.target.value;$('#tauOut').textContent=tau.toFixed(2);drawCharts()};
+$('#spd').onchange=e=>spd=+e.target.value;
+$('#cMiss').oninput=drawCharts; $('#cFalse').oninput=drawCharts;
+$('#applyTau').onclick=()=>{tau=bestTau;$('#tau').value=tau;$('#tauOut').textContent=tau.toFixed(2);selectTab('ai');drawCharts();toast(`AIのしきい値を τ=${tau.toFixed(2)} にしました`)};
+
+/* ---------- camera orbit ---------- */
+const orbit={theta:-2.35,phi:1.12,r:4.2,target:new THREE.Vector3(1.2,1,0),follow:true};
+const canvas=renderer.domElement, ptrs=new Map(); let pinch0=0,r0=0;
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y);r0=orbit.r}});
+canvas.addEventListener('pointermove',e=>{
+  const p=ptrs.get(e.pointerId); if(!p)return;
+  if(ptrs.size===1){orbit.theta+=(e.clientX-p.x)*0.006;orbit.phi=clamp(orbit.phi-(e.clientY-p.y)*0.005,0.2,1.5)}
+  p.x=e.clientX;p.y=e.clientY;
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0)orbit.r=clamp(r0*pinch0/d,1.4,20)}
+});
+['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{ptrs.delete(e.pointerId);pinch0=0}));
+canvas.addEventListener('wheel',e=>{e.preventDefault();orbit.r=clamp(orbit.r*(1+e.deltaY*0.001),1.4,20)},{passive:false});
+function camMode(follow){orbit.follow=follow;$('#camFollow').setAttribute('aria-pressed',follow);$('#camOver').setAttribute('aria-pressed',!follow);
+  if(follow){orbit.r=4.2;orbit.phi=1.12}else{orbit.r=13;orbit.phi=0.85;orbit.target.set(L/2,0.8,0)}}
+$('#camFollow').onclick=()=>camMode(true); $('#camOver').onclick=()=>camMode(false);
+
+/* ---------- layout ---------- */
+let pip={x:0,y:0,w:200,h:150}, W=1, H=1;
+function layout(){
+  W=stage.clientWidth;H=stage.clientHeight; renderer.setSize(W,H,false);
+  cam.aspect=W/H;cam.updateProjectionMatrix();
+  let pw=Math.round(Math.min(Math.max(150,W*0.34),W-24)),ph=Math.round(pw*0.75);
+  if(ph>H*0.45){ph=Math.round(H*0.45);pw=Math.round(ph/0.75)}
+  pip={x:W-pw-12,y:H-ph-12,w:pw,h:ph};
+  const el=$('#pip');Object.assign(el.style,{left:pip.x+'px',top:pip.y+'px',width:pw+'px',height:ph+'px'});
+  pipCam.aspect=pw/ph;pipCam.updateProjectionMatrix();
+  const d=0.69-0.16, frac=2*REACH/(2*d*Math.tan(THREE.MathUtils.degToRad(pipCam.fov/2)));
+  const s=Math.round(frac*ph);Object.assign($('#reticle').style,{width:s+'px',height:s+'px',left:(pw-s)/2+'px',top:(ph-s)/2+'px'});
+}
+new ResizeObserver(layout).observe(stage); layout();
+
+/* ---------- loop ---------- */
+let last=performance.now();
+const reticle=$('#reticle'), posText=$('#posText');
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  drainQueue(now);
+  if(mode==='remote'&&!robot.busy){
+    robot.x=clamp(robot.x+(applied.right-applied.left)*0.4*dt,0.3,L-0.3);
+    robot.h=clamp(robot.h+(applied.up-applied.down)*0.3*dt,0.42,1.98);
+  }
+  const working=robot.busy||ai.running||(mode==='remote'&&(applied.left||applied.right||applied.up||applied.down));
+  if(working)stats.active+=dt*(mode==='ai'?spd:1);
+  updateAI(dt);
+  syncRobot();
+  updateTask(dt*(mode==='ai'?spd:1));
+  syncRobot();
+  if(orbit.follow)orbit.target.lerp(new THREE.Vector3(robot.x,1.0,0),Math.min(1,dt*4));
+  const t=orbit.target;
+  cam.position.set(t.x+orbit.r*Math.sin(orbit.phi)*Math.cos(orbit.theta),t.y+orbit.r*Math.cos(orbit.phi),t.z+orbit.r*Math.sin(orbit.phi)*Math.sin(orbit.theta));
+  cam.lookAt(t);
+  pipCam.position.set(robot.x,robot.h+0.02,robot.side*0.16);
+  pipCam.lookAt(robot.x,robot.h,robot.side*1.3);
+  reticle.classList.toggle('lock',mode==='remote'&&!robot.busy&&!!reachable());
+  posText.textContent=`x ${robot.x.toFixed(2)} m・高さ ${robot.h.toFixed(2)} m・${robot.side>0?'A':'B'}列・収穫箱 ${stats.bin} 本`;
+  renderer.setScissorTest(false); renderer.setViewport(0,0,W,H); renderer.render(scene,cam);
+  renderer.setScissorTest(true); const vy=H-pip.y-pip.h;
+  renderer.setViewport(pip.x,vy,pip.w,pip.h); renderer.setScissor(pip.x,vy,pip.w,pip.h); renderer.render(scene,pipCam);
+  renderer.setScissorTest(false);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- 探究ノート: charts ---------- */
+function simulate(o,t,n,r){
+  let TP=0,FP=0,FN=0,TN=0;
+  for(let i=0;i<n;i++){
+    const col=r(), ripe=col>=RIPE, occ=Math.min(0.95,o*(0.4+r()*1.2));
+    let pick=false; if(detect(occ,r)>=t)pick=estimate(col,occ,r)>=RIPE;
+    if(ripe&&pick)TP++;else if(ripe)FN++;else if(pick)FP++;else TN++;
+  }
+  return {TP,FP,FN,TN,recall:TP/Math.max(1,TP+FN),fpr:FP/Math.max(1,FP+TN)};
+}
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function prep(cv){const dpr=Math.min(window.devicePixelRatio||1,2),w=cv.clientWidth,h=cv.clientHeight;cv.width=w*dpr;cv.height=h*dpr;const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);return {c,w,h}}
+function axes(c,w,h,{x0,x1,y1,xt,yt,xf,yf,xl,yl}){
+  const P={l:44,r:10,t:10,b:34}, X=v=>P.l+(v-x0)/(x1-x0)*(w-P.l-P.r), Y=v=>h-P.b-v/y1*(h-P.t-P.b);
+  c.font='11px "IBM Plex Mono", monospace'; c.lineWidth=1;
+  yt.forEach(v=>{c.strokeStyle=css('--line');c.beginPath();c.moveTo(P.l,Y(v)+.5);c.lineTo(w-P.r,Y(v)+.5);c.stroke();c.fillStyle=css('--muted');c.textAlign='right';c.textBaseline='middle';c.fillText(yf(v),P.l-6,Y(v))});
+  xt.forEach(v=>{c.fillStyle=css('--muted');c.textAlign='center';c.textBaseline='top';c.fillText(xf(v),X(v),h-P.b+5)});
+  c.font='11px "Zen Kaku Gothic New", sans-serif';c.textAlign='right';c.fillText(xl,w-P.r,h-13);
+  c.save();c.textAlign='left';c.textBaseline='top';c.fillText(yl,P.l+4,P.t);c.restore();
+  return {X,Y};
+}
+function line(c,X,Y,xs,ys,color,wd=2){c.strokeStyle=color;c.lineWidth=wd;c.beginPath();xs.forEach((x,i)=>i?c.lineTo(X(x),Y(ys[i])):c.moveTo(X(x),Y(ys[i])));c.stroke();
+  xs.forEach((x,i)=>{c.fillStyle=color;c.beginPath();c.arc(X(x),Y(ys[i]),2.5,0,7);c.fill()})}
+function vline(c,X,Y,x,y1,color){c.save();c.setLineDash([4,4]);c.strokeStyle=color;c.lineWidth=1.5;c.beginPath();c.moveTo(X(x),Y(0));c.lineTo(X(x),Y(y1));c.stroke();c.restore()}
+let bestTau=0.55;
+function drawCharts(){
+  const os=[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8];
+  const res=os.map(o=>simulate(o,tau,3000,mulberry32(seed*31+Math.round(o*100))));
+  {const {c,w,h}=prep($('#chart1'));
+   const {X,Y}=axes(c,w,h,{x0:0,x1:0.8,y1:1,xt:[0,0.2,0.4,0.6,0.8],yt:[0,0.25,0.5,0.75,1],xf:v=>Math.round(v*100)+'%',yf:v=>Math.round(v*100)+'%',xl:'葉の遮蔽率',yl:''});
+   vline(c,X,Y,occLevel,1,css('--accent'));
+   line(c,X,Y,os,res.map(r=>r.recall),css('--ok')); line(c,X,Y,os,res.map(r=>r.fpr),css('--bad'));}
+  const cur=simulate(occLevel,tau,4000,mulberry32(seed*7+1));
+  $('#c1text').textContent=`τ = ${tau.toFixed(2)}・遮蔽率 ${Math.round(occLevel*100)}% のとき、適期果の ${Math.round(cur.recall*100)}% を収穫し、未熟果の ${(cur.fpr*100).toFixed(1)}% を誤って収穫する見込み。`;
+  const cm=Math.max(0,+$('#cMiss').value||0), cf=Math.max(0,+$('#cFalse').value||0);
+  const ts=[];for(let t=0.3;t<=0.9001;t+=0.05)ts.push(+t.toFixed(2));
+  const loss=ts.map(t=>{const r=simulate(occLevel,t,4000,mulberry32(seed*7+1));return (r.FN*cm+r.FP*cf)/4000*100});
+  let bi=0;loss.forEach((v,i)=>{if(v<loss[bi])bi=i}); bestTau=ts[bi];
+  const ymax=Math.max(10,...loss)*1.1, nice=Math.pow(10,Math.floor(Math.log10(ymax))), yTop=Math.ceil(ymax/nice)*nice;
+  const yt=[0,yTop/4,yTop/2,yTop*3/4,yTop];
+  {const {c,w,h}=prep($('#chart2'));
+   const {X,Y}=axes(c,w,h,{x0:0.3,x1:0.9,y1:yTop,xt:[0.3,0.45,0.6,0.75,0.9],yt,xf:v=>v.toFixed(2),yf:v=>Math.round(v)+'',xl:'しきい値 τ',yl:'円／100本'});
+   vline(c,X,Y,tau,yTop,css('--muted'));
+   line(c,X,Y,ts,loss,css('--accent'));
+   c.strokeStyle=css('--ink');c.lineWidth=2;c.beginPath();c.arc(X(bestTau),Y(loss[bi]),6,0,7);c.stroke();}
+  const curLoss=loss[ts.indexOf(+tau.toFixed(2))];
+  $('#verdict').innerHTML=`遮蔽率 ${Math.round(occLevel*100)}% のこの圃場では <b>τ = ${bestTau.toFixed(2)}</b> で損失が最小（100本あたり約 ${Math.round(loss[bi])} 円）。いまの τ = ${tau.toFixed(2)} では約 ${curLoss==null?'—':Math.round(curLoss)} 円。`;
+}
+new ResizeObserver(()=>drawCharts()).observe($('#chart1'));
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',drawCharts)}catch(e){}
+new MutationObserver(drawCharts).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- CSV ---------- */
+$('#copyCsv').onclick=()=>{
+  const head='round,mode,occlusion,condition,good,immature_picked,missed,sec_per_fruit';
+  const csv=[head,...records.map((r,i)=>[i+1,r.mode,r.occ,`"${r.cond}"`,r.good,r.bad,r.miss,r.spf==null?'':r.spf.toFixed(2)].join(','))].join('\n');
+  const ta=$('#csvOut');
+  const fallback=()=>{ta.hidden=false;ta.value=csv;ta.focus();ta.select();toast('コピーできなかったので、下の欄を選択しました')};
+  try{navigator.clipboard.writeText(csv).then(()=>toast(`CSVをコピーしました（${records.length} ラウンド）`),fallback)}catch(e){fallback()}
+};
+
+/* ---------- boot ---------- */
+buildField(); selectTab('remote'); drawCharts(); renderRecords();
+requestAnimationFrame(t=>{last=t;frame(t)});
+})();
+</script>
+
+</body></html>
