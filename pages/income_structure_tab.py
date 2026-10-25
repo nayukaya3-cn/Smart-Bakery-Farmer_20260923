@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import chaos_hedge as ch
+
 
 # ───────────────────────── 計算 ─────────────────────────
 def simulate(p: dict, horizon: int = 10) -> pd.DataFrame:
@@ -146,6 +148,59 @@ def render_income_structure_tab():
 
     st.caption("ヒント: 下落率を0%にしても B が A を上回るか、"
                "導入ペースを0.5に落としても黒字化するか、を試すと頑健性が分かります。")
+
+    render_chaos_hedge(df)
+
+
+# ─────────────── D カオスヘッジ（インフレ下の実質値） ───────────────
+def render_chaos_hedge(df: pd.DataFrame) -> None:
+    """A・B・C を物価で割り戻し、悪性インフレで「どの柱が床を支えるか」を見る。"""
+    st.divider()
+    st.subheader("🛡️ D カオスヘッジ：インフレ下の実質値")
+    st.caption("名目の収入が同じでも、物価が上がると買える量は減ります。"
+               "C（自給）は『買わずに済んだ食料』なので、食料価格と一緒に価値が上がります。"
+               "教育用の単純化モデルです（投資助言ではありません）。")
+
+    h1, h2 = st.columns([2, 3])
+    with h1:
+        scen = st.radio("インフレの想定（年率）", list(ch.SCENARIOS), index=1, key="hedge_scen")
+        pi = ch.SCENARIOS[scen]
+        wage_index = st.slider("A コマ給の物価への追随度", 0.0, 1.0, 0.3, 0.1,
+                               help="0＝据え置き、1＝物価と同率で上がる。非常勤のコマ給は改定が遅い")
+        fee_index = st.slider("B 契約単価の追随度", 0.0, 1.0, 0.5, 0.1,
+                              help="年次契約なら毎年の改定で一部追いつく")
+        food_mult = st.slider("食料価格の上昇（全体の何倍か）", 0.5, 2.0, 1.3, 0.1,
+                              help="供給ショック時は食料・燃料が先に上がりやすい")
+    real = ch.real_income(df, pi, wage_index, fee_index, food_mult)
+    with h2:
+        st.line_chart(real.set_index("年")[["A 時間売り（実質）", "B 型化（実質）", "C 自給（実質）"]])
+
+    last = real.iloc[-1]
+    m1, m2, m3 = st.columns(3)
+    m1.metric("最終年の合計（実質）", f"{last['合計（実質）']:,.0f} 円",
+              f"名目 {last['合計（名目）']:,.0f} 円")
+    m2.metric("C 自給の比重（最終年）", f"{last['C の比重']:.0%}",
+              f"{(last['C の比重'] - real['C の比重'].iloc[1 if len(real) > 1 else 0]) * 100:+.0f} pt")
+    weakest = min(["A 時間売り（実質）", "B 型化（実質）"], key=lambda c: last[c] - real[c].max())
+    m3.metric("いちばん目減りする柱", weakest.split("（")[0])
+
+    with st.expander("3段の行動原則（作る → 売る → 換える）"):
+        st.markdown(
+            "| 段 | すること | このアプリで見る場所 |\n|---|---|---|\n"
+            "| ① 作る | 主食と野菜を自給し、市場に依存しない部分を増やす | 上の「C 自給」 |\n"
+            "| ② 売る | 余りだけを売って流動性（現金）を得る | 自給家計簿の「② 余りを売る」 |\n"
+            "| ③ 換える | 現金は寝かせず、種・資材・道具・土地・技能・信頼に換える | 自給家計簿の「③ 実物に換える」 |\n\n"
+            "先行事例：1990年代ロシアの家庭菜園（ダーチャ）は、売って儲ける装置ではなく"
+            "『買わずに済ませる』保険として家計の底割れを防ぎました（Seeth et al. 1998; Pallot & Nefedova 2007）。"
+            "戦後日本でも、預金封鎖と新円切替（1946年）で現金は目減りし、残ったのは土地と実物でした。"
+        )
+    floor_ok = st.checkbox("④ 悪性インフレ（年50%）でも、C（自給）＋現金の床で最低限の暮らしが回る",
+                           key="hedge_floor")
+    if floor_ok:
+        st.success("D の床があります。B（型化）の挑戦は、この床の上で進めましょう。")
+    else:
+        st.info("想定を『悪性インフレ』に切り替えて、合計（実質）がどこまで下がるかを確かめてください。"
+                "下がりすぎるなら、A を増やすより C を育てるほうが効きます。")
 
 
 if __name__ == "__main__":
