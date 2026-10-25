@@ -11,24 +11,29 @@
   ① 現象を計算する → ② 数値を可視化する → ③ 自分の条件で判断する
 に、横軸として「得意だと思えるか・使う仕事が想像できるか」（自己効力感と将来像）を足す。
 
+実験では「安全」が最優先。「🛡️ 安全が最優先」タブ（小学校・中学校・高校）を各単元の前に置き、
+安全管理そのものも量の計算（指定数量の倍数・薄めた後の濃度）として3段構えで扱う（計算は rika_anzen.py）。
+
 方針
   - 計算は chugaku_rika.py（`python chugaku_rika.py` で自己チェック）。
   - 初期表示の数値は一般的な目安と架空データ（実測ではありません）。
   - 入力はセッション内だけで使い、サーバーには残さない。生徒の氏名は扱わない。
 """
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
 import chugaku_rika as cr
+import rika_anzen as ra
 import security_guard as sg
 
 st.set_page_config(page_title="中学理科 量の計算", page_icon="🧪", layout="wide")
 
 import social as sn  # noqa: E402  SNSのURLは social.py で一括管理
 
-UPDATED = "2026-10-14"
+UPDATED = "2026-10-26"
 TIMSS_URL = "https://www.nippon.com/ja/japan-data/h02233/"
 MEXT_TIMSS_URL = "https://www.mext.go.jp/content/20241223-mxt_chousa02-000039290-9.pdf"
 HULLEMAN_URL = "https://sparq.stanford.edu/sites/g/files/sbiybj19021/files/media/file/hulleman_harackiewicz_2009_-_promoting_interest_performance_in_high_school_science_classes.pdf"
@@ -47,6 +52,49 @@ def check_box(key: str, question: str, diagnose, *args, unit: str = "", step: fl
             (st.success if ok else st.warning)(msg)
 
 
+SAFETY_BY_UNIT = {  # 各単元の実験で、始める前に必ず確かめること
+    "オームの法則・電力": ("電気", [
+        "濡れた手でプラグ・コンセントに触らない（工房の流しの近くは特に）",
+        "コードリールは巻いたまま使わない（熱がこもる）。束ねたコードも同じ",
+        "タップの定格（A・W）は本体の表示を読む。たこ足で足し算を超えない",
+        "乾電池の＋と−を導線だけでつながない（ショートで発熱）",
+    ]),
+    "質量パーセント濃度": ("薬品・液肥", [
+        "保護眼鏡をかける。塩酸・水酸化ナトリウムなどは原液を生徒が扱わない（薄めるのは先生が準備室で）",
+        "酸を薄めるときは「水に酸を少しずつ」。逆にしない",
+        "液肥・農薬は製品のラベルの倍率・保護具に従う。食品用の容器（ペットボトル等）に移さない",
+        "食塩水でも、なめて確かめない。理科室の器具で飲食しない",
+    ]),
+    "化学変化と質量": ("加熱", [
+        "保護眼鏡、ぬれ雑巾、消火器の場所。燃えやすい物を火のそばに置かない",
+        "試験管の口を少し下げて加熱する（出てきた水が加熱部に流れると割れる）",
+        "火を消す前に、ガラス管を石灰水から抜く（石灰水が逆流して試験管が割れる）",
+        "加熱後の試験管・ガスバーナーの筒は熱い。冷めるまで触らない",
+    ]),
+}
+
+
+def checklist_done() -> tuple[int, int]:
+    """安全タブの「実験の前・中・後」チェックの済み数 / 全数（同じページ内なので共有できる）。"""
+    total = sum(len(v) for v in ra.CHECKLIST.values())
+    done = sum(bool(st.session_state.get(f"safe_{when}_{i}"))
+               for when, items in ra.CHECKLIST.items() for i in range(len(items)))
+    return done, total
+
+
+def safety_strip(unit: str) -> None:
+    """各単元の冒頭：実験の前に必ず確かめること（安全が最優先）。"""
+    kind, rules = SAFETY_BY_UNIT[unit]
+    done, total = checklist_done()
+    with st.container(border=True):
+        st.markdown(f"**🛡️ 始める前に（{kind}）** ─ 実験では安全が最優先")
+        st.markdown("\n".join(f"- {r}" for r in rules))
+        if done < total:
+            st.warning(f"「🛡️ 安全が最優先」タブの実験チェックが {done} / {total}。済ませてから実験に入ります。")
+        else:
+            st.success("実験の前・中・後のチェックは済んでいます。")
+
+
 def deciders(unit: str) -> None:
     """単元の冒頭：この計算で「何を決めている人」がいるか（原則①）。"""
     ms = [m for m in cr.MISSIONS if m["単元"] == unit]
@@ -58,6 +106,7 @@ def deciders(unit: str) -> None:
 with st.sidebar:
     st.header("🧪 中学理科 量の計算")
     st.caption("3つの単元は、どれも「比べる量 = もとにする量 × 割合」。")
+    st.caption("実験の前に「🛡️ 安全が最優先」タブのチェックを済ませる。")
     st.caption("入力はページを閉じると消えます。残したい記録はCSVで保存してください。")
     st.divider()
     sn.buttons("で相談する", stacked=True)
@@ -65,8 +114,8 @@ with st.sidebar:
 st.title("🧪 中学理科「量の計算」── パン工房と畑で使う")
 st.caption("① 現象を計算する → ② 数値を可視化する → ③ 自分の条件で判断する　＋　横軸：使う仕事が想像できるか")
 
-tab_flow, tab_a, tab_b, tab_c, tab_x = st.tabs([
-    "🧭 なぜ中学でつまずくか", *UNITS, "🌱 横軸：使う仕事が想像できる",
+tab_flow, tab_safe, tab_a, tab_b, tab_c, tab_x = st.tabs([
+    "🧭 なぜ中学でつまずくか", "🛡️ 安全が最優先（小・中・高）", *UNITS, "🌱 横軸：使う仕事が想像できる",
 ])
 
 # ═════════════════════════════════════════════
@@ -89,20 +138,159 @@ with tab_flow:
 
     st.subheader("1単元あたりの流れ（50分の例）")
     st.dataframe(pd.DataFrame([
+        ("授業の前", "🛡️ 安全を確かめる", "予備実験・器具の点検・換気・消火の用意。安全タブの「実験の前」チェック"),
         ("0–10分", "パン工房・畑の場面から問いを立てる", "例：オーブンと発酵器を同じタップにつないでいい？"),
         ("10–25分", "① 現象を計算する", "式に入れる前に「もとにする量」を指でさす"),
         ("25–35分", "② 数値を可視化する", "グラフの傾きが「割合 a」だと確かめる"),
         ("35–45分", "③ 自分の条件で判断する", "自分の家・畑の数値を入れて決める。答えは人によって違う"),
         ("45–50分", "横軸：使う仕事", "仕事ミッションを1つ解き、「自分の言葉でつなぐ」を書く。前後の自己評価を記録"),
     ], columns=["時間", "段", "ポイント"]), width="stretch", hide_index=True)
+    st.warning("**実験では安全が最優先。** どの単元も、実験に入る前に「🛡️ 安全が最優先」タブのチェックを済ませます。"
+               "安全管理も「量の計算」でできています（指定数量の倍数＝保管量÷指定数量、薄めた後の濃度＝質量パーセント濃度）。")
     st.caption("※ 計算は教育用に単純化しています。電気機器は本体の表示、肥料は製品の説明書、"
                "食品は衛生上の基準に必ず従ってください。")
+
+# ═════════════════════════════════════════════
+# 🛡️ 安全が最優先（小学校・中学校・高校）
+# ═════════════════════════════════════════════
+with tab_safe:
+    st.header("🛡️ 理科室の安全管理・安全指導 ─ 実験では安全が最優先")
+    st.write("事故の多くは、払うべき注意を怠ったときや後始末が雑なときに起きます。"
+             "予想できる危険は数値と手順で先に消し、予想できない危険（地震など）は被害を小さくしておく。"
+             "その中身は、じつは **量の計算** です。")
+    st.info(ra.LICENSE_NOTE)
+    level = st.radio("学校段階", ra.LEVELS, index=1, horizontal=True, key="safe_level")
+
+    st.subheader(f"{level}で使う主な薬品と、法の区分")
+    st.dataframe(ra.chemicals_for(level), width="stretch", hide_index=True)
+    st.caption("劇物＝毒物及び劇物取締法（施錠・「医薬用外劇物」の表示）。消防法＝危険物（指定数量・火気厳禁）。"
+               "石灰水・アルカリ性の薬品は劇物でなくても、劇物と同じ棚・同じ扱いにすると安全です。")
+
+    # ── ① 計算する ──
+    st.subheader("① 現象を計算する")
+    s1, s2 = st.columns(2)
+    with s1, st.container(border=True):
+        st.markdown("**🔥 指定数量の倍数：この部屋に、どれだけ置いていい？**")
+        st.caption("倍数 = （品Aの量 ÷ 品Aの指定数量）＋（品Bの量 ÷ 品Bの指定数量）＋ …　"
+                   "もとにする量（分母）は指定数量。保管量の初期値は架空です。")
+        place = st.selectbox("場所", list(ra.PRESETS), index=ra.LEVELS.index(level), key="inv_place")
+        inv = st.data_editor(
+            ra.preset_inventory(place), key=f"inv_ed_{place}", num_rows="dynamic", width="stretch",
+            column_config={
+                "品名": st.column_config.SelectboxColumn("品名", options=list(ra.DESIGNATED), required=True),
+                "保管量": st.column_config.NumberColumn("保管量（L または kg）", min_value=0.0, step=0.5),
+            })
+        res = ra.designated_multiple(inv)
+        st.dataframe(res["table"].style.format({"保管量": "{:g}", "倍数": "{:.4f}"}),
+                     width="stretch", hide_index=True)
+        st.metric("指定数量の倍数（合計）", f"{res['total']:.3f}")
+        {"許可": st.error, "届出": st.warning, "条例の基準": st.success}[res["status"]](ra.STATUS_TEXT[res["status"]])
+    with s2, st.container(border=True):
+        st.markdown("**🧪 薄めたあとも劇物？（質量パーセント濃度）**")
+        st.caption("分母は溶液全体。原液と水を体積で混ぜたときの濃度を、密度を使って質量％に直します。")
+        stock = st.selectbox("原液", list(ra.STOCK), key="dil_stock")
+        pct0, rho, mm, line = ra.STOCK[stock]
+        d1, d2 = st.columns(2)
+        st_ml = d1.number_input("原液 [mL]", 1.0, 1000.0, 10.0, 1.0, key="dil_ml")
+        wt_ml = d2.number_input("水 [mL]", 0.0, 10000.0, 50.0, 5.0, key="dil_w")
+        after = ra.diluted_percent_by_volume(stock, st_ml, wt_ml)
+        g1, g2 = st.columns(2)
+        g1.metric("薄めたあとの濃度", f"{after:.2f} %", f"劇物の線 {line:g}%", delta_color="off")
+        if level == "高校":
+            g2.metric("モル濃度（化学基礎）", f"{ra.molarity(after, 1.0 + (rho - 1) * after / pct0, mm):.2f} mol/L")
+            st.caption("密度は原液と水の間を濃度で比例配分した近似値です。")
+        if ra.is_gekibutsu(stock, after):
+            st.error(f"まだ **劇物** です。容器に「医薬用外劇物」を表示し、施錠して保管します。")
+        else:
+            st.success("劇物の線より下です。それでも目・皮膚には有害なので、保護眼鏡は外しません。")
+        st.caption(f"体積で 水 : 原液 = {ra.max_water_ratio_still_gekibutsu(stock):.1f} : 1 までは、まだ劇物。"
+                   "「水に原液を少しずつ」加えます（逆は発熱して飛び散る。濃硫酸は特に危険）。")
+    check_box("chk_mult", "灯油 200 L とガソリン 40 L を同じ小屋に置く。指定数量の倍数は？（灯油 1000 L・ガソリン 200 L）",
+              ra.diagnose_multiple,
+              pd.DataFrame([("灯油", 200), ("ガソリン（草刈機・発電機）", 40)], columns=ra.INV_COLS),
+              unit="倍", step=0.01)
+
+    # ── ② 可視化する ──
+    st.subheader("② 数値を可視化する")
+    v1, v2 = st.columns(2)
+    with v1:
+        st.caption("倍数を積み上げて、1/5（届出）と 1（許可）の線と比べる。")
+        figm = go.Figure()
+        for _, r in res["table"].iterrows():
+            figm.add_trace(go.Bar(y=["倍数"], x=[r["倍数"]], orientation="h", name=f"{r['品名']} {r['倍数']:.3f}"))
+        figm.add_vline(x=ra.SMALL_QTY_RATIO, line_dash="dot", line_color="#c98a2b", annotation_text="1/5 届出")
+        figm.add_vline(x=1.0, line_dash="dash", line_color=NG, annotation_text="1 許可")
+        figm.update_layout(barmode="stack", height=260, margin=dict(t=30, b=10), legend=dict(font=dict(size=10)),
+                           xaxis=dict(title="指定数量の倍数", range=[0, max(1.1, res["total"] * 1.1)]))
+        st.plotly_chart(figm, width="stretch")
+    with v2:
+        st.caption(f"{stock}に水を足していくと、濃度はどこで劇物の線を下回る？")
+        xs = np.linspace(0, max(10.0, ra.max_water_ratio_still_gekibutsu(stock) * 1.5), 120)
+        curve = pd.DataFrame({"水の体積（原液1に対して）": xs,
+                              "濃度_%": [ra.diluted_percent_by_volume(stock, 1, x) for x in xs]})
+        figd = px.line(curve, x="水の体積（原液1に対して）", y="濃度_%")
+        figd.add_hline(y=line, line_dash="dash", line_color=NG, annotation_text=f"劇物の線 {line:g}%")
+        figd.update_layout(height=260, margin=dict(t=10, b=10), yaxis_title="質量パーセント濃度 [%]")
+        st.plotly_chart(figd, width="stretch")
+
+    st.markdown("**一緒に置いてはいけない組み合わせ**（地震で瓶が割れて混ざると火災・有毒ガス）")
+    h1, h2 = st.columns([1, 1.3])
+    with h1:
+        mm_df = ra.mixing_matrix()
+        figh = go.Figure(go.Heatmap(
+            z=mm_df.values, x=[c[:3] for c in mm_df.columns], y=[c[:3] for c in mm_df.index],
+            text=np.where(mm_df.values == 1, "○", "×"), texttemplate="%{text}",
+            colorscale=[[0, "#f2c4bd"], [1, "#cfe8da"]], showscale=False, hoverinfo="skip"))
+        figh.update_layout(height=300, margin=dict(t=10, b=10), yaxis=dict(autorange="reversed"))
+        st.plotly_chart(figh, width="stretch")
+        st.caption("消防法の危険物の類どうし（危険物の規制に関する規則 別表第四。×は同じ箱・同じ棚に並べない）。"
+                   "第1類・第6類（酸化剤）は、可燃物（第2・4類）から離す。")
+    with h2:
+        st.dataframe(ra.INCOMPATIBLE, width="stretch", hide_index=True, height=300)
+
+    # ── ③ 自分の条件で判断する ──
+    st.subheader("③ 自分の条件で判断する")
+    st.markdown(f"**{level}で、とくに注意する実験**")
+    st.dataframe(pd.DataFrame(ra.DANGER_EXPERIMENTS[level], columns=["単元", "使うもの", "これを守る"]),
+                 width="stretch", hide_index=True)
+
+    st.markdown("**✅ 実験の前・中・後のチェック**（全部済むと、各単元タブの表示が変わります）")
+    c_before, c_during, c_after = st.columns(3)
+    for col, when in zip((c_before, c_during, c_after), ra.CHECKLIST):
+        with col, st.container(border=True):
+            st.markdown(f"**実験の{when}**")
+            for i, item in enumerate(ra.CHECKLIST[when]):
+                st.checkbox(item, key=f"safe_{when}_{i}")
+    done, total = checklist_done()
+    st.progress(done / total, text=f"済み {done} / {total}")
+    log = pd.DataFrame([(level, when, item, "済" if st.session_state.get(f"safe_{when}_{i}") else "未")
+                        for when, items in ra.CHECKLIST.items() for i, item in enumerate(items)],
+                       columns=["学校段階", "時点", "項目", "状態"])
+    st.download_button("チェックの記録をCSVで保存", sg.safe_csv(log), "安全チェック.csv", "text/csv")
+
+    with st.expander("🔐 薬品の保管（施錠・表示・分類・転倒防止・台帳）"):
+        st.dataframe(ra.STORAGE_RULES, width="stretch", hide_index=True)
+        st.caption("台帳は液体も固体も「容器ごとの質量」で記録すると、使用量が引き算で出せます（これも量の計算）。"
+                   "廃液は流しに捨てず、酸・アルカリ・金属を含む液に分けて集めます。")
+    with st.expander("🚑 事故が起きたら（応急処置）", expanded=True):
+        st.dataframe(ra.FIRST_AID, width="stretch", hide_index=True)
+        st.markdown("中毒110番（日本中毒情報センター）：" +
+                    "　".join(f"{n} **{t}**" for n, t in ra.POISON_HOTLINES) +
+                    "　／　救急・火災 **119**")
+        st.caption("応急処置のあとは、必要に応じて必ず医師の診断を受けます。")
+    st.text_area("自分の判断：自分の理科室・工房・農機具小屋で、まず何を変える？　理由を数値（倍数・濃度）で",
+                 key="judge_safe")
+    st.caption("出典：宮城県総合教育センター「小学校・理科主任のための薬品管理について」（令和8年3月改訂）、"
+               "山形県教育委員会「理科薬品の管理と取扱い」（平成28年12月改訂）、札幌市「理科室の安全管理・安全指導」、"
+               "消防法・危険物の規制に関する政令・同規則、毒物及び劇物取締法。"
+               "実際の届出・保管は所轄の消防署、学校薬剤師、教育委員会の規定に従ってください。")
 
 # ═════════════════════════════════════════════
 # A. オームの法則・電力
 # ═════════════════════════════════════════════
 with tab_a:
     st.header("⚡ オーブンと発酵器、同じタップにつないでいい？")
+    safety_strip("オームの法則・電力")
     deciders("オームの法則・電力")
     st.write(f"家のコンセントは **{cr.VOLTAGE:.0f} V**。1つのタップにつないだ機器は **並列** なので、"
              f"電流は **足し算** になります。テーブルタップの定格は一般に **{cr.TAP_LIMIT_A:.0f} A** です。")
@@ -170,6 +358,7 @@ with tab_a:
 # ═════════════════════════════════════════════
 with tab_b:
     st.header("🧂 パン屋の「塩2%」と、理科の「2%」は同じ？")
+    safety_strip("質量パーセント濃度")
     deciders("質量パーセント濃度")
     st.write("理科の質量パーセント濃度は **溶液全体** が分母。パン屋のベーカーズ％は **粉** が分母。"
              "「何を100とするか」で、同じ材料でも％が変わります。")
@@ -225,6 +414,7 @@ with tab_b:
 # ═════════════════════════════════════════════
 with tab_c:
     st.header("🔥 蒸しパンの重曹は、どこへ行く？")
+    safety_strip("化学変化と質量")
     deciders("化学変化と質量")
     st.write("重曹（炭酸水素ナトリウム）を加熱すると、**炭酸ナトリウム（固体）が残り**、"
              "**二酸化炭素と水蒸気が出ていきます**。出ていく二酸化炭素が生地をふくらませ、"
