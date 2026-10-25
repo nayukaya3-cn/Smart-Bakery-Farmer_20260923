@@ -24,8 +24,19 @@ import security_guard as sg
 st.set_page_config(page_title="ハウス収穫ロボ体験実習", page_icon="🍅", layout="wide")
 
 SIM = Path(__file__).parent.parent / "docs" / "sim" / "harvest_robot_tomato.html"
-SIM_URL = "https://nayukaya3-cn.github.io/Smart-Bakery-Farmer_20260923/sim/harvest_robot_tomato.html"
+# 全画面は「同じページ＋?view=sim」で開く（GitHub Pages を有効にしていなくても動く。
+# Streamlit の静的配信は HTML を text/plain で返すため使えない）
+SIM_URL = "?view=sim"
 MODE_COLORS = {"人（遠隔）": "#c98a2b", "AI": "#2f6db0"}
+
+if st.query_params.get("view") == "sim":
+    st.markdown("**🍅 ハウス収穫ロボ・シミュレーター（全画面）**　"
+                "記録の「CSVをコピー」は、元のタブの「3 ② 可視化する」に貼ってください。")
+    if SIM.exists():
+        st.iframe(SIM, height=2100)  # リポジトリ内の自作ファイルだけを埋め込む
+    else:
+        st.error("シミュレーターのファイルが見つかりません。")
+    st.stop()
 
 st.title("🍅 ハウス収穫ロボで、安全安心な体験実習")
 st.caption("刃も熱も重さもない教室から始め、段階を踏んで実機に近づく。人とAIの収穫を比べ、AIの設定を自分の条件で決める。"
