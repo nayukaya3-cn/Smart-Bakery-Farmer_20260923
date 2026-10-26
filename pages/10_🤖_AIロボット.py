@@ -21,6 +21,12 @@ import streamlit as st
 import media_gallery as mg
 import weeding_lab as wl
 
+# 公開サーバーでは、更新後もページだけ新しく、部品（weeding_lab）が古いまま残ることがある。
+# 新しい部品にしかない名前が見つからなければ、読み直す。
+if not hasattr(wl, "method_params"):
+    import importlib
+    wl = importlib.reload(wl)
+
 ROOT = Path(__file__).parents[1]
 ASSETS = ROOT / "assets"
 WEED_SIM = ROOT / "docs" / "sim" / "weeding_robot.html"
@@ -275,7 +281,7 @@ with T[3]:
                            "ロボット_分": 0, "人_分": 0}), hide_index=True, width="stretch")
     st.caption(f"期待収量＝100×（1−傷んだ小麦の割合）×（1−減収%/100）。人の手は1本 {wl.HAND_SEC:.0f} 秒、"
                f"画面で確かめるのは1本 {wl.CHECK_SEC:.0f} 秒、ロボットは {wl.ROBOT_SPEED} m/s で幅 {wl.SWATH:.0f} m ずつ走る（曲がる時間・充電は含まない）。"
-               f"ハンドは株元の雑草（{wl.INROW_SHARE:.0%}）を抜くとき {wl.METHODS['ハンド（抜き取り）'][1]:.0%} の確率で隣の小麦の根を傷めるとしています。")
+               f"ハンドは株元の雑草（{wl.INROW_SHARE:.0%}）を抜くとき {wl.method_params('ハンド（抜き取り）')[1]:.0%} の確率で隣の小麦の根を傷めるとしています。")
 
 # ═════════════════════ 除草 3 ② 可視化する ═════════════════════
 with T[4]:
