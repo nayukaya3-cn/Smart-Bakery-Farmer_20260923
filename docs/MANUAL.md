@@ -58,6 +58,7 @@ conda create が "Solving environment" のまま長時間止まる場合は、An
 | satellite_lab.py | 探究コーナー「衛星データ解析」の計算（架空の地図・NDVI/NDWI・dB・スペックル・Leeフィルタ・2段階の大津の方法・前後差の浸水検出・ナイーブベイズ／k-means・CFAR船舶検出・乖離指標D・3層の観測のベイズ統合）。`python satellite_lab.py` で自己チェック |
 | jikyu_lab.py | 探究コーナー「自給と防災の畑」の計算（畑の配分4案の比較・月別の調達経路・停電断水の日ごとの水と薪・実測CSVでの係数置き換え・自給家計簿と収入構造への連動）。`python jikyu_lab.py` で自己チェック |
 | harvest_lab.py | 探究コーナー「ハウス収穫ロボ体験実習」の計算（安全の段階のリスク点・遅延のずれと人との距離・検出と着色度推定のモデル・記録CSVの読み込みと人／AIの比較（ベイズ）・τ の期待損失・授業の流れ・実機への点検）。シミュレーター本体は `docs/sim/harvest_robot_tomato.html`。`python harvest_lab.py` で自己チェック |
+| weeding_lab.py | 学校向けの探究「AIロボット」の除草タブの計算（信号検出理論での雑草／小麦の見分け・ROC・Cousens（1985）の減収モデル・機械とレーザーの比較・人の手／AIだけ／AI＋人（グレーゾーン）の作業時間と期待収量・記録CSVの比較（ベイズ）・安全の段階・授業の流れ・実機への点検・ROS2の仕分け役）。シミュレーター本体は `docs/sim/weeding_robot.html`。`python weeding_lab.py` で自己チェック |
 | compare_lab.py | 比べて確かめる探究の計算（くじ・列単位の比較・並べ替え検定・ブートストラップ・差の差） |
 | docs/ | 表紙ページ（GitHub Pages）、研究メモ、画面の写真（`docs/img/`） |
 | media_gallery.py | 画像・動画・PDF・テキスト・ノートブックの表示部品、Colab リンク |
