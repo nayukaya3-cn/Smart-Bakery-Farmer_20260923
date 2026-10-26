@@ -62,7 +62,7 @@ def school_box(title: str, steps: list[tuple[str, str]], subjects: list[tuple[st
         with l2:
             safe_page_link(page_path("3"), "比べて確かめる探究（くじで分けて測る）", "⚖️")
 
-st.set_page_config(page_title="AIロボット", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="AIロボット（畑を見回る・雑草を取るシミュレーター体験）", page_icon="🤖", layout="wide")
 
 if st.query_params.get("view") == "weedsim":
     st.markdown("**🌱 除草AIロボ・シミュレーター（全画面）**　"
