@@ -2,7 +2,7 @@
 weeding_lab.py — 学校向けの探究「除草AIロボット・シミュレーター」の計算部品
 
 画面は pages/10_🤖_AIロボット.py（除草のタブ）。`python weeding_lab.py` で自己チェック。
-シミュレーター本体は docs/sim/weeding_robot.html（ブラウザだけで動く。外部ライブラリなし）。
+シミュレーター本体は docs/sim/weeding_robot.html（three.js、ブラウザだけで動く）。
 
 問い
   パン用小麦の畑で、AIロボットに除草を任せるとき、「雑草を取り残す損」と「小麦を傷める損」の
@@ -41,8 +41,8 @@ GRASS_DEFAULT = 0.4   # 雑草のうちイネ科（スズメノテッポウな�
 # 取り方（仮置き）
 METHODS = {
     #           1本あたりの秒, 株元の雑草を取るとき隣の小麦を傷める確率, 説明
-    "機械（つめ・刃）": (2.0, 0.25, "安い・速い。株元では小麦を巻き込みやすい"),
-    "レーザー": (0.6, 0.0, "株元でも正確。目・やけど・乾いた草の火災の危険が大きい（実機は扱わない）"),
+    "ハンド（抜き取り）": (2.6, 0.15, "つかんで根ごと抜く。株元では隣の小麦の根を傷めることがある"),
+    "レーザー": (1.25, 0.0, "株元でも正確。目・やけど・乾いた草の火災の危険が大きい（実機は扱わない）"),
 }
 INROW_SHARE = 0.3     # 雑草のうち、小麦の株元（列の中）に生えている割合
 ROBOT_SPEED = 0.2     # ロボットの走る速さ m/s
@@ -110,7 +110,7 @@ def yield_loss(n_per_m2: float, i: float = COUSENS_I, a: float = COUSENS_A) -> f
 
 
 def field_outcome(removed: float, crop_misread: float, weeds_m2: float, crops_m2: float,
-                  method: str = "機械（つめ・刃）", inrow: float = INROW_SHARE) -> dict:
+                  method: str = "ハンド（抜き取り）", inrow: float = INROW_SHARE) -> dict:
     """取る割合・読み違いの割合から、残る雑草・傷んだ小麦・期待収量（雑草なしを100）を出す。"""
     _, coll, _ = METHODS[method]
     left = weeds_m2 * (1 - removed)
@@ -122,7 +122,7 @@ def field_outcome(removed: float, crop_misread: float, weeds_m2: float, crops_m2
             "期待収量": 100 * (1 - hurt) * (1 - yl / 100)}
 
 
-def work_time(area_m2: float, weeds_m2: float, crops_m2: float, mode: str, method: str = "機械（つめ・刃）",
+def work_time(area_m2: float, weeds_m2: float, crops_m2: float, mode: str, method: str = "ハンド（抜き取り）",
               flagged_share: float = 0.0, checks_per_m2: float = 0.0) -> dict:
     """作業時間（分）。ロボット＝走る＋取る、人＝手で抜く・画面で確かめる。曲がる時間・充電は含まない。"""
     sec, _, _ = METHODS[method]
@@ -134,7 +134,7 @@ def work_time(area_m2: float, weeds_m2: float, crops_m2: float, mode: str, metho
 
 
 def compare_plans(area: float, weeds_m2: float, crops_m2: float, tau: float, band: float,
-                  d: float = D_DEFAULT, grass: float = GRASS_DEFAULT, method: str = "機械（つめ・刃）",
+                  d: float = D_DEFAULT, grass: float = GRASS_DEFAULT, method: str = "ハンド（抜き取り）",
                   acc: float = HUMAN_ACC) -> pd.DataFrame:
     """人の手・AIだけ・AI＋人・何もしない、の4案を同じ条件で比べる。"""
     rows = []
@@ -185,7 +185,7 @@ def score_samples(d: float = D_DEFAULT, n: int = 600, seed: int = 0) -> pd.DataF
 
 
 def tau_curve(weeds_m2: float, crops_m2: float, d: float = D_DEFAULT, grass: float = GRASS_DEFAULT,
-              method: str = "機械（つめ・刃）",
+              method: str = "ハンド（抜き取り）",
               taus: Sequence[float] = tuple(np.round(np.arange(0.05, 0.951, 0.05), 2))) -> pd.DataFrame:
     rows = []
     for t in taus:
@@ -196,7 +196,7 @@ def tau_curve(weeds_m2: float, crops_m2: float, d: float = D_DEFAULT, grass: flo
 
 
 def best_tau(weeds_m2: float, crops_m2: float, d: float = D_DEFAULT, grass: float = GRASS_DEFAULT,
-             method: str = "機械（つめ・刃）") -> tuple[float, float]:
+             method: str = "ハンド（抜き取り）") -> tuple[float, float]:
     tc = tau_curve(weeds_m2, crops_m2, d, grass, method)
     i = int(tc["期待収量"].idxmax())
     return float(tc.loc[i, "τ"]), float(tc.loc[i, "期待収量"])
@@ -209,8 +209,8 @@ CSV_COLS = ["round", "mode", "difficulty", "method", "tau", "seed", "weeds_total
 # 秒はモデルの時間（人：手で抜く5秒／本・画面で確かめる3秒／本、ロボット：走る60秒＋取る秒×本数）
 SAMPLE_CSV = """round,mode,difficulty,method,tau,seed,weeds_total,weeds_removed,crops_total,crops_damaged,human_checks,human_sec,robot_sec
 1,人の目,0.5,手,,1,36,27,72,3,30,150,0
-2,AIだけ,0.5,機械,0.50,1,36,28,72,7,0,0,130
-3,AI＋人,0.5,機械,0.50,1,36,32,72,4,11,33,136
+2,AIだけ,0.5,ハンド,0.50,1,36,28,72,7,0,0,130
+3,AI＋人,0.5,ハンド,0.50,1,36,32,72,4,11,33,136
 4,AIだけ,0.5,レーザー,0.50,1,36,29,72,4,0,0,80
 5,AI＋人,0.5,レーザー,0.50,1,36,33,72,2,10,30,81
 6,人の目,0.8,手,,2,36,22,72,5,27,135,0
@@ -278,12 +278,12 @@ STEP3 = ["本質的安全設計", "安全防護", "使用上の情報"]
 
 # 重さ（1〜4）× 起こりやすさ（0〜4）。値は教材用の仮置き。受け入れ先で見直す。
 HAZARDS = pd.DataFrame([
-    {"危険": "除草のつめ・回転刃（切り傷・巻き込み）", "重さ": 4, "0": 0, "1": 0, "2": 1, "3": 3,
-     "対策": "教室の段では刃を付けない。刃のそばの作業は止めてから大人が", "対策の種類": "本質的安全設計"},
+    {"危険": "ロボットハンド・門型の可動部（はさまれ・ぶつかり）", "重さ": 4, "0": 0, "1": 1, "2": 1, "3": 3,
+     "対策": "教室の段は小さく弱いハンドにする。可動範囲に入らない線・非常停止", "対策の種類": "本質的安全設計"},
     {"危険": "レーザー光（目・やけど）", "重さ": 4, "0": 0, "1": 0, "2": 0, "3": 0,
      "対策": "実機のレーザーは扱わない。シミュレーターの中だけ", "対策の種類": "本質的安全設計"},
     {"危険": "乾いた草への着火（レーザー・熱）", "重さ": 3, "0": 0, "1": 0, "2": 0, "3": 0,
-     "対策": "同上。機械式でも刈った草の近くで火を使わない", "対策の種類": "本質的安全設計"},
+     "対策": "同上。抜いた草を乾かす場所の近くで火を使わない", "対策の種類": "本質的安全設計"},
     {"危険": "走行（ひかれる・足を踏まれる）", "重さ": 3, "0": 0, "1": 1, "2": 1, "3": 2,
      "対策": "速さの上限・近づいたら止まる距離・非常停止", "対策の種類": "安全防護"},
     {"危険": "畝・斜面での転倒、石や土の飛び散り", "重さ": 2, "0": 0, "1": 0, "2": 1, "3": 2,
@@ -328,7 +328,7 @@ LESSON_PLANS = {
     "90分（2コマ）": [
         ("導入：除草の手間と、畑の雑草（指標植物）の写真", 10, "教員", "スズメノテッポウは小麦に似ている"),
         ("人の目で2ラウンド（見分けにくさ 0.3 と 0.8）", 15, "生徒", "似ている雑草で人も迷うことを知る"),
-        ("AIだけ・AI＋人で各1ラウンド（機械とレーザー）", 15, "生徒（2人1組）", "株元の雑草で何が起きるか"),
+        ("AIだけ・AI＋人で各1ラウンド（ハンドとレーザー）", 15, "生徒（2人1組）", "株元の雑草で何が起きるか"),
         ("記録CSVをこのページに貼って比べる", 15, "生徒", "ベイズで「どの方式が良さそうか」を確率で言う"),
         ("① の計算で τ とグレーゾーンの幅を決める", 20, "グループ", "取り残しと傷め、どちらが痛いか"),
         ("ふり返り：AIに任せる・人がやるの線引き", 15, "全体", "収量だけでなく、時間・危険・費用も"),
@@ -345,7 +345,7 @@ def lesson_table(name: str) -> pd.DataFrame:
 
 
 NEXT_STAGE_CHECKS = [
-    ("教室の小型ローバーに刃・つめを付けていない", True),
+    ("教室の小型ローバーのハンドは小さく弱いもので、刃を付けていない", True),
     ("非常停止の位置と使い方を、生徒全員が言える", True),
     ("通信が途切れたら止まることを、実機で確かめてある", True),
     ("畑で動かす範囲と、生徒が立つ位置を図にしてある（受け入れ先のリスクアセスメント）", True),
@@ -441,8 +441,8 @@ def main():
     assert t1["人が見る小麦の割合"] > 0 and t1["小麦を読み違える割合"] < classify_rates(0.3)["小麦を読み違える割合"]
     # Cousens：0本で0、増えると上限Aに近づく
     assert yield_loss(0) == 0 and yield_loss(10) < yield_loss(40) < COUSENS_A and yield_loss(1e6) > 49.9
-    # 機械は株元の雑草で小麦を巻き込む。レーザーは巻き込まない
-    m = field_outcome(0.9, 0.0, 40, 80, "機械（つめ・刃）")
+    # ハンドは株元の雑草で隣の小麦の根を傷める。レーザーは傷めない
+    m = field_outcome(0.9, 0.0, 40, 80, "ハンド（抜き取り）")
     lz = field_outcome(0.9, 0.0, 40, 80, "レーザー")
     assert m["傷んだ小麦の割合"] > lz["傷んだ小麦の割合"] == 0
     # 4案の比較：何もしないより、どの案も収量が上がる。人の手がいちばん人の時間を使う
@@ -454,9 +454,9 @@ def main():
     # ROC：τ を下げるほど右上へ（単調）
     roc = roc_curve()
     assert roc["小麦を読み違える割合"].is_monotonic_decreasing and roc["雑草を取る割合"].is_monotonic_decreasing
-    # 最適な τ：株元で巻き込む機械は、巻き込まないレーザーより τ を高め（取りすぎない）にする
+    # 最適な τ：株元で傷めるハンドは、傷めないレーザーより τ を高め（取りすぎない）にする
     t_laser, y_laser = best_tau(40, 80, method="レーザー")
-    t_mech, y_mech = best_tau(40, 80, method="機械（つめ・刃）")
+    t_mech, y_mech = best_tau(40, 80, method="ハンド（抜き取り）")
     assert t_mech >= t_laser and y_laser >= y_mech, (t_laser, t_mech)
     # 雑草が多いほど τ は低め（取りこぼしの損が大きい）
     t_lowweed, _ = best_tau(5, 80)
@@ -482,9 +482,9 @@ def main():
         raise AssertionError("列の足りないCSVを通してしまった")
     except ValueError:
         pass
-    bad = parse_records(SAMPLE_CSV + "8,AIだけ,0.5,機械,0.5,1,10,12,72,0,0,0,80\n"   # 取った＞雑草
-                        "9,AIだけ,0.5,機械,0.5,1,abc,1,72,0,0,0,80\n"                    # 数でない
-                        "10,ロボ,0.5,機械,0.5,1,10,1,72,0,0,0,80\n")                      # 方式が不明
+    bad = parse_records(SAMPLE_CSV + "8,AIだけ,0.5,ハンド,0.5,1,10,12,72,0,0,0,80\n"   # 取った＞雑草
+                        "9,AIだけ,0.5,ハンド,0.5,1,abc,1,72,0,0,0,80\n"                    # 数でない
+                        "10,ロボ,0.5,ハンド,0.5,1,10,1,72,0,0,0,80\n")                      # 方式が不明
     assert d_from_difficulty(0.5) == D_DEFAULT
     assert len(bad) == 7
     # 安全の段階：シミュレーターの段は危険ゼロ、実機のそばがいちばん高い
