@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>除草AIロボ・シミュレーター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=IBM+Plex+Mono:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* 上から見た小麦畑（主役）＋右に操作盤。下にラウンド記録。狭い画面は縦積み。
+   計算の式は weeding_lab.py と同じ（MODEL を変えたら両方を直す） */
+:root{
+  --bg:#f1efe6; --panel:#fbfaf5; --ink:#24271c; --muted:#646a57; --line:#d9d6c7; --soft:#e9e6d9;
+  --accent:#8a4b12; --accent-ink:#fff; --ok:#2b8a3e; --warn:#b06d00; --bad:#c92a2a;
+  --f-display:"Dela Gothic One","Zen Kaku Gothic New","Hiragino Sans",sans-serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14150f; --panel:#1c1e16; --ink:#e7e6dc; --muted:#a3a690; --line:#33362a; --soft:#25281e;
+  --accent:#e9a25b; --accent-ink:#1b0f04; --ok:#5ccf74; --warn:#f2b632; --bad:#ff6b6b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14150f; --panel:#1c1e16; --ink:#e7e6dc; --muted:#a3a690; --line:#33362a; --soft:#25281e;
+  --accent:#e9a25b; --accent-ink:#1b0f04; --ok:#5ccf74; --warn:#f2b632; --bad:#ff6b6b; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.6;padding:18px 16px 40px}
+.wrap{max-width:1280px;margin:0 auto;display:grid;gap:16px}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(21px,3vw,30px);line-height:1.2;margin:0}
+h2{font-size:15px;margin:0}
+p{margin:0}
+.lede{color:var(--muted);max-width:72ch;margin-top:4px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:920px){.app{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#7a5a3a}
+canvas{display:block;width:100%;height:auto;aspect-ratio:1000/580;cursor:crosshair;touch-action:manipulation}
+.hud{position:absolute;left:10px;top:8px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
+.pill{background:rgba(20,18,10,.72);color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-family:var(--f-mono)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:12px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--ink);padding:7px 4px;font:inherit;font-size:13px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.seg.two{grid-template-columns:repeat(2,1fr)}
+label{display:grid;gap:2px;font-size:13px}
+.lab{display:flex;justify-content:space-between;gap:8px}
+.lab span:last-child{font-family:var(--f-mono);color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=number]{width:80px;font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--soft);color:var(--ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.hint{font-size:12px;color:var(--muted)}
+.result{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kpi{background:var(--soft);border-radius:8px;padding:6px 10px}
+.kpi b{display:block;font-family:var(--f-mono);font-size:18px}
+.kpi small{color:var(--muted);font-size:11px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:right;white-space:nowrap}
+th:nth-child(2),td:nth-child(2),th:nth-child(4),td:nth-child(4){text-align:left}
+.tablebox{overflow-x:auto}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:6px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.note{font-size:12px;color:var(--muted);border-left:3px solid var(--line);padding-left:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>除草AIロボ・シミュレーター</h1>
+    <p class="lede">上から見たパン用小麦の畑です。<b>人の目</b>・<b>AIだけ</b>・<b>AI＋人</b>の3つのやり方で、同じ畑（同じ番号）の雑草を取り、
+      「雑草を取り残す」と「小麦を傷める」のどちらがどれだけ起きるかを比べます。刃も光も熱もない教室の段で、先に失敗しておくための道具です。</p>
+  </header>
+
+  <div class="app">
+    <div>
+      <div class="stage">
+        <canvas id="cv" width="1000" height="580" aria-label="上から見た小麦畑。植物をクリックすると印を付けられる"></canvas>
+        <div class="hud"><span class="pill" id="hudMode">人の目</span><span class="pill" id="hudTime">—</span><span class="pill" id="hudInfo">畑 1</span></div>
+      </div>
+      <div class="legend" style="margin-top:6px">
+        <span><i style="background:#f2c94c"></i>人の印（抜く）</span>
+        <span><i style="background:#e03131"></i>AIが「取る」</span>
+        <span><i style="border:2px dashed #f2c94c"></i>AIが迷った（人が決める）</span>
+        <span><i style="background:#6b4a2b"></i>取った跡</span>
+        <span><i style="background:#c08a3e"></i>傷んだ小麦</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div>
+        <h2>① やり方</h2>
+        <div class="seg" id="modeSeg" role="group" aria-label="やり方">
+          <button data-m="人の目" aria-pressed="true">人の目</button>
+          <button data-m="AIだけ" aria-pressed="false">AIだけ</button>
+          <button data-m="AI＋人" aria-pressed="false">AI＋人</button>
+        </div>
+        <p class="hint" id="modeHint" style="margin-top:4px"></p>
+      </div>
+      <div>
+        <h2>② 取り方（ロボット）</h2>
+        <div class="seg two" id="methodSeg" role="group" aria-label="取り方">
+          <button data-k="機械" aria-pressed="true">機械（つめ・刃）</button>
+          <button data-k="レーザー" aria-pressed="false">レーザー</button>
+        </div>
+        <p class="hint" id="methodHint" style="margin-top:4px"></p>
+      </div>
+      <label><div class="lab"><span>見分けにくさ h（イネ科の雑草が小麦に似ている度合い）</span><span id="hVal">0.50</span></div>
+        <input id="h" type="range" min="0" max="1" step="0.1" value="0.5"></label>
+      <label><div class="lab"><span>AIのしきい値 τ（点数がこれ以上なら「雑草」）</span><span id="tauVal">0.50</span></div>
+        <input id="tau" type="range" min="0.05" max="0.95" step="0.05" value="0.5"></label>
+      <label><div class="lab"><span>グレーゾーンの幅 ±（AI＋人のとき、人が決める範囲）</span><span id="bandVal">0.10</span></div>
+        <input id="band" type="range" min="0" max="0.3" step="0.05" value="0.1"></label>
+      <div class="row">
+        <span style="font-size:13px">畑の番号</span><input id="seed" type="number" min="1" max="999" value="1">
+        <span style="font-size:13px">雑草</span><input id="nw" type="number" min="12" max="60" value="36">
+        <button class="btn" id="newField">新しい畑</button>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="start">はじめる</button>
+        <button class="btn" id="finish" disabled>終わる</button>
+        <label class="row" style="display:flex;font-size:12px"><input type="checkbox" id="showScore">AIの点数を見せる</label>
+        <label class="row" style="display:flex;font-size:12px"><input type="checkbox" id="reveal">答え合わせ</label>
+      </div>
+      <div class="result" id="result" aria-live="polite">
+        <div class="kpi"><small>雑草を取った</small><b id="rW">—</b></div>
+        <div class="kpi"><small>小麦を傷めた</small><b id="rC">—</b></div>
+        <div class="kpi"><small>人の時間（モデル）</small><b id="rH">—</b></div>
+        <div class="kpi"><small>ロボットの時間（モデル）</small><b id="rR">—</b></div>
+        <div class="kpi" style="grid-column:1/-1"><small>期待収量（雑草なし・傷みなし＝100。Cousens 1985 の式）</small><b id="rY">—</b></div>
+      </div>
+      <p class="note">数値は教材用の仮置きです（実機の性能ではありません）。実機のレーザーは目とやけど・火災の危険が大きいため、このシミュレーターの中だけで扱います。</p>
+    </div>
+  </div>
+
+  <section class="panel">
+    <div class="row" style="justify-content:space-between"><h2>ラウンド記録（同じ畑の番号で比べる）</h2>
+      <div class="row"><button class="btn" id="clearRec">記録を消す</button><button class="btn primary" id="copyCsv">CSVをコピー</button></div></div>
+    <div class="tablebox"><table>
+      <thead><tr><th>回</th><th>やり方</th><th>h</th><th>取り方</th><th>τ</th><th>畑</th><th>雑草を取った</th><th>小麦を傷めた</th><th>人が見た</th><th>人の秒</th><th>ロボの秒</th><th>期待収量</th></tr></thead>
+      <tbody id="recBody"><tr><td colspan="12" style="text-align:center;color:var(--muted)">まだ記録はありません</td></tr></tbody>
+    </table></div>
+    <p class="hint">CSVは、ダッシュボードの「AIロボット」→「除草 3 ② 可視化する」に貼ると、やり方どうしをベイズで比べられます。記録はこの画面の中だけにあり、どこにも送られません。</p>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+// ===== モデル（weeding_lab.py と同じ値） =====
+const MODEL = {
+  GRASS: 0.4,          // 雑草のうちイネ科の割合
+  INROW: 0.3,          // 雑草のうち小麦の株元にある割合
+  ROWS: 6, PER_ROW: 12, ROW_LEN: 2.0, AREA: 2.4,  // 6列×2m、列の間0.2m → 2.4㎡
+  SPEED: 0.2,          // m/s
+  HAND_SEC: 5, CHECK_SEC: 3,
+  METHOD: {"機械": {sec: 2.0, coll: 0.25}, "レーザー": {sec: 0.6, coll: 0.0}},
+  COUSENS_I: 1.0, COUSENS_A: 50.0,
+  HUMAN_LIMIT: 45, REVIEW_LIMIT: 30,   // 秒（ゲームの制限時間）
+};
+const dFromH = h => 4 - 3 * h;        // 見分けにくさ h → AIの見分けやすさ d（h=0.5 で d=2.5）
+const mu = (kind, d) => kind === "crop" ? -d / 2 : kind === "broad" ? d / 2 : 0;
+const sig = z => 1 / (1 + Math.exp(-z));
+const cousens = n => MODEL.COUSENS_I * n / (1 + MODEL.COUSENS_I * n / MODEL.COUSENS_A);
+
+// ===== 乱数（同じ番号なら同じ畑） =====
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){let u=0,v=0;while(u===0)u=r();while(v===0)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+
+const $ = s => document.querySelector(s);
+const cv = $("#cv"), ctx = cv.getContext("2d");
+const W = 1000, H = 580, FX0 = 40, FX1 = 960, FY0 = 50, FY1 = 540;
+const rowY = i => FY0 + (i + 0.5) * (FY1 - FY0) / MODEL.ROWS;
+
+const S = { mode: "人の目", method: "機械", h: 0.5, tau: 0.5, band: 0.1, seed: 1, nw: 36,
+  plants: [], phase: "idle", t0: 0, robotX: 0, robotRow: 0, raf: 0, timer: 0, last: null, records: [], round: 0 };
+
+// ===== 畑をつくる =====
+function makeField(){
+  const r = mulberry32(S.seed * 7919 + 13);
+  const P = [];
+  const sp = (FX1 - FX0) / MODEL.PER_ROW;
+  for (let i = 0; i < MODEL.ROWS; i++) for (let j = 0; j < MODEL.PER_ROW; j++)
+    P.push({kind: "crop", x: FX0 + (j + 0.5) * sp + (r() - 0.5) * 12, y: rowY(i) + (r() - 0.5) * 6, row: i});
+  const nCrop = P.length;
+  const far = (x, y) => P.every(p => Math.hypot(p.x - x, p.y - y) > 20);
+  for (let k = 0; k < S.nw; k++){
+    const kind = r() < MODEL.GRASS ? "grass" : "broad";
+    const inrow = r() < MODEL.INROW;
+    let x, y, nb = -1, row, tries = 0;
+    do {
+      if (inrow){ nb = Math.floor(r() * nCrop); const c = P[nb]; x = c.x + (r() < .5 ? -1 : 1) * (15 + r() * 7); y = c.y + (r() - .5) * 10; row = c.row; }
+      else { row = Math.floor(r() * MODEL.ROWS); const gap = (FY1 - FY0) / MODEL.ROWS;
+        y = rowY(row) + (r() < .5 ? -1 : 1) * gap * (0.3 + r() * 0.15); x = FX0 + 15 + r() * (FX1 - FX0 - 30); }
+      tries++;
+    } while (!far(x, y) && tries < 30 && !inrow);
+    P.push({kind, x, y, row, inrow, nb});
+  }
+  for (const p of P){ p.eps = gauss(r); p.u = r(); p.a = r() * Math.PI * 2; p.j = r(); }
+  S.plants = P;
+  resetStatus();
+}
+function resetStatus(){
+  const d = dFromH(S.h);
+  for (const p of S.plants){ p.s = sig(mu(p.kind, d) + p.eps); p.mark = false; p.gone = false; p.hurt = false; p.flag = false; p.gray = false; p.seen = false; }
+}
+
+// ===== 描く =====
+function mix(a, b, t){ return a.map((v, i) => Math.round(v + (b[i] - v) * t)); }
+const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+const CROP = [86, 150, 58], GRASS0 = [170, 182, 60], BROAD = [52, 112, 70];
+function blades(p, n, len, spread, col, w){
+  ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = "round";
+  for (let i = 0; i < n; i++){
+    const ang = -Math.PI / 2 + (i - (n - 1) / 2) * spread / Math.max(1, n - 1) * 2 + (p.j - .5) * 0.25;
+    const l = len * (0.8 + 0.4 * ((i * 37 + p.j * 100) % 10) / 10);
+    ctx.beginPath(); ctx.moveTo(p.x, p.y + 6);
+    ctx.quadraticCurveTo(p.x + Math.cos(ang) * l * .5, p.y + 6 + Math.sin(ang) * l * .5, p.x + Math.cos(ang) * l, p.y + 6 + Math.sin(ang) * l);
+    ctx.stroke();
+  }
+}
+function drawPlant(p){
+  if (p.gone){ ctx.fillStyle = "#6b4a2b"; ctx.beginPath(); ctx.ellipse(p.x, p.y, 9, 6, 0, 0, 7); ctx.fill(); return; }
+  if (p.kind === "crop"){
+    blades(p, 3, 20, 0.28, rgb(p.hurt ? [192, 138, 62] : CROP), 2.6);
+  } else if (p.kind === "grass"){
+    const t = S.h;  // h が大きいほど小麦に似る（色・開き・長さ）
+    blades(p, 5, 15 + 4 * t, 0.28 + 0.6 * (1 - t), rgb(mix(GRASS0, CROP, t)), 1.6 + 0.8 * t);
+  } else {
+    ctx.fillStyle = rgb(BROAD);
+    for (let i = 0; i < 5; i++){ const a = p.a + i * 2 * Math.PI / 5;
+      ctx.beginPath(); ctx.ellipse(p.x + Math.cos(a) * 6, p.y + Math.sin(a) * 6, 6, 3.6, a, 0, 7); ctx.fill(); }
+    ctx.fillStyle = "#2c5a37"; ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, 7); ctx.fill();
+  }
+}
+function overlay(p){
+  ctx.lineWidth = 2.2;
+  if (p.mark && !p.gone){ ctx.strokeStyle = "#f2c94c"; ctx.beginPath(); ctx.arc(p.x, p.y, 15, 0, 7); ctx.stroke(); }
+  if (p.flag && !p.gone){ ctx.strokeStyle = "#e03131"; ctx.strokeRect(p.x - 14, p.y - 16, 28, 28); }
+  if (p.gray && !p.gone){ ctx.strokeStyle = "#f2c94c"; ctx.setLineDash([4, 3]); ctx.strokeRect(p.x - 15, p.y - 17, 30, 30); ctx.setLineDash([]);
+    if (!p.mark){ ctx.fillStyle = "#f2c94c"; ctx.font = "bold 13px sans-serif"; ctx.fillText("?", p.x + 11, p.y - 12); } }
+  if (p.hurt){ ctx.strokeStyle = "#c92a2a"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(p.x - 7, p.y - 7); ctx.lineTo(p.x + 7, p.y + 7); ctx.moveTo(p.x + 7, p.y - 7); ctx.lineTo(p.x - 7, p.y + 7); ctx.stroke(); }
+  ctx.font = "11px 'IBM Plex Mono',monospace"; ctx.textAlign = "center";
+  if ($("#showScore").checked && (p.seen || S.phase === "done") && S.mode !== "人の目"){
+    ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(p.x - 15, p.y + 13, 30, 13);
+    ctx.fillStyle = "#fff"; ctx.fillText(p.s.toFixed(2), p.x, p.y + 23);
+  }
+  if ($("#reveal").checked){
+    const lab = {crop: "麦", grass: "イ", broad: "広"}[p.kind];
+    ctx.fillStyle = p.kind === "crop" ? "#fff" : "#ff8cc6"; ctx.font = "bold 11px sans-serif";
+    ctx.fillText(lab, p.x - 14, p.y - 10);
+  }
+  ctx.textAlign = "start";
+}
+function draw(){
+  ctx.fillStyle = "#7a5a3a"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#8a6843";
+  for (let i = 0; i < MODEL.ROWS; i++) ctx.fillRect(FX0 - 10, rowY(i) - 16, FX1 - FX0 + 20, 32);   // 畝
+  ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.font = "12px sans-serif";
+  ctx.fillText(`2 m × ${MODEL.ROWS}列（${MODEL.AREA}㎡）・小麦 ${MODEL.ROWS * MODEL.PER_ROW} 株・雑草 ${S.nw} 本`, FX0, 570);
+  for (const p of S.plants) drawPlant(p);
+  for (const p of S.plants) overlay(p);
+  if (S.phase === "robot"){  // ロボットとカメラの視野
+    const y = rowY(S.robotRow);
+    ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(S.robotX - 5, y - 40, 60, 80);
+    ctx.fillStyle = "#e9ecef"; ctx.strokeStyle = "#343a40"; ctx.lineWidth = 2;
+    ctx.fillRect(S.robotX - 34, y - 22, 34, 44); ctx.strokeRect(S.robotX - 34, y - 22, 34, 44);
+    ctx.fillStyle = "#343a40"; ctx.fillRect(S.robotX - 36, y - 26, 10, 8); ctx.fillRect(S.robotX - 36, y + 18, 10, 8);
+    ctx.fillRect(S.robotX - 10, y - 26, 10, 8); ctx.fillRect(S.robotX - 10, y + 18, 10, 8);
+    ctx.fillStyle = "#228be6"; ctx.beginPath(); ctx.arc(S.robotX - 4, y, 4, 0, 7); ctx.fill();
+  }
+}
+
+// ===== 進行 =====
+function setHud(){
+  $("#hudMode").textContent = S.mode + "・" + (S.mode === "人の目" ? "手" : S.method);
+  $("#hudInfo").textContent = `畑 ${S.seed}・h=${S.h.toFixed(1)}`;
+}
+function hint(){
+  $("#modeHint").textContent = {
+    "人の目": `${MODEL.HUMAN_LIMIT}秒で、抜く雑草をクリック（もう一度で取り消し）。手で抜くので小麦は巻き込まない。`,
+    "AIだけ": "ロボットが列を走り、点数 s ≥ τ のものを取る。人は見ているだけ。",
+    "AI＋人": `AIが自信のあるものだけ取り、τ±幅の「？」は人が${MODEL.REVIEW_LIMIT}秒で決める（クリック＝抜く）。`,
+  }[S.mode];
+  $("#methodHint").textContent = S.method === "機械"
+    ? `1本 ${MODEL.METHOD["機械"].sec} 秒。株元の雑草を取ると ${MODEL.METHOD["機械"].coll * 100}% の確率で隣の小麦を傷める。`
+    : `1本 ${MODEL.METHOD["レーザー"].sec} 秒。株元でも正確。実機は目・火災の危険が大きい（ここだけで扱う）。`;
+}
+function lockInputs(on){ for (const el of document.querySelectorAll("#modeSeg button,#methodSeg button,#h,#tau,#band,#seed,#nw,#newField")) el.disabled = on; }
+
+function start(){
+  cancelAnimationFrame(S.raf); clearInterval(S.timer);
+  makeField(); lockInputs(true);
+  $("#start").disabled = true; S.round++; $("#hudTime").textContent = "はじめ";
+  for (const id of ["#rW", "#rC", "#rH", "#rR", "#rY"]) $(id).textContent = "—";
+  if (S.mode === "人の目"){ S.phase = "human"; beginTimer(MODEL.HUMAN_LIMIT); $("#finish").disabled = false; }
+  else { S.phase = "robot"; S.robotRow = 0; S.robotX = FX0 - 10; S.last = null; $("#finish").disabled = true; S.raf = requestAnimationFrame(step); }
+  draw();
+}
+function beginTimer(sec){
+  const end = performance.now() + sec * 1000;
+  const tick = () => { const left = Math.max(0, (end - performance.now()) / 1000);
+    $("#hudTime").textContent = `のこり ${left.toFixed(0)} 秒`; if (left <= 0) finish(); };
+  tick(); S.timer = setInterval(tick, 200);
+}
+function act(p){  // ロボットが1本を取る
+  p.gone = true;
+  if (p.kind === "crop") p.hurt = true, p.gone = false;  // 小麦を取った＝傷めた（跡は残す）
+  const nb = S.plants[p.nb];
+  if (p.kind !== "crop" && p.inrow && nb && p.u < MODEL.METHOD[S.method].coll) nb.hurt = true;
+}
+function step(now){
+  // 画面上は1列およそ2秒で走らせる（見やすさ優先。作業時間はモデルの式で別に数える）
+  const dt = Math.min(0.05, Math.max(0, ((now || performance.now()) - (S.last || now || 0)) / 1000));
+  S.last = now; S.robotX += 520 * dt;
+  const lo = S.tau - (S.mode === "AI＋人" ? S.band : 0), hi = S.tau + (S.mode === "AI＋人" ? S.band : 0);
+  for (const p of S.plants){
+    if (p.row !== S.robotRow || p.seen || p.x > S.robotX) continue;
+    p.seen = true;
+    if (S.mode === "AIだけ"){ if (p.s >= S.tau){ p.flag = true; act(p); } }
+    else if (p.s >= Math.min(0.99, hi)){ p.flag = true; act(p); }
+    else if (p.s >= Math.max(0.01, lo) && hi > lo) p.gray = true;
+  }
+  $("#hudTime").textContent = `${S.robotRow + 1} / ${MODEL.ROWS} 列`;
+  if (S.robotX > FX1 + 40){ S.robotRow++; S.robotX = FX0 - 10; }
+  draw();
+  if (S.robotRow >= MODEL.ROWS){
+    if (S.mode === "AI＋人" && S.plants.some(p => p.gray)){
+      S.phase = "review"; $("#finish").disabled = false; beginTimer(MODEL.REVIEW_LIMIT); draw(); toast("黄色の「？」をクリックして決めてください"); return;
+    }
+    finish(); return;
+  }
+  S.raf = requestAnimationFrame(step);
+}
+function finish(){
+  if (S.phase === "done" || S.phase === "idle") return;
+  clearInterval(S.timer); cancelAnimationFrame(S.raf);
+  const m = MODEL.METHOD[S.method];
+  let humanSec = 0, robotActs = S.plants.filter(p => p.flag).length, checks = 0;
+  if (S.phase === "human"){
+    for (const p of S.plants) if (p.mark){ if (p.kind === "crop") p.hurt = true; else p.gone = true; }
+    checks = S.plants.filter(p => p.mark).length; humanSec = checks * MODEL.HAND_SEC; robotActs = 0;
+  } else if (S.phase === "review" || S.mode === "AI＋人"){
+    const gray = S.plants.filter(p => p.gray); checks = gray.length; humanSec = checks * MODEL.CHECK_SEC;
+    for (const p of gray) if (p.mark){ act(p); robotActs++; }
+  }
+  const robotSec = S.mode === "人の目" ? 0 : MODEL.ROWS * MODEL.ROW_LEN / MODEL.SPEED + robotActs * m.sec;
+  const weeds = S.plants.filter(p => p.kind !== "crop"), crops = S.plants.filter(p => p.kind === "crop");
+  const removed = weeds.filter(p => p.gone).length, hurt = crops.filter(p => p.hurt).length;
+  const yl = cousens((weeds.length - removed) / MODEL.AREA);
+  const yld = 100 * (1 - hurt / crops.length) * (1 - yl / 100);
+  S.phase = "done"; lockInputs(false); $("#start").disabled = false; $("#finish").disabled = true;
+  $("#hudTime").textContent = "おわり";
+  $("#rW").textContent = `${removed} / ${weeds.length}`; $("#rC").textContent = `${hurt} / ${crops.length}`;
+  $("#rH").textContent = `${humanSec.toFixed(0)} 秒`; $("#rR").textContent = `${robotSec.toFixed(0)} 秒`; $("#rY").textContent = yld.toFixed(1);
+  S.records.push({round: S.round, mode: S.mode, difficulty: S.h, method: S.mode === "人の目" ? "手" : S.method,
+    tau: S.mode === "人の目" ? "" : S.tau.toFixed(2), seed: S.seed, weeds_total: weeds.length, weeds_removed: removed,
+    crops_total: crops.length, crops_damaged: hurt, human_checks: checks, human_sec: Math.round(humanSec),
+    robot_sec: Math.round(robotSec), yield: yld.toFixed(1)});
+  renderRecords(); draw();
+}
+function renderRecords(){
+  const tb = $("#recBody");
+  if (!S.records.length){ tb.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted)">まだ記録はありません</td></tr>'; return; }
+  tb.innerHTML = S.records.map(r => `<tr><td>${r.round}</td><td>${r.mode}</td><td>${r.difficulty.toFixed(1)}</td><td>${r.method}</td><td>${r.tau || "—"}</td><td>${r.seed}</td>
+    <td>${r.weeds_removed}/${r.weeds_total}</td><td>${r.crops_damaged}/${r.crops_total}</td><td>${r.human_checks}</td><td>${r.human_sec}</td><td>${r.robot_sec}</td><td>${r.yield}</td></tr>`).join("");
+}
+
+// ===== 操作 =====
+cv.addEventListener("click", e => {
+  if (S.phase !== "human" && S.phase !== "review") return;
+  const b = cv.getBoundingClientRect(), x = (e.clientX - b.left) * W / b.width, y = (e.clientY - b.top) * H / b.height;
+  let best = null, bd = 22;
+  for (const p of S.plants){ if (p.gone || (S.phase === "review" && !p.gray)) continue;
+    const dd = Math.hypot(p.x - x, p.y - y); if (dd < bd){ bd = dd; best = p; } }
+  if (best){ best.mark = !best.mark; draw(); }
+});
+function seg(id, key, attr){
+  for (const b of document.querySelectorAll(`#${id} button`)) b.onclick = () => {
+    if (S.phase === "robot" || S.phase === "human" || S.phase === "review") return;
+    for (const o of document.querySelectorAll(`#${id} button`)) o.setAttribute("aria-pressed", o === b);
+    S[key] = b.dataset[attr]; S.phase = "idle"; setHud(); hint(); makeField(); draw();
+  };
+}
+seg("modeSeg", "mode", "m"); seg("methodSeg", "method", "k");
+const bindRange = (id, key, fmt) => $(id).addEventListener("input", e => { S[key] = +e.target.value; $(id + "Val").textContent = fmt(S[key]);
+  if (key === "h"){ resetStatus(); S.phase = "idle"; } setHud(); draw(); });
+bindRange("#h", "h", v => v.toFixed(2)); bindRange("#tau", "tau", v => v.toFixed(2)); bindRange("#band", "band", v => v.toFixed(2));
+$("#seed").addEventListener("change", e => { S.seed = Math.max(1, Math.min(999, Math.round(+e.target.value || 1))); e.target.value = S.seed; S.phase = "idle"; makeField(); setHud(); draw(); });
+$("#nw").addEventListener("change", e => { S.nw = Math.max(12, Math.min(60, Math.round(+e.target.value || 36))); e.target.value = S.nw; S.phase = "idle"; makeField(); draw(); });
+$("#newField").onclick = () => { S.seed = S.seed % 999 + 1; $("#seed").value = S.seed; S.phase = "idle"; makeField(); setHud(); draw(); };
+$("#start").onclick = start; $("#finish").onclick = finish;
+$("#showScore").onchange = draw; $("#reveal").onchange = draw;
+$("#clearRec").onclick = () => { S.records = []; S.round = 0; renderRecords(); };
+
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200); }
+$("#copyCsv").onclick = () => {
+  if (!S.records.length){ toast("まだ記録がありません"); return; }
+  const cols = ["round","mode","difficulty","method","tau","seed","weeds_total","weeds_removed","crops_total","crops_damaged","human_checks","human_sec","robot_sec"];
+  const csv = [cols.join(",")].concat(S.records.map(r => cols.map(c => r[c]).join(","))).join("\n");
+  const fallback = () => { const ta = document.createElement("textarea"); ta.value = csv; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("CSVをコピーしました"); } catch (e) { toast("コピーできませんでした"); } ta.remove(); };
+  try { navigator.clipboard.writeText(csv).then(() => toast(`CSVをコピーしました（${S.records.length} ラウンド）`), fallback); } catch (e) { fallback(); }
+};
+
+makeField(); setHud(); hint(); draw();
+</script>
+</body>
+</html>
