@@ -44,6 +44,17 @@ METHODS = {
     "ハンド（抜き取り）": (2.6, 0.15, "つかんで根ごと抜く。株元では隣の小麦の根を傷めることがある"),
     "レーザー": (1.25, 0.0, "株元でも正確。目・やけど・乾いた草の火災の危険が大きい（実機は扱わない）"),
 }
+# 以前の名前・短い名前でも引けるようにする（シミュレーターのCSVは「ハンド」、古い版は「機械（つめ・刃）」）
+METHOD_ALIASES = {"ハンド": "ハンド（抜き取り）", "機械": "ハンド（抜き取り）", "機械（つめ・刃）": "ハンド（抜き取り）",
+                  "レーザー（シミュレーターの中だけ）": "レーザー"}
+
+
+def method_params(method: str) -> tuple:
+    """取り方の名前から（1本あたりの秒, 株元で隣を傷める確率, 説明）を返す。知らない名前はハンドとして扱う。"""
+    key = METHOD_ALIASES.get(method, method)
+    return METHODS.get(key, METHODS["ハンド（抜き取り）"])
+
+
 INROW_SHARE = 0.3     # 雑草のうち、小麦の株元（列の中）に生えている割合
 ROBOT_SPEED = 0.2     # ロボットの走る速さ m/s
 SWATH = 1.0           # 1回に見る幅 m（畝1本ぶん）
@@ -112,7 +123,7 @@ def yield_loss(n_per_m2: float, i: float = COUSENS_I, a: float = COUSENS_A) -> f
 def field_outcome(removed: float, crop_misread: float, weeds_m2: float, crops_m2: float,
                   method: str = "ハンド（抜き取り）", inrow: float = INROW_SHARE) -> dict:
     """取る割合・読み違いの割合から、残る雑草・傷んだ小麦・期待収量（雑草なしを100）を出す。"""
-    _, coll, _ = METHODS[method]
+    _, coll, _ = method_params(method)
     left = weeds_m2 * (1 - removed)
     # 傷む小麦の本数／㎡ ＝ 読み違えて取った小麦 ＋ 株元の雑草を取るときに巻き込んだ小麦
     hurt_m2 = crops_m2 * crop_misread + weeds_m2 * removed * inrow * coll
@@ -125,7 +136,7 @@ def field_outcome(removed: float, crop_misread: float, weeds_m2: float, crops_m2
 def work_time(area_m2: float, weeds_m2: float, crops_m2: float, mode: str, method: str = "ハンド（抜き取り）",
               flagged_share: float = 0.0, checks_per_m2: float = 0.0) -> dict:
     """作業時間（分）。ロボット＝走る＋取る、人＝手で抜く・画面で確かめる。曲がる時間・充電は含まない。"""
-    sec, _, _ = METHODS[method]
+    sec, _, _ = method_params(method)
     if mode == "人の手":
         return {"ロボット_分": 0.0, "人_分": area_m2 * weeds_m2 * HAND_SEC / 60}
     run = area_m2 / SWATH / ROBOT_SPEED
@@ -499,6 +510,9 @@ def main():
     assert ok["判定"].startswith("次の段を") and ok["準備度"] == 1
     one = next_stage_readiness([i != 0 for i in range(len(NEXT_STAGE_CHECKS))])
     assert one["判定"].startswith("まだ") and len(one["まだの必須"]) == 1
+    # 取り方の名前：古い名前・短い名前・知らない名前でも止まらない
+    assert method_params("機械（つめ・刃）") == METHODS["ハンド（抜き取り）"] and method_params("レーザー（シミュレーターの中だけ）")[1] == 0
+    assert method_params("ハンド") == method_params("だれも知らない取り方")
     compile(ROS2_WEED_TRIAGE, "weed_triage.py", "exec")  # 表示するコードが文法として正しいか
     print("weeding_lab.py：自己チェック OK")
 
