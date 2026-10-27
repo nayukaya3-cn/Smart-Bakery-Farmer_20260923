@@ -3,6 +3,7 @@ streamlit>=1.65,<2
 pandas>=3.0,<4
 numpy>=2.5,<3
 plotly>=7.1,<8
+scikit-learn>=1.9,<2   # 機械学習（🛒 離れる顧客を先に見つける）
 pillow>=12.3,<13
 pypdfium2>=5.14,<6   # PDFをページ画像にして表示
 anthropic>=1.12,<2   # 任意：生成AI（Claude）で雑草候補・日誌写真のタグを付ける場合
