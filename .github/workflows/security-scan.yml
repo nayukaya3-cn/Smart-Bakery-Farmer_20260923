@@ -32,8 +32,18 @@ jobs:
         continue-on-error: true
         run: |
           pip install -q pip-audit
+          # 脆弱性が無いとき pip-audit は -o のファイルを作らない。cat が失敗して
+          # 「脆弱性あり」と誤判定しないよう、終了コードは pip-audit 自身のものを返す。
+          set +e
           pip-audit -r requirements.txt --desc -f markdown -o pip-audit.md
-          cat pip-audit.md >> "$GITHUB_STEP_SUMMARY"
+          rc=$?
+          set -e
+          if [ -s pip-audit.md ]; then
+            cat pip-audit.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "pip-audit: 既知の脆弱性なし（終了コード $rc）" | tee pip-audit.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $rc
 
       - name: コードの危険なパターン（bandit）
         id: bandit

@@ -21,7 +21,6 @@ import shogai_koyo as sk
 import soil_vision as sv
 import social as sn
 import sowing_calendar as sc
-import strategy as stg
 
 
 def page_path(no: str) -> str:
@@ -194,7 +193,7 @@ MAIN_GROUPS = {  # 表に出す5つ：だれ向けか で分ける
     "🏠 ホーム": ["🏠 ホーム"],
     "🎓 学校の先生へ": ["🎓 探究学習（構想）", "🤝 受け入れ体制"],
     "🌿 農園で働く方へ": ["🌿 農園で働く方へ"],
-    "🧭 10年戦略と記録": ["🧭 10年戦略", "📝 活動ログ"],
+    "📝 活動ログ": ["📝 活動ログ"],  # 10年戦略は 🔒 管理（本人のみ）へ移した
 }
 MORE_TAB = "🔎 詳しく見る"
 DETAIL_GROUPS = {  # 詳しく見る：3段構え＋ものづくり の4つ
@@ -309,9 +308,8 @@ with T["🏠 ホーム"]:
     _active = _now[_now["状態"] == "適期中"]
     c3.metric("いま適期の作物", f"{len(_active)} 品目")
     c3.caption("→ 🔎 詳しく見る › ① 計算する" if len(_active) else "本命はパン用小麦。ほかに柿・キウイ・栗")
-    phase = stg.current_phase(today)
-    c4.metric("10年戦略", f"フェーズ{phase.no}")
-    c4.caption(f"{phase.name}｜進行中の工程 {len(doing)} 件")
+    c4.metric("進行中の工程", f"{len(doing)} 件")
+    c4.caption("記録は 📝 活動ログ に毎月残しています")
 
     left, right = st.columns([3, 2])
     with left:
@@ -327,7 +325,7 @@ with T["🏠 ホーム"]:
             st.markdown(f"**{r['日付']:%m/%d}**　`{r['カテゴリ']}`　{r['内容']}")
         sn.buttons("で活動内容を見る")
 
-    st.subheader(f"ロードマップ（フェーズ{phase.no}：{phase.name}）")
+    st.subheader("ロードマップ")
     fig = px.timeline(current, x_start="開始", x_end="終了", y="工程", color="状態",
                       color_discrete_map={"完了": "#c9c2b4", "進行中": "#c98a2b", "予定": "#9bb884"},
                       category_orders={"状態": ["完了", "進行中", "予定"]})
@@ -336,12 +334,6 @@ with T["🏠 ホーム"]:
     fig.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
     st.plotly_chart(fig, width="stretch")
     st.caption("状態（完了／進行中／予定）は今日の日付から自動で判定しています。点線が今日です。")
-
-# ═════════════════════════════════════════════
-# 1-2. 10年戦略（計算する → 可視化する → 判断ゲート）
-# ═════════════════════════════════════════════
-with T["🧭 10年戦略"]:
-    stg.render(st.session_state.log, ASSETS)
 
 # ═════════════════════════════════════════════
 # 1-3. 障害者雇用ビジネス（農園型）— 農園で働く障害のある方向け
@@ -590,15 +582,9 @@ with T["🎓 探究学習（構想）"]:
     st.write(
         "畑はまだ整備を始めたばかりです。まずは自分で小麦を育て、パンを焼き、"
         "記録とデータを積み重ねるところから始めます。"
-        "その記録をもとに、**2028〜2029年（フェーズ1）に有償の試行**を始め、"
+        "その記録をもとに、受け入れの体制（保険・手順書・安全管理）が整ってから、"
         "「探究学習」の外部フィールドとして畑を開くことを目指しています。"
     )
-
-    st.subheader("ステップ（10年戦略のフェーズ）")
-    phases = pd.DataFrame([(f"フェーズ{p.no}", f"{p.start:%Y}〜{p.end:%Y}", p.name, p.gate)
-                           for p in stg.PHASES], columns=["段階", "時期", "目標", "次へ進む条件（判断ゲート）"])
-    st.dataframe(phases, width="stretch", hide_index=True)
-    st.caption("各フェーズの中身と、ゲートの判定は「🧭 10年戦略と記録」タブにあります。")
 
     with st.expander("将来、こんな場とつながれたらと考えています"):
         st.markdown(
