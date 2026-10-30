@@ -1,7 +1,7 @@
 # 下限＋メジャー上限で固定（予期しない大型更新を防ぎ、更新は Dependabot のPRで確認してから入れる）
 streamlit>=1.65,<2
 pandas>=3.0,<4
-numpy>=2.5,<3
+numpy>=2.5.4,<3
 plotly>=7.1,<8
 scikit-learn>=1.9,<2   # 機械学習（🛒 離れる顧客を先に見つける）
 pillow>=13.0,<14
