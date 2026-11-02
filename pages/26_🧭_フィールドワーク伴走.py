@@ -22,6 +22,7 @@ import streamlit as st
 import fieldwork_pdca as fp
 import security_guard as sg
 import social as sn
+import teacher_course as tc
 
 st.set_page_config(page_title="フィールドワーク伴走", page_icon="🧭", layout="wide")
 
@@ -86,6 +87,11 @@ with tabs[0]:
     for col, (i, (title, body)) in zip(cols, enumerate(fp.REASONS, 1)):
         with col.container(border=True):
             st.markdown(f"**理由{i}：{title}**\n\n{body}")
+
+    try:
+        st.page_link(tc.SUBJECT_PAGE, label="教科の側から：科目の位置づけ・単元×調査地・事前学習の1コマ（📝 教科×情報Ⅰ）", icon="🔭")
+    except Exception:  # noqa: BLE001
+        st.caption("🔭 科目の詳しい説明は左メニュー「📝 教科×情報Ⅰ」から開けます")
 
     st.subheader("PDCA を HACCP の言葉で回す")
     st.dataframe(fp.PDCA, width="stretch", hide_index=True)
