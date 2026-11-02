@@ -4,6 +4,7 @@
 
 問い：「小麦と大豆の二毛作を主体に、ハウスで野菜」は、実家の畑100㎡で最適な自給態勢か？
        水・電気が止まったら、かまど・石窯で何日しのげるか？
+       「一年分の備蓄」（資料「食糧保存プログラム」の同心円）は、畑と保存の工夫でどこまで成り立つか？
 
 方針
   - 計算は jikyu_lab.py（`python jikyu_lab.py` で自己チェック）。
@@ -42,6 +43,8 @@ with st.sidebar:
     keep = st.slider("余りを保存に回せる割合（%）", 0, 90, 50, 10) / 100
     kuri = st.slider("栗5本の樹勢（%）", 10, 100, 40, 10, help="盛りの木を100%として。植えて30年。") / 100
     rice_own = st.checkbox("米を委託中の水田から現物で受け取る（想定）")
+    rensaku = st.slider("連作による減収（%・目安）", 0, 30, 10, 5,
+                        help="二毛作で毎年同じ区画に同じ作物を作ると、病気・線虫で収量が落ちます。輪作区には掛かりません。") / 100
     if "jikyu_coef" in st.session_state:
         st.success("収量の係数は、読み込んだ実測値を使っています。")
         if st.button("初期値に戻す"):
@@ -49,19 +52,19 @@ with st.sidebar:
             st.rerun()
 
 base = jl.Conditions(persons=persons, stage=jl.STAGES[stage_name], house_m2=house,
-                     bread_share=bread, keep_rate=keep, kuri_vigor=kuri, rice_own=rice_own,
+                     bread_share=bread, keep_rate=keep, kuri_vigor=kuri, rice_own=rice_own, rensaku=rensaku,
                      coef=st.session_state.get("jikyu_coef", dict(jl.COEF)))
 
 st.title("🍞 自給と防災の畑シミュレーター")
 st.caption("三原市西部の実家：畑100㎡・ハウス・柿1本・いちじく2本・栗5本 ／ ① 計算する → ② 可視化する → ③ 自分の条件で判断する")
 
-T = st.tabs(["① 畑の配分を比べる", "② 月ごとの調達", "③ 停電・断水（かまど・石窯）",
+T = st.tabs(["🎯 1年備蓄の同心円", "① 畑の配分を比べる", "② 月ごとの調達", "③ 停電・断水（かまど・石窯）",
              "④ 探究フィールドワーク", "⑤ 家計簿・収入構造とつなぐ"])
 
 # ═════════════════════ ① 畑の配分を比べる ═════════════════════
-with T[0]:
+with T[1]:
     st.subheader("問い：二毛作（小麦→大豆）主体＋ハウス野菜が最適か")
-    st.write("同じ条件で4つの案を比べます。何を「最適」とするか（お金・カロリー・たんぱく質・停電への備え・手間）で答えが変わります。")
+    st.write("同じ条件で5つの案を比べます（E は資料の輪作❶「芋→豆→小麦」）。何を「最適」とするか（お金・カロリー・たんぱく質・停電への備え・手間）で答えが変わります。")
     cmp = jl.compare_presets(base)
     show = cmp.copy()
     for col in ["重量の自給率", "カロリー自給率", "主食", "野菜", "たんぱく質"]:
@@ -76,7 +79,7 @@ with T[0]:
     long = cmp.melt(id_vars="案", value_vars=["カロリー自給率", "主食", "野菜", "たんぱく質"],
                     var_name="指標", value_name="割合")
     fig = px.bar(long, x="指標", y="割合", color="案", barmode="group",
-                 color_discrete_sequence=["#c98a2b", "#7fb3a8", "#6a9a4a", "#3f7cac"])
+                 color_discrete_sequence=["#c98a2b", "#7fb3a8", "#6a9a4a", "#3f7cac", "#8a6aa8"])
     fig.update_yaxes(tickformat=".0%", range=[0, 1.05], title=None)
     fig.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
     st.plotly_chart(fig, width="stretch")
@@ -87,13 +90,17 @@ with T[0]:
 
     st.divider()
     st.subheader("自分の配分を試す")
-    c1, c2 = st.columns(2)
-    a_soy = c1.slider("小麦→大豆の面積（㎡）", 0, 100, 70, 5)
-    a_imo = c2.slider("小麦→サツマイモの面積（㎡）", 0, 100 - a_soy, 0, 5)
-    st.caption(f"残りの {100 - a_soy - a_imo}㎡ は通年の露地野菜。小麦は11〜5月に畑を使い、6月の収穫後に夏作へ回します。")
-    st.session_state["jikyu_area"] = (a_soy, a_imo)
+    c1, c2, c3 = st.columns(3)
+    a_soy = c1.slider("小麦→大豆（二毛作）の面積（㎡）", 0, 100, 70, 5)
+    a_imo = c2.slider("小麦→サツマイモ（二毛作）の面積（㎡）", 0, 100 - a_soy, 0, 5)
+    a_rot = c3.slider("輪作❶ 3区画（芋→大豆→小麦）の面積（㎡）", 0, 100 - a_soy - a_imo, 0, 3,
+                      help="区画を3つに分け、1年目 サツマイモ → 2年目 大豆のあと小麦をまく → 3年目 6月に小麦を収穫、と毎年1つずつずらします。"
+                           "毎年、3区画のうち1つずつで芋・大豆・小麦がとれます。")
+    st.caption(f"残りの {100 - a_soy - a_imo - a_rot}㎡ は通年の露地野菜（輪作❷の四季リレー）。"
+               "二毛作の区画では、小麦は11〜5月に畑を使い、6月の収穫後に夏作へ回します。")
+    st.session_state["jikyu_area"] = (a_soy, a_imo, a_rot)
 
-    cond = replace(base, a_soy=a_soy, a_imo=a_imo)
+    cond = replace(base, a_soy=a_soy, a_imo=a_imo, a_rot=a_rot)
     _, s = jl.simulate(cond)
     m = st.columns(4)
     m[0].metric("重量の自給率", f"{s['weight_rate']:.0%}")
@@ -110,24 +117,28 @@ with T[0]:
                 "主食とたんぱく質は1割も自給できません。")
     tips.append("大豆はたんぱく質を、サツマイモはカロリーを稼ぎます。どちらか一方より、両方を組み合わせた折衷案が"
                 "弱点（たんぱく質ゼロ・カロリー不足）を作りにくい配分です。")
+    tips.append("**二毛作か輪作❶か**：二毛作は1㎡あたりのカロリーが大きい代わりに、連作の減収と10月の作業の山を抱えます。"
+                "輪作❶は量では劣りますが、大豆の窒素が次の小麦に効いて肥料が減り、病気と作業の山を分散できます。"
+                "左の「連作による減収」を動かして、どこで順位が入れ替わるかを確かめてください。")
     dc = s["double_crop"]
     if dc:
         tips.append(f"**二毛作の季節制約**：夏作の収穫（10月中下旬）が小麦の最適播種日（10/20頃）とぶつかります。"
                     f"播種が11/5まで{dc['delay_days']}日ずれると、発芽率は {dc['germ_opt']:.0%} → {dc['germ_late']:.0%}、"
                     f"種子は {dc['seed_opt_g_m2']:.1f} → {dc['seed_late_g_m2']:.1f} g/㎡ に増え、"
-                    f"{cond.a_wheat:.0f}㎡で約 {dc['seed_late_total_kg']:.2f} kg 必要です。"
+                    f"遅れる{dc['late_area']:.0f}㎡で約 {dc['seed_late_total_kg']:.2f} kg 必要です。"
                     "早生の大豆を選ぶか、夏作の一部だけ早く片付けて小麦を先にまく区画を作ると緩和できます。")
     for t in tips:
         st.markdown(f"- {t}")
 
 # ═════════════════════ ② 月ごとの調達 ═════════════════════
-a_soy, a_imo = st.session_state.get("jikyu_area", (70, 0))
-cond = replace(base, a_soy=a_soy, a_imo=a_imo)
+_area = tuple(st.session_state.get("jikyu_area", (70, 0, 0)))
+a_soy, a_imo, a_rot = (_area + (0,))[:3]
+cond = replace(base, a_soy=a_soy, a_imo=a_imo, a_rot=a_rot)
 df, s = jl.simulate(cond)
 
-with T[1]:
+with T[2]:
     st.subheader("足りない分を、何でまかなうか")
-    st.write(f"①で選んだ配分（大豆 {a_soy}㎡・サツマイモ {a_imo}㎡・野菜 {cond.a_veg:.0f}㎡）で、"
+    st.write(f"①で選んだ配分（二毛作 大豆 {a_soy}㎡・サツマイモ {a_imo}㎡・輪作 {a_rot}㎡・野菜 {cond.a_veg:.0f}㎡）で、"
              "月ごとの必要量を5つの経路に分けます。")
     cat = st.radio("品目", jl.CATEGORIES, horizontal=True,
                    format_func=lambda k: f"{k}（自給 {s['rate'][k]:.0%}）")
@@ -145,6 +156,16 @@ with T[1]:
     st.dataframe(pv.round(0).astype(int), width="stretch")
     st.caption("単位は kg/年。主食は米換算、たんぱく質は肉換算。")
 
+    st.subheader("輪作❷ 野菜の四季リレー（春作 → 春夏 → 秋冬 → 冬春）")
+    gaps = jl.veg_gap_months(df)
+    st.dataframe(jl.VEG_RELAY, hide_index=True, width="stretch")
+    if gaps:
+        st.markdown(f"- 自家産だけでは野菜が足りない**端境期**：{'・'.join(f'{m}月' for m in gaps)}。"
+                    "冬春作の玉ねぎ（吊るし保存）とハウスの葉物で、この月を埋める設計にします。")
+    else:
+        st.markdown("- いまの配分では、とれたて＋保存で毎月の野菜にほぼ届きます。余りは切り干し・漬物にして「③ 第三の円」へ回せます。")
+    st.caption("同じ科（アブラナ科・ナス科など）を同じ場所で続けないのが、病気を減らす輪作の基本です。")
+
     st.subheader("今の「下味冷凍＋常備品＋現地で買う」は、移住後どう変わるか")
     st.dataframe(pd.DataFrame([
         ["下味冷凍", "月1回仕込んで車で運ぶ", "肉・魚の月1回まとめ買いとして続ける（たんぱく質の主力）"],
@@ -153,7 +174,7 @@ with T[1]:
     ], columns=["経路", "今（隔週帰省）", "移住後"]), hide_index=True, width="stretch")
 
 # ═════════════════════ ③ 停電・断水 ═════════════════════
-with T[2]:
+with T[3]:
     st.subheader("水と電気が止まったら、何日しのげるか")
     st.write("冷凍庫は止まると傷み始め、雨水は煮沸が要り、煮炊きとパン焼きには薪が要ります。食べ物・水・薪を1日ずつ追います。")
     c1, c2, c3 = st.columns(3)
@@ -164,14 +185,25 @@ with T[2]:
     freezer = c2.radio("冷凍庫の中身", ["満杯に近い", "半分以下"], horizontal=True)
     rice_kg = c3.number_input("備蓄米（kg）", 0, 120, 30, 5)
     jobi = c3.number_input("常備品（缶詰・乾物）の量（日分）", 0, 60, 7)
+    st.markdown("**A エネルギー（資料の「薪ストーブと薪」「木炭調理器と木炭」）**")
+    e1, e2, e3 = st.columns(3)
+    heating = e1.checkbox("薪ストーブで1室を暖める", value=month in (11, 12, 1, 2, 3))
+    charcoal = e2.number_input("木炭の備蓄（kg）", 0, 200, 10, 5, help="煮炊きは煙の少ない木炭から先に使う想定")
+    wood_stock = e3.number_input("乾いた薪の備蓄（kg）", 0, 3000, 200, 50)
 
     od, os_ = jl.outage(cond, s, days=days, month=month, tank_l=tank, freezer_full=freezer == "満杯に近い",
-                        rice_kg=rice_kg, jobi_days=jobi, roof_m2=roof)
-    m = st.columns(4)
+                        rice_kg=rice_kg, jobi_days=jobi, roof_m2=roof, heating=heating,
+                        charcoal_kg=charcoal, wood_stock_kg=wood_stock)
+    m = st.columns(5)
     m[0].metric("食べ物が続く日数", f"{os_['food_days']:.0f} 日")
     m[1].metric("水が足りなくなる日", f"{os_['water_short_day']} 日目" if os_["water_short_day"] else "期間内は足りる")
     m[2].metric("1日の雨水（平均）", f"{os_['rain_per_day']:.0f} L", f"必要 {os_['need_per_day']:.0f} L/日", delta_color="off")
-    m[3].metric(f"{days}日間の薪", f"{os_['wood_total']:.0f} kg")
+    m[3].metric(f"{days}日間の薪", f"{os_['wood_total']:.0f} kg",
+                f"うち暖房 {os_['heat_total']:.0f} kg" if os_["heat_total"] else None, delta_color="off")
+    m[4].metric("薪が尽きる日", f"{os_['wood_out_day']} 日目" if os_["wood_out_day"] else "期間内はもつ")
+    w14 = jl.water_target(persons, 14)
+    st.caption(f"資料の目標「最低2週間分の水」＝ 3L × {persons}人 × 14日 ＝ **{w14:.0f} L**。"
+               f"いまのタンク {tank} L は {tank / w14:.0%}。不足分はペットボトルで分散して置きます（1か所に集めない）。")
 
     fig = go.Figure()
     fig.add_bar(x=od["日"], y=od["その日の薪(kg)"], name="その日の薪（kg）", marker_color="#a08a68", yaxis="y2", opacity=0.6)
@@ -190,13 +222,14 @@ with T[2]:
         f"- 雨水は屋根1㎡に1mm降ると1Lです。{month}月は1日平均約{os_['rain_per_day']:.0f}L集まる計算です。飲み水は**煮沸かろ過**してから使います。\n"
         f"- 薪は{days}日で約{os_['wood_total']:.0f}kg。栗5本の剪定枝だけで年約{supply:.0f}kg（目安）です。"
         "栗を改植するときに出る材は乾燥に1年かかるので、**今年切った分が来年の備え**になります。\n"
-        "- 石窯で一度にまとめて焼けば、パンは数日もつ主食になります。自家産の小麦はここで効きます。"
+        "- 石窯で一度にまとめて焼けば、パンは数日もつ主食になります。自家産の小麦はここで効きます。\n"
+        "- 冬の停電で薪を一番食うのは煮炊きではなく**暖房**です。12〜2月に備えるなら、薪の備蓄は暖房の量で決めます。"
     )
     st.warning("かまど・石窯は必ず屋外か十分に換気できる場所で使います（一酸化炭素中毒・火災の危険）。"
                "本ページの数値は教育用の単純化モデルです。実際の備えは自治体のハザードマップと防災情報に従ってください。")
 
 # ═════════════════════ ④ 探究フィールドワーク ═════════════════════
-with T[3]:
+with T[4]:
     st.subheader("探究フィールドワークの叩き台")
     st.write("通信制高校・サポート校の探究、総合型選抜に向けた探究、特別支援学校の作業学習の場として使う想定です。"
              "このシミュレーターの**目安の数値を、生徒が畑で測った値に置き換えていく**ことが探究の中心です。")
@@ -238,12 +271,23 @@ with T[3]:
                 diff = pd.DataFrame([(k, jl.COEF[k].yield_kg_m2, new[k].yield_kg_m2) for k in jl.COEF],
                                     columns=["作物", "目安(kg/㎡)", "実測(kg/㎡)"])
                 st.dataframe(diff.round(2), hide_index=True, width="stretch")
+                post = jl.posterior_from_measurements(mdf)
+                if post:
+                    st.markdown("**ベイズ更新：目安（事前）と実測から、来年の収量をどこまで絞れたか**")
+                    st.dataframe(pd.DataFrame([
+                        (k, jl.COEF[k].yield_kg_m2, v["n"], v["mean"], f"{v['lo90']:.2f}〜{v['hi90']:.2f}",
+                         f"{jl.YIELD_CV[k]:.0%} → {v['pred_cv']:.0%}") for k, v in post.items()],
+                        columns=["作物", "目安(kg/㎡)", "区画数", "事後平均(kg/㎡)", "平均の90%区間", "来年のばらつき"]
+                    ).round(3), hide_index=True, width="stretch")
+                    st.caption("区画が1つだけだと、目安の値に引き戻されます（測った値をそのまま信じない）。"
+                               "区画と年を重ねるほど、実測が優先され、🎯タブの「達成する確率」の幅が縮みます。")
+                    st.session_state["jikyu_post"] = post
                 if st.button("この実測値で再計算する"):
                     st.session_state["jikyu_coef"] = new
                     st.rerun()
 
 # ═════════════════════ ⑤ 家計簿・収入構造とつなぐ ═════════════════════
-with T[4]:
+with T[5]:
     st.subheader("計画値を、自給家計簿と収入構造へ渡す")
     st.write("このページは計画（見込み）、自給家計簿は実績、収入構造は10年の家計の見通しです。"
              "同じ品目名・同じ列でつなぐので、計画と実績の差がそのまま次の判断材料になります。")
@@ -274,3 +318,114 @@ with T[4]:
             "探究フィールドワーク（実測CSV）─→ coef_from_measurements() ─→ 収量の係数を置き換え",
             language="text",
         )
+
+# ═════════════════════ 🎯 1年備蓄の同心円（食糧保存プログラム） ═════════════════════
+# ①で選んだ配分（cond）を使うため、コードはここに置き、表示は先頭のタブにする
+CIRCLE_COLORS = {"畑から": "#2f6f5e", "買い足す": "#c98a2b", "持つと傷む分": "#d9d4c7"}
+GOALS = {"3日": 0.1, "1週間（農水省の目安）": 0.25, "1か月": 1, "3か月": 3, "6か月": 6, "1年（資料の目標）": 12}
+
+with T[0]:
+    st.subheader("問い：「一年分の備蓄」は、畑と保存の工夫でどこまで成り立つか")
+    st.write("資料「食糧保存プログラム」の同心円（① 有事最優先 → ② 必需食料品 → ③ 第三の円）と A〜F の備えを、"
+             "**① 計算する → ② 可視化する → ③ 自分の条件で判断する** で確かめます。"
+             "畑の配分は「① 畑の配分を比べる」で選んだもの（輪作❶を含む）を使います。")
+    goal_name = st.select_slider("備蓄の目標", list(GOALS), value="1年（資料の目標）")
+    goal = GOALS[goal_name]
+
+    plan = jl.stock_plan(cond, goal)
+    tot = plan[["目標_kg", "回せる上限_kg", "畑から_kg", "買い足す_kg"]].sum()
+    m = st.columns(4)
+    m[0].metric("目標（②③の合計）", f"{tot['目標_kg']:.0f} kg")
+    m[1].metric("傷ませずに回せる上限", f"{tot['回せる上限_kg']:.0f} kg",
+                f"{tot['回せる上限_kg'] / tot['目標_kg']:.0%}", delta_color="off")
+    m[2].metric("畑から", f"{tot['畑から_kg']:.0f} kg", f"{tot['畑から_kg'] / tot['回せる上限_kg']:.0%}", delta_color="off")
+    m[3].metric("買い足す", f"{tot['買い足す_kg']:.0f} kg")
+
+    # ② 可視化：品目ごとに「畑から／買い足す／持つと傷む分」
+    bar = plan.assign(持つと傷む分=plan["目標_kg"] - plan["回せる上限_kg"]).rename(
+        columns={"畑から_kg": "畑から", "買い足す_kg": "買い足す"})
+    long = bar.melt(id_vars=["円", "品目"], value_vars=list(CIRCLE_COLORS), var_name="内訳", value_name="kg")
+    c1, c2 = st.columns([3, 2])
+    with c1:
+        fig = px.bar(long, y="品目", x="kg", color="内訳", orientation="h", color_discrete_map=CIRCLE_COLORS,
+                     category_orders={"品目": list(plan["品目"]), "内訳": list(CIRCLE_COLORS)})
+        fig.update_layout(height=430, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="",
+                          legend=dict(orientation="h", y=-0.12), yaxis_title=None, xaxis_title="kg")
+        st.plotly_chart(fig, width="stretch")
+    with c2:
+        sb = px.sunburst(plan.assign(中心=f"{goal_name}の備蓄"), path=["中心", "円", "品目"], values="目標_kg",
+                         color="円", color_discrete_map={"② 必需食料品": "#6a9a4a", "③ 第三の円": "#7fb3a8",
+                                                        f"{goal_name}の備蓄": "#f3efe6"})
+        sb.update_layout(height=430, margin=dict(l=0, r=0, t=10, b=0))
+        st.plotly_chart(sb, width="stretch")
+    st.caption("同心円の中心「① 有事最優先（栄養補給剤）」は量を計算しません（下のチェック表）。")
+
+    with st.expander("品目ごとの表（保存の工夫つき）"):
+        st.dataframe(plan.round(1), hide_index=True, width="stretch")
+        st.download_button("備蓄計画をCSVで保存", sg.safe_csv(plan.round(2)), "備蓄計画_同心円.csv", "text/csv")
+
+    # 回転率の原理と、水分活性
+    st.subheader("「食品の回転率」を計算にすると")
+    st.markdown(
+        "ふだんどおりの速さで**古いものから**食べると、備蓄のいちばん古い分は「目標の月数」だけ待ってから食べられます。"
+        "だから **保存の目安 ≧ 目標の月数** の品目だけが、そのまま回せます。短い品目は"
+        "「量を保存の目安の月数分に抑える」か「**保存の形を変える**」（粉→粒、生芋→干し芋、柿→干し柿→冷凍）しかありません。"
+        "資料の「挽臼（精米器・粉挽ミル）」は、この**形を変える道具**です。")
+    a1, a2 = st.columns([3, 2])
+    a1.dataframe(jl.AW_TABLE, hide_index=True, width="stretch")
+    a2.markdown("**水分活性（Aw）の下限の目安**\n\n" + "\n".join(f"- {k}：{v:.2f}" for k, v in jl.AW_LIMITS.items())
+                + "\n\n乾燥・塩・砂糖・発酵は、どれも**微生物が使える水を減らす**工夫です。"
+                "資料の「燻製？」は、煙だけでは長期保存になりません。**塩漬け・乾燥と組み合わせて**Awを下げます。")
+
+    # 今買う → どの速さで
+    st.subheader("「今買うこと」を、どの速さで実行するか")
+    pace = jl.purchase_pace(plan, cond)
+    fig = px.bar(pace, x="揃える期間", y="ふだんの何倍", text=pace["ふだんの何倍"].map(lambda v: f"{v:.1f}倍"),
+                 color_discrete_sequence=["#3f7cac"])
+    fig.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10), yaxis_title="ふだんの月の購入量の何倍か")
+    st.plotly_chart(fig, width="stretch")
+    st.markdown(
+        f"- 買い足す {tot['買い足す_kg']:.0f} kg を**1週間で**揃えると、その月の購入はふだんの約 "
+        f"**{pace.iloc[0]['ふだんの何倍']:.0f}倍**、**1年かけて**なら約 **{pace.iloc[-1]['ふだんの何倍']:.1f}倍** です。\n"
+        "- 1世帯の買い増しは小さくても、品薄報道のあと多くの世帯が同じ週に動くと、店→卸→メーカーへと発注の振れが増幅します"
+        "（**ブルウィップ効果**：Lee, Padmanabhan & Whang 1997）。ナフサ・ショックで見たのと同じ構造です。\n"
+        "- だから資料の「今買う」は、**平時のうちに・少しずつ・古いものから食べて補充**（ローリングストック）と読み替えます。")
+
+    # 不確かさ：モンテカルロ
+    st.subheader("天候・鳥害込みで、目標に届く確率")
+    post = st.session_state.get("jikyu_post")
+    r = jl.staple_risk(cond, n=4000, post=post)
+    m = st.columns(4)
+    m[0].metric("パン用小麦を1年分まかなえる確率", f"{r['p_bread_year']:.0%}",
+                f"必要 {r['wheat_need']:.0f} kg（粒）", delta_color="off")
+    m[1].metric("小麦の収穫（10〜90%）", f"{r['wheat_q']['p10']:.0f}〜{r['wheat_q']['p90']:.0f} kg")
+    m[2].metric("乾燥備蓄が1週間以上ある確率", f"{r['p_dry_week']:.0%}")
+    m[3].metric("パン1年分に要る小麦の面積", f"{r['wheat_m2_for_bread']:.0f} ㎡", "今の管理段階の収量で", delta_color="off")
+    hist = px.histogram(pd.DataFrame({"停電でも食べられる乾燥備蓄(日)": r["dry_days"]}),
+                        x="停電でも食べられる乾燥備蓄(日)", nbins=40, color_discrete_sequence=["#2f6f5e"])
+    hist.add_vline(x=7, line_dash="dash", annotation_text="1週間", line_color="#b77a86")
+    hist.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10), yaxis_title="年数（4,000回の試行）")
+    st.plotly_chart(hist, width="stretch")
+    st.caption("収量を対数正規分布でばらつかせた4,000年分の試行です（変動係数の目安："
+               + "・".join(f"{k} {v:.0%}" for k, v in jl.YIELD_CV.items() if k in ("小麦", "大豆", "サツマイモ"))
+               + "）。" + ("④の実測でベイズ更新した分布を使っています。" if post else
+                          "④で実測CSVを読み込むと、ベイズ更新した分布に切り替わります。"))
+
+    # ③ 判断
+    st.subheader("判断の材料")
+    short = plan[plan["保存の目安_月"] < goal]["品目"].tolist()
+    tips = [
+        f"目標「{goal_name}」で、そのまま回せないのは **{'・'.join(short) if short else 'なし'}** です。"
+        + ("形を変える（干す・漬ける・冷凍）か、量を抑えます。" if short else ""),
+        f"100㎡の畑だけでパンの主食を1年分つくるには、小麦が約 **{r['wheat_m2_for_bread']:.0f}㎡** 要ります。"
+        "畑は「主食を全部」ではなく、**乾燥して年単位でもつもの（玄小麦・大豆）を、天候の悪い年でも少し残せる量**を狙うのが現実的です。",
+        "② 必需食料品のうち、玄米・粉ミルク・調味料・塩は畑から出ません。ここは**買って回す**部分で、自給と備蓄は役割分担です。",
+        "発芽用種子は小さな量で効きます。乾燥した穀物・豆にはほとんどないビタミンCを、水と数日で作れます（理科の探究テーマにもなる）。",
+    ]
+    for t in tips:
+        st.markdown(f"- {t}")
+
+    st.subheader("1・A〜F：量より先に、法令と安全を確かめる")
+    st.dataframe(jl.PREP_CHECKLIST, hide_index=True, width="stretch")
+    st.warning("本ページの数値は教育用の単純化モデルです。備蓄の量は農林水産省「家庭備蓄ポータル」、"
+               "飲み水・消毒は保健所と自治体の案内、薬は主治医・薬剤師に従ってください。")
