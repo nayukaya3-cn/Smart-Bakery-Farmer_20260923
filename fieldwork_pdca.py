@@ -443,6 +443,84 @@ Q6. 若い世代が「食と技術の守り手」になるために、今どん�
 
 
 # ─────────────────────────────────────────────
+# ❸→❹ T2（ティーム・ティーチングのサポート役）のつまずき記録
+#   授業・実習中に「その場で解消した／T1へつないだ」を1行ずつ残し、
+#   次の授業の HA（危害分析）に戻す。T2 の個別伴走・機材対応・事後反省を1枚でつなぐ。
+# ─────────────────────────────────────────────
+STUMBLE_KINDS = {
+    "L": "学び（写経で動いたが説明できない・問いが持てない）",
+    "P": "操作（ログイン・保存先・エラーで手が止まる）",
+    "I": "情報（出典のない数値・生成AIの答えの貼りつけ・写り込み）",
+    "S": "セキュリティ（ログアウト忘れ・パスワードのメモ・個人情報の入力）",
+    "R": "ロボット・機械（動作中に線の内側へ入る・3Dプリンターのノズル）",
+}
+STUMBLE_COLS = ["日付", "授業", "生徒ID", "種類", "状態", "対応", "解消", "分", "次の予防"]
+
+
+def sample_stumble_log() -> pd.DataFrame:
+    """架空の記入例（匿名ID）。実施記録ではありません。"""
+    d = dt.date(2026, 11, 10)
+    return pd.DataFrame([
+        (d, "情報Ⅰ 表計算③", "S03", "P", "絶対参照の$を付け忘れ、コピーで値がずれた",
+         "「1つ下のセルの式を見てごらん」と問い返し", True, 3, "コピー前に式を1回見せる"),
+        (d, "情報Ⅰ 表計算③", "S02", "P", "ログインできず5分止まる",
+         "予備アカウントでペア作業に切替", False, 8, "前日に全アカウントの確認"),
+        (d, "情報Ⅰ 表計算③", "S05", "I", "生成AIの答えをそのまま貼った",
+         "「どうやったら正しいと確かめられる？」", True, 4, ""),
+        (d, "情報Ⅰ 表計算③", "S02", "L", "式は合っているが、なぜその式か説明できない",
+         "T1へ共有し、全体で1回説明", False, 2, "T1の説明に「なぜ」を1問入れる"),
+        (d, "情報Ⅰ 表計算③", "S01", "S", "共有PCでログアウトせず退出しかけた",
+         "その場でログアウト", True, 1, "最後の2分をログアウト確認に固定"),
+    ], columns=STUMBLE_COLS)
+
+
+def stumble_summary(log: pd.DataFrame, predicted: list[str] | None = None) -> dict:
+    """つまずきを種類別に数え、事前の予想（HA）とのずれを出す。
+
+    - by_kind     : 種類ごとの件数・その場での解消率・平均の分数
+    - unexpected  : 事前に予想していなかった種類（＝インサイト。次回の CCP 候補）
+    - missing_rows: 未解消なのに「次の予防」が空の行（HACCPの「外れた→何をしたか」の書き忘れと同じ）
+    """
+    df = log.copy()
+    df["解消"] = df["解消"].astype(bool)
+    df["分"] = pd.to_numeric(df["分"], errors="coerce").fillna(0)
+    by = (df.groupby("種類")
+            .agg(件数=("生徒ID", "size"), その場で解消=("解消", "mean"), 平均の分=("分", "mean"))
+            .reset_index())
+    by["内容"] = by["種類"].map(STUMBLE_KINDS)
+    by["その場で解消"] = by["その場で解消"].round(2)
+    by["平均の分"] = by["平均の分"].round(1)
+    by = by.sort_values("件数", ascending=False).reset_index(drop=True)
+    pred = set(predicted or [])
+    unexpected = [k for k in by["種類"] if k not in pred] if predicted is not None else []
+    blank = df["次の予防"].fillna("").astype(str).str.strip() == ""
+    missing = df[(~df["解消"]) & blank]
+    return dict(n=len(df), solved=float(df["解消"].mean()) if len(df) else 0.0,
+                minutes=float(df["分"].sum()), by_kind=by,
+                unexpected=unexpected, missing_rows=missing)
+
+
+def next_visit_priority(log: pd.DataFrame, threshold: float = 0.5) -> pd.DataFrame:
+    """次の授業で、手立てを変えて先に見に行く生徒の順。
+
+    生徒ごとの「その場で解消した／しなかった」を Beta(1,1) で更新し、
+    解消率が threshold 以上である確率が低い順に並べる。
+    ※ 効き目が低い生徒を後回しにするのではなく、「同じ声かけを繰り返さず手立てを変える」ための順番。
+    """
+    rows = []
+    for sid, g in log.groupby("生徒ID"):
+        ok = int(g["解消"].astype(bool).sum())
+        post = readiness_posterior(ok, len(g), threshold=threshold)
+        how = ("声かけ（問い返し）を続ける" if post["mean"] >= threshold
+               else "手立てを変える（手順カード・ペア・T1へ共有）")
+        rows.append({"生徒ID": sid, "記録の数": len(g), "その場で解消": ok,
+                     "解消率（平均）": round(post["mean"], 2),
+                     f"解消率≧{threshold:.0%}の確率": round(post["p_ready"], 2), "次の手立て": how})
+    out = pd.DataFrame(rows)
+    return out.sort_values(f"解消率≧{threshold:.0%}の確率").reset_index(drop=True) if len(out) else out
+
+
+# ─────────────────────────────────────────────
 # 自己チェック
 # ─────────────────────────────────────────────
 def _selftest() -> None:
@@ -486,6 +564,16 @@ def _selftest() -> None:
     memo = strategy_memo("テスト", dt.date(2026, 12, 10), "高1", 30, ["微生物とその利用"], HAZARDS)
     assert "CCP" in memo and "微生物" in memo
     assert set(UNIT_BRIDGE["レンズ"]) <= set(LENSES)
+    st_log = sample_stumble_log()
+    ss = stumble_summary(st_log, predicted=["P", "L"])
+    assert ss["n"] == 5 and ss["by_kind"].iloc[0]["種類"] == "P"
+    assert set(ss["unexpected"]) == {"I", "S"} and len(ss["missing_rows"]) == 0
+    broken = st_log.copy()
+    broken.loc[1, "次の予防"] = ""
+    assert len(stumble_summary(broken)["missing_rows"]) == 1      # 未解消で予防が空 → 検出
+    nv = next_visit_priority(st_log)
+    assert nv.iloc[0]["生徒ID"] == "S02" and "手立てを変える" in nv.iloc[0]["次の手立て"]
+    assert set(st_log["種類"]) <= set(STUMBLE_KINDS)
     print("fieldwork_pdca: すべてのチェックに合格しました")
 
 
