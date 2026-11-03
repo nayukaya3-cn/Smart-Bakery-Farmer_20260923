@@ -27,7 +27,7 @@ import teacher_course as tc
 st.set_page_config(page_title="フィールドワーク伴走", page_icon="🧭", layout="wide")
 
 PAGE = "fieldwork_pdca"
-UPDATED = "2026-11-03"
+UPDATED = "2026-11-04"
 
 st.markdown(
     """
@@ -256,6 +256,56 @@ with tabs[3]:
         else:
             st.success("基準から外れた記録には、すべて是正の内容が書かれています。")
         st.download_button("当日の管理記録をCSVで保存", sg.safe_csv(mon), "当日の管理記録.csv", "text/csv")
+
+    st.subheader("④ T2のつまずき記録（個別伴走 → 次の❶へ戻す）")
+    st.write("ティーム・ティーチングのサポート役（T2）が、授業・実習中のつまずきを**1行ずつ**残します。"
+             "「その場で解消した／T1へつないだ」と「次の予防」までが1組。集計は❹の振り返りと、次回の❶（危害分析）に戻します。")
+    with st.expander("種類の見分け方（L・P・I・S・R）"):
+        st.dataframe(pd.DataFrame(list(fp.STUMBLE_KINDS.items()), columns=["種類", "内容"]),
+                     width="stretch", hide_index=True)
+    up_st = st.file_uploader("つまずき記録CSV（列：" + ",".join(fp.STUMBLE_COLS) + "）",
+                             type="csv", key="fw_stumble_up")
+    if "fw_stumble" not in st.session_state:
+        st.session_state.fw_stumble = fp.sample_stumble_log()
+    if up_st is not None:
+        _st = sg.read_csv_safely(up_st, page=PAGE, kind="stumble")
+        if _st is not None and set(fp.STUMBLE_COLS) <= set(_st.columns):
+            _st = _st[fp.STUMBLE_COLS]
+            _st["日付"] = pd.to_datetime(_st["日付"], errors="coerce").dt.date
+            _st["解消"] = _st["解消"].astype(str).str.strip().str.lower().isin(["true", "1", "はい", "○"])
+            st.session_state.fw_stumble = _st
+        elif _st is not None:
+            st.error("列名が足りません：" + "・".join(sorted(set(fp.STUMBLE_COLS) - set(_st.columns))))
+    stl = st.data_editor(
+        st.session_state.fw_stumble, num_rows="dynamic", width="stretch", hide_index=True, key="fw_stumble_editor",
+        column_config={
+            "日付": st.column_config.DateColumn(),
+            "種類": st.column_config.SelectboxColumn(options=list(fp.STUMBLE_KINDS)),
+            "解消": st.column_config.CheckboxColumn("その場で解消", default=False),
+            "分": st.column_config.NumberColumn("解消までの分", min_value=0, max_value=50, step=1),
+        })
+    stl = stl.dropna(subset=["生徒ID", "種類"])
+    st.caption("生徒の氏名・学校名は書かず、匿名IDで記録します。初期表示は架空の記入例です。")
+    if len(stl):
+        predicted = st.multiselect("事前の打ち合わせ（❶）で予想していた種類", list(fp.STUMBLE_KINDS),
+                                   default=["P", "L"], key="fw_stumble_pred")
+        sm = fp.stumble_summary(stl, predicted=predicted)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("つまずきの数", sm["n"])
+        c2.metric("その場で解消した割合", f"{sm['solved']:.0%}")
+        c3.metric("対応にかかった分（合計）", f"{sm['minutes']:.0f} 分")
+        st.dataframe(sm["by_kind"], width="stretch", hide_index=True)
+        if sm["unexpected"]:
+            st.warning("予想していなかった種類：" + "・".join(sm["unexpected"])
+                       + " → インサイトです。次回の打ち合わせで CCP の候補にします。")
+        if len(sm["missing_rows"]):
+            st.error("その場で解消しなかったのに、「次の予防」が空の記録があります。")
+            st.dataframe(sm["missing_rows"], width="stretch", hide_index=True)
+        st.markdown("**次の授業で、手立てを変えて先に見に行く順**")
+        st.caption("同じ声かけで解消しなかった回数が多い生徒ほど上に来ます。後回しにするための順番ではなく、"
+                   "**手立てを変える**ための順番です。")
+        st.dataframe(fp.next_visit_priority(stl), width="stretch", hide_index=True)
+        st.download_button("つまずき記録をCSVで保存", sg.safe_csv(stl), "T2つまずき記録.csv", "text/csv")
 
 # ═════════════════════════════════════════════
 # ❹ 事後：振り返り
