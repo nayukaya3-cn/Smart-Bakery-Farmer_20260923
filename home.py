@@ -61,6 +61,58 @@ def safe_page_link(page: str, label: str, icon: str) -> None:
         st.caption(f"{icon} {label}（左のメニューから開けます）")
 
 
+STANCE_ROLES = pd.DataFrame([
+    # 授業の場面, 先生（T1）が決めること, 私（T2）が受け持つこと
+    ("ねらい・進め方", "単元のねらい、授業の流れ、全体への説明", "つまずきそうな点を事前に洗い出し、打ち合わせでお伝えする"),
+    ("実習中", "授業全体の進行と、全体に戻す判断", "手が止まった生徒への個別の声かけ（答えは言わず問い返す）"),
+    ("機材・現場", "使う教材・機材の選択", "PC・ネットワーク・畑・機械の不具合を裏で直し、授業を止めない"),
+    ("安全", "実施するかどうかの最終判断", "暑さ指数・アレルゲン・機械の立ち位置などを決めた基準で測り、記録する"),
+    ("評価", "評価・成績をつける", "評価の材料（活動ログ・つまずき記録・ルーブリック）を整えてお渡しする"),
+], columns=["授業の場面", "先生（T1）が決めること", "私（T2）が受け持つこと"])
+
+HACCP_ANALOGY = pd.DataFrame([
+    ("製造工程を回す人", "授業を進める先生（T1）"),
+    ("前提条件プログラム（一般衛生管理）", "教室・機材・畑の環境を、授業の前に整えておく（T2）"),
+    ("モニタリング", "授業中、決めた要所だけを基準で見て回る（T2）"),
+    ("是正処置と記録", "外れたらその場で直し、何をしたかを1行残す（T2）"),
+    ("検証", "授業後に先生と、予想と実際のずれをすり合わせる（T1＋T2）"),
+], columns=["パン工場のHACCP", "授業では"])
+
+
+def _md_table(df: pd.DataFrame) -> str:
+    """折り返して全文が読めるように、表を Markdown で書く（st.dataframe は長い文が切れるため）。"""
+    head = "| " + " | ".join(df.columns) + " |\n|" + "---|" * len(df.columns) + "\n"
+    return head + "\n".join("| " + " | ".join(map(str, r)) + " |" for r in df.itertuples(index=False))
+
+
+def stance_block() -> None:
+    """ホームの冒頭：学校・先生に対する立場（競合ではなく、学習環境を整え保つ役）。"""
+    st.subheader("🤝 学校の先生方へ：私の立場")
+    st.markdown(
+        "授業の主役は、**生徒と先生**です。私は先生に代わって教える人ではありません。"
+        "ティーム・ティーチングで言えば **T2（サポート役）**。先生が授業という“ライン”を回し、"
+        "私は**その“ライン”を止めないための環境づくりと、見守り・立て直し**を受け持ちます。"
+    )
+    st.markdown(_md_table(STANCE_ROLES))
+    a, b = st.columns([3, 2])
+    with a.container(border=True):
+        st.markdown("**パン工場の衛生管理（HACCP）で言うと**\n\n" + _md_table(HACCP_ANALOGY))
+    with b.container(border=True):
+        st.markdown(
+            "**しないこと**\n\n"
+            "- 授業の進め方や評価を、先生に代わって決めること\n"
+            "- 学校の授業と競う講座で、生徒を囲い込むこと\n"
+            "- 記録や写真を、学校の了承なく外に出すこと"
+        )
+    st.caption("裏づけ：今年度、高校「情報Ⅰ」のティーム・ティーチングでT2を担当しています。"
+               "特別支援学校 高等部では作業学習（農業・食品加工）の支援を5年4か月、食品工場の衛生管理（HACCP）を長く担ってきました。")
+    l1, l2 = st.columns(2)
+    with l1:
+        safe_page_link(FIELDWORK_PAGE, "T2の道具（CCP管理表・つまずき記録）を見る", "🧭")
+    with l2:
+        safe_page_link(SCHOOL_PAGE, "先生にお渡しする記録（ルーブリック・活動ログ）を見る", "📋")
+
+
 def school_banner() -> None:
     """学校向けページへの入口（ホーム・探究学習・受け入れ体制で共用）。"""
     with st.container(border=True):
@@ -116,6 +168,9 @@ st.markdown(
                       color: #3b2f1e; font-size: .92rem; white-space: nowrap;}
     .cycle span.arrow {color: #a08a68;}
     .note {font-size: .85rem; color: #7a6a55;}
+    .hero .stance {margin: 0 0 .9rem 0; padding: .8rem 1rem; border-left: 5px solid #c98a2b;
+                   background: rgba(255,255,255,.7); border-radius: 0 10px 10px 0;
+                   font-size: 1.05rem; line-height: 1.8;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -127,6 +182,7 @@ st.markdown(
 with st.sidebar:
     st.header("🌾 スマートパン屋農家")
     st.write("麦を育て、数値で判断し、パンを焼く。")
+    st.caption("学校の授業では、先生の競合ではなく、授業を止めない裏方（T2）を受け持ちます。")
     sn.buttons("で活動内容を見る", stacked=True)
     st.caption("ほかのページは、上のメニューに5つのまとまりで並べています。")
     st.divider()
@@ -249,16 +305,21 @@ with T["🏠 ホーム"]:
     st.markdown(
         f"""
         <div class="hero">
-          <p class="eyebrow">広島県三原市 ・ 約{FIELD_AREA_M2}㎡の小さな畑から</p>
+          <p class="eyebrow">広島県三原市 ・ 約{FIELD_AREA_M2}㎡の小さな畑から ・ 学校の先生方へ</p>
           <h1>スマートパン屋農家を始める！</h1>
-          <p class="lead">畑の小麦から、一斤のパンまで。<br>
-          土の状態も、麦の育ち方も、パンの原価も。センサー・AI・ロボットで<b>数字にして見える化</b>し、必要な道具は3Dプリンターで自作しながら、
-          小さな農とパンの循環を、三原でひとつずつ形にしていきます。</p>
+          <p class="stance">授業の主役は、生徒と先生です。私は<b>「補助の先生」でも「競合する講師」でもなく</b>、
+          授業という<b>“ライン”を止めない品質保証役（T2）</b>です。<br>
+          パン工場のHACCPで言えば、先生（T1）が製造工程を回し、私は
+          <b>前提条件（学びの環境づくり）と、見守り・その場の立て直し・記録</b>を受け持ちます。</p>
+          <p class="lead">そのための現場が、この畑とパン工房です。土の状態も、麦の育ち方も、パンの原価も。
+          センサー・AI・ロボットで<b>数字にして見える化</b>し、必要な道具は3Dプリンターで自作しながら、
+          先生がそのまま授業に持ち込める題材と記録を、三原でひとつずつ形にしていきます。</p>
           <p class="motto">噂や雰囲気ではなく、自分の数値で決める。</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    stance_block()  # 学校・先生に対する立場（T2＝授業を止めない裏方）
     tc.render()  # 3分コースは teacher_course.py（📝 教科×情報Ⅰの科目ページと共用）
 
     # この畑でつくる循環（米ぬか・残渣 → 発酵肥料 → 土 へ戻す）
