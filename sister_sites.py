@@ -20,7 +20,7 @@ from __future__ import annotations
 import unicodedata
 from pathlib import Path
 
-NETWORK_VERSION = "2026-11-06"
+NETWORK_VERSION = "2026-11-06.2"
 
 SITES: dict[str, dict] = {
     "bakery": {
@@ -34,7 +34,7 @@ SITES: dict[str, dict] = {
         "name": "体をつくるタンパク質",
         "icon": "🧬",
         "role": "教室（事前学習）：教科書の1単元をPythonで動かす",
-        "app": None,  # Streamlit Cloud で公開したら URL を入れる（None の間は GitHub に案内）
+        "app": "https://science-and-our-daily-life-dashboard-eemy7afzawym4gn656fjat.streamlit.app",
         "repo": "https://github.com/nayukaya3-cn/Science-and-Our-Daily-Life-dashboard",
     },
 }
@@ -147,6 +147,7 @@ def _self_check() -> None:
     assert pairs_for("tanpaku", "shoka") and pairs_for("bakery", "科学と人間生活_FW事前学習")
     assert pairs_for_unit("ヒトの生命現象", "bakery")[0][0] == "tanpaku"
     assert url("bakery", "フィールドワーク伴走").endswith("/フィールドワーク伴走")
+    assert all(s["app"] for s in SITES.values()), "公開URLが未設定のサイトがある"
 
 
 if __name__ == "__main__":
