@@ -19,6 +19,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import kyotsu_rika as kr
+import sister_sites as ss
 
 st.set_page_config(page_title="共通テスト『理科』を情報Ⅰで解く", page_icon="📝", layout="wide")
 
@@ -376,3 +377,5 @@ with tab_x:
         ("トレース表", "情報Ⅰ", "手順を1行ずつ実行したときの変数の値の表。誤りを見つける道具", "アルゴリズム"),
     ], columns=["用語", "分野", "意味", "情報Ⅰの道具"]), hide_index=True, width="stretch")
     st.caption("© スマートパン屋農家プロジェクト ｜ 問題文はオリジナル。数値は教育用の目安で、正式な値は教科書・理科年表で確かめてください。")
+
+ss.render("bakery", "共通テスト理科×情報Ⅰ")

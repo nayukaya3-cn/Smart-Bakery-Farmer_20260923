@@ -21,6 +21,7 @@ import streamlit as st
 
 import fieldwork_pdca as fp
 import security_guard as sg
+import sister_sites as ss
 import social as sn
 import teacher_course as tc
 
@@ -387,6 +388,7 @@ with tabs[5]:
     st.success("❺ の結果は、次のフィールドワークの ❶（危害分析）に戻します。"
                "「確かめられなかった」が多かった観点は、次回の CCP4（問いの質）の基準を見直す材料になります。")
 
+ss.render("bakery", "フィールドワーク伴走")
 st.divider()
 st.write(f"この伴走キットへのご意見・試してみたい学校の先生は、{sn.NAMES}からお声がけください。"
          "受け入れ実績はまだありません（フェーズ0：実証・記録）。")
