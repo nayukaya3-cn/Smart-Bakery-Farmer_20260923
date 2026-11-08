@@ -1,4 +1,5 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}.bt th,.bt td{text-align:left!important;white-space:normal;font-family:inherit}.bt tr.cur td{background:var(--soft);font-weight:700}
+</style></head><body>
 <title>ハウス収穫ロボ・シミュレーター</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -120,7 +121,7 @@ textarea{width:100%;min-height:90px;font-family:var(--f-mono);font-size:12px;bac
       <h1>ハウス収穫ロボ・シミュレーター</h1>
       <p class="lede">レール走行式のトマト収穫ロボットを、教室から遠隔操作する。または AI に任せる。同じハウス・同じ果房で、人とAIの収穫を比べます。</p>
     </div>
-    <div class="spec"><span class="tag">ハウス長 18 m</span><span class="tag">温湯管レール走行</span><span class="tag">収穫基準 着色度 ≥ 70%</span></div>
+    <div class="spec"><span class="tag">ハウス長 18 m</span><span class="tag">レール走行ロボ（温湯管の上）</span><span class="tag">収穫基準 着色度 ≥ 70%</span></div>
   </header>
 
   <main class="app">
@@ -226,6 +227,11 @@ textarea{width:100%;min-height:90px;font-family:var(--f-mono);font-size:12px;bac
     <textarea id="csvOut" readonly hidden></textarea>
   </section>
 
+  <section class="card bodies" aria-label="ロボットの体のちがい">
+    <h2>ロボットの体のつくりと、得意な場所（同じダッシュボードの3つのシミュレーター）</h2>
+    <div class="tbl-wrap"><table class="bt"><thead><tr><th>体のつくり</th><th>シミュレーター</th><th>得意な場所</th><th>苦手な場所</th></tr></thead><tbody><tr><td>門型（車輪で畝をまたぐ）</td><td>🌱 除草AIロボ</td><td>平らな畑の畝。上から真下を見られ、ハンドが安定する</td><td>斜面・段差・木の根</td></tr><tr class="cur"><td>レール走行（温湯管の上）（この画面）</td><td>🍅 ハウス収穫ロボ</td><td>ハウスの通路。位置がぶれず、重い収穫箱も運べる</td><td>レールのない場所・ハウスの外</td></tr><tr><td>四足歩行（横歩きできる）</td><td>🐕 四足ロボ</td><td>法面・林の中・段差・パネルの下</td><td>長い時間の作業（電池）・重い荷物・急斜面での転倒</td></tr></tbody></table></div>
+    <p class="muted">同じ「画像認識の点数 s としきい値 τ」の考え方で、作業と場所が変わると、何が変わるかを比べてみよう。</p>
+  </section>
   <p class="foot">教育用の単純化モデルです。実機のトマト収穫ロボットの性能や判定方式を再現したものではありません。誤収穫の損失は「その果実が育っていれば得られた売上＋出荷できない分」として、各自の条件で入れてください。</p>
 </div>
 

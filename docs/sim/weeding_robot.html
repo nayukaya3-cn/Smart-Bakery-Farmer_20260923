@@ -111,6 +111,7 @@ th{color:var(--muted);font-weight:500;font-size:11.5px}
 td{font-family:var(--f-mono)}
 .empty{color:var(--muted);font-size:13px;padding:8px 0}
 .foot{color:var(--muted);font-size:12px;max-width:80ch}
+.bt th,.bt td{text-align:left!important;white-space:normal;font-family:inherit}.bt tr.cur td{background:var(--soft);font-weight:700}
 </style>
 </head>
 <body>
@@ -121,7 +122,7 @@ td{font-family:var(--f-mono)}
       <p class="lede">門型の除草ロボットが小麦の畝をまたいで走り、搭載カメラの画像認識で「雑草か小麦か」を見分け、ロボットハンドで雑草を根ごと抜き取ります（またはレーザーで焼きます）。
         人の遠隔操作・AI自動・AI＋人の3つのやり方で、同じ畑の雑草を取り比べます。</p>
     </div>
-    <div class="spec"><span class="tag">畝 6 m × 小麦3条</span><span class="tag">門型ロボ・ハンドで抜き取り</span><span class="tag">点数 s ≥ τ で「雑草」</span></div>
+    <div class="spec"><span class="tag">畝 6 m × 小麦3条</span><span class="tag">門型ロボ（車輪）・ハンドで抜き取り</span><span class="tag">点数 s ≥ τ で「雑草」</span></div>
   </header>
 
   <main class="app">
@@ -236,6 +237,11 @@ s ≥ τ なら「雑草」と判断して抜く</div>
     <p id="recEmpty" class="empty">「答え合わせ」を押すと（AIは走り終えると自動で）、そのラウンドの結果がここに残ります。CSVは、ダッシュボードの「AIロボット（見回り・除草の体験）」→「除草 3 ② 可視化する」に貼ってください。</p>
   </section>
 
+  <section class="card bodies" aria-label="ロボットの体のちがい">
+    <h2>ロボットの体のつくりと、得意な場所（同じダッシュボードの3つのシミュレーター）</h2>
+    <div class="tbl-wrap"><table class="bt"><thead><tr><th>体のつくり</th><th>シミュレーター</th><th>得意な場所</th><th>苦手な場所</th></tr></thead><tbody><tr class="cur"><td>門型（車輪で畝をまたぐ）（この画面）</td><td>🌱 除草AIロボ</td><td>平らな畑の畝。上から真下を見られ、ハンドが安定する</td><td>斜面・段差・木の根</td></tr><tr><td>レール走行（温湯管の上）</td><td>🍅 ハウス収穫ロボ</td><td>ハウスの通路。位置がぶれず、重い収穫箱も運べる</td><td>レールのない場所・ハウスの外</td></tr><tr><td>四足歩行（横歩きできる）</td><td>🐕 四足ロボ</td><td>法面・林の中・段差・パネルの下</td><td>長い時間の作業（電池）・重い荷物・急斜面での転倒</td></tr></tbody></table></div>
+    <p class="muted">同じ「画像認識の点数 s としきい値 τ」の考え方で、作業と場所が変わると、何が変わるかを比べてみよう。</p>
+  </section>
   <p class="foot">教育用の単純化モデルです。実機の除草ロボットの性能や判定方式を再現したものではありません。実機のレーザーは目・やけど・乾いた草の火災の危険が大きいため、このシミュレーターの中だけで扱います。記録はこの画面の中だけにあり、どこにも送られません。</p>
 </div>
 

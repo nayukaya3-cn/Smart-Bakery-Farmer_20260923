@@ -8,6 +8,8 @@ AIロボット ─ 記録 → シミュレーション → 実機（学校向け
   🗺️ 巡回ルートを設計する … 畑を見回るロボットの経路（写真の重なり・距離・時間）
   🌱 除草 0〜5            … 除草AIロボット・シミュレーター（docs/sim/weeding_robot.html）と、その探究
                              計算は weeding_lab.py（`python weeding_lab.py` で自己チェック）
+  🐕 四足ロボ             … 四足ロボ・シミュレーター（docs/sim/quadruped_robot.html）：草刈り・除草剤散布・栗拾い
+                             計算は quadruped_lab.py（`python quadruped_lab.py` で自己チェック）
 このページはロボットを動かさない。除草のモデルは教育用の単純化で、実機の性能を再現したものではない。
 """
 from pathlib import Path
@@ -19,6 +21,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import media_gallery as mg
+import quadruped_lab as ql
 import weeding_lab as wl
 
 # 公開サーバーでは、更新後もページだけ新しく、部品（weeding_lab）が古いまま残ることがある。
@@ -32,6 +35,8 @@ ASSETS = ROOT / "assets"
 WEED_SIM = ROOT / "docs" / "sim" / "weeding_robot.html"
 # 全画面は「同じページ＋?view=weedsim」で開く（Streamlit の静的配信は HTML を text/plain で返すため）
 WEED_SIM_URL = "?view=weedsim"
+QUAD_SIM = ROOT / "docs" / "sim" / "quadruped_robot.html"
+QUAD_SIM_URL = "?view=quadsim"
 METHOD_KEYS = {"ハンド（抜き取り）": "ハンド（抜き取り）", "レーザー（シミュレーターの中だけ）": "レーザー"}
 
 
@@ -62,13 +67,21 @@ def school_box(title: str, steps: list[tuple[str, str]], subjects: list[tuple[st
         with l2:
             safe_page_link(page_path("3"), "比べて確かめる探究（くじで分けて測る）", "⚖️")
 
-st.set_page_config(page_title="AIロボット（見回り・除草の体験）", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="AIロボット（見回り・除草・四足の体験）", page_icon="🤖", layout="wide")
 
 if st.query_params.get("view") == "weedsim":
     st.markdown("**🌱 除草AIロボ・シミュレーター（全画面）**　"
                 "記録の「CSVをコピー」は、元のページの「除草 3 ② 可視化する」に貼ってください。")
     if WEED_SIM.exists():
         st.iframe(WEED_SIM, height=2100)  # リポジトリ内の自作ファイルだけを埋め込む
+    else:
+        st.error("シミュレーターのファイルが見つかりません。")
+    st.stop()
+if st.query_params.get("view") == "quadsim":
+    st.markdown("**🐕 四足ロボ・シミュレーター（全画面）**　"
+                "記録の「CSVをコピー」は、元のページの「🐕 四足ロボ」に貼ってください。")
+    if QUAD_SIM.exists():
+        st.iframe(QUAD_SIM, height=2150)  # リポジトリ内の自作ファイルだけを埋め込む
     else:
         st.error("シミュレーターのファイルが見つかりません。")
     st.stop()
@@ -82,7 +95,8 @@ st.write(
 )
 
 T = st.tabs(["🗺️ 巡回ルートを設計する", "🌱 除草 0 問いと安全", "除草 1 体験する", "除草 2 ① 計算する",
-             "除草 3 ② 可視化する", "除草 4 ③ 自分の条件で判断する", "除草 5 授業と実機への点検"])
+             "除草 3 ② 可視化する", "除草 4 ③ 自分の条件で判断する", "除草 5 授業と実機への点検",
+             "🐕 四足ロボ（草刈り・散布・栗拾い）"])
 
 # ═════════════════════ 巡回ルート（もとのページ） ═════════════════════
 with T[0]:
@@ -429,6 +443,115 @@ with T[6]:
     with st.expander("出典・参考"):
         st.markdown("\n".join(f"- {s}" for s in wl.SOURCES))
     st.caption("© スマートパン屋農家プロジェクト ｜ 記録の初期表示と数値の多くは教材用の仮置きです。")
+
+# ═════════════════════ 🐕 四足ロボ（草刈り・散布・栗拾い） ═════════════════════
+with T[7]:
+    st.subheader("🐕 四足ロボ・シミュレーター：車輪が入りにくい場所で働かせる")
+    st.write("門型の除草ロボは平らな畝、ハウスの収穫ロボはレールの上で働きます。"
+             "では、**法面（のりめん）の急斜面・太陽光パネルの下・栗園の木の根元**ではどうするか。"
+             "いま、四足歩行ロボットに道具を付けて、こうした場所で働かせる実証が始まっています。")
+    st.dataframe(ql.CASES, hide_index=True, width="stretch",
+                 column_config={"出典": st.column_config.LinkColumn("出典", display_text="記事を開く")})
+    st.caption("事例は、記事に書かれていたことだけを載せています。シミュレーターは各社の方式を再現したものではありません。")
+    st.markdown("#### ロボットの体のつくりと、得意な場所")
+    st.dataframe(ql.BODY_TABLE, hide_index=True, width="stretch")
+    school_box(
+        "斜面の草刈り、ロボに任せる？ 人がやる？",
+        [
+            ("① 計算する", "すべらずに立つ条件 μ ≥ tan θ から、傾きごとのすべりやすさと、電池・速さを求める"),
+            ("② 可視化する", "四足・人の足・車輪のすべりやすさをグラフにし、シミュレーターの記録で「人・AI・AI＋人」を比べる"),
+            ("③ 自分の条件で判断する", "年間の作業面積・時給・本体価格から、ロボのほうが安くなる面積を求め、危険も含めて決める"),
+        ],
+        [
+            ("物理基礎", "斜面の上の物体と摩擦力（μ ≥ tan θ）、仕事と電力量"),
+            ("生物基礎・科学と人間生活", "雑草と残す植物（エヒメアヤメ）、虫食いの栗、農薬と生態系"),
+            ("数学", "三角比（tan・sin）、正規分布、1次関数の交点（元が取れる面積）"),
+            ("情報Ⅰ", "モデル化とシミュレーション、画像認識のしきい値、ROS 2 へのつながり"),
+        ],
+    )
+    st.markdown("#### 体験する")
+    st.markdown(
+        "1. 作業を選ぶ（**草刈り**＝法面 25°・**除草剤散布**＝パネルの下 5°・**栗拾い**＝栗園 15°）。\n"
+        "2. **遠隔操作（人）**：A・D で前後に歩き、W・S で横歩き。小窓の黄色の枠が作業の相手なら Space。\n"
+        "3. **AI自動**・**AI＋人**：同じ区画の番号で「自動作業を開始」。傾き θ を 35° に上げて、すべり・転倒・電池を見る。\n"
+        "4. **CSVをコピー**して、下の「記録を比べる」に貼る。"
+    )
+    st.link_button("シミュレーターを全画面で開く", QUAD_SIM_URL)
+    if QUAD_SIM.exists():
+        st.iframe(QUAD_SIM, height=2100)  # リポジトリ内の自作ファイルだけを埋め込む
+    else:
+        st.error("シミュレーターのファイル（docs/sim/quadruped_robot.html）が見つかりません。")
+
+    st.markdown("#### ① 計算する → ② 可視化する：傾きとすべりやすさ")
+    q1, q2 = st.columns([1, 2])
+    with q1:
+        th = st.slider("傾き θ（度）", 0, 40, 25, key="qd_theta")
+        st.metric("必要な摩擦 tan θ", f"{np.tan(np.radians(th)):.2f}")
+        st.metric("歩く速さ", f"{ql.speed(th):.2f} m/秒")
+        st.metric("1 m あたりの電池", f"{ql.battery_per_m(th):.2f} %")
+    with q2:
+        long = ql.slip_table(range(0, 41)).melt(id_vars=["傾き θ（度）", "必要な摩擦 tanθ"], var_name="足", value_name="1mですべる割合 %")
+        fig = px.line(long, x="傾き θ（度）", y="1mですべる割合 %", color="足",
+                      color_discrete_map={"四足ロボ": "#1d4e89", "人の足": "#c98a2b", "車輪のロボ": "#868e96"})
+        fig.add_vline(x=th, line_dash="dash", line_color="#c92a2a")
+        fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
+        st.plotly_chart(fig, width="stretch")
+    st.caption("p = Φ((tan θ − μ) / 0.2)。μ は 四足 0.85・人の足 0.75・車輪 0.55 の仮置き。"
+               "濡れた草・落ち葉・土の固さで大きく変わります。")
+
+    st.markdown("#### ③ 自分の条件で判断する：ロボを買う？ 人がやる？")
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        task = st.radio("作業", list(ql.TASKS), horizontal=True, key="qd_task")
+        th2 = st.slider("傾き θ（度）", 0, 40, ql.TASKS[task]["傾き"], key=f"qd_th2_{task}")
+        area = st.number_input("年間の作業面積（㎡）", 0, 200_000, 3000, 500, key="qd_area")
+        wage = st.number_input("人の時給（円）", 0, 5000, 1100, 50, key="qd_wage")
+        price = st.number_input("ロボの本体価格（円）", 0, 10_000_000, ql.UNITREE_GO2_PRICE, 50_000, key="qd_price")
+        years = st.number_input("使う年数", 1, 15, 5, key="qd_years")
+        keep = st.number_input("道具・保守（円／年）", 0, 2_000_000, 80_000, 10_000, key="qd_keep")
+        watch = st.slider("人が見守る割合", 0.0, 1.0, 0.3, 0.05, key="qd_watch")
+        risk = st.number_input("すべり1回の重み（円）", 0, 100_000, 300, 100, key="qd_risk")
+    kw = dict(wage=wage, price=price, years=years, keep=keep, watch=watch, risk=risk)
+    be = ql.break_even(task, th2, **kw)
+    amax = min(200_000, max(1000, area * 2.5, (be or 0) * 1.4))
+    with c2:
+        cc = ql.annual_cost(area, task, th2, **kw)
+        k1, k2, k3 = st.columns(3)
+        k1.metric("人がやる", f"{cc['人がやる'] / 10000:,.1f} 万円/年")
+        k2.metric("四足ロボ＋見守り", f"{cc['四足ロボ＋見守り'] / 10000:,.1f} 万円/年")
+        k3.metric("元が取れる面積", f"{be:,.0f} ㎡" if be else "なし")
+        fig = px.line(ql.cost_curve(task, th2, amax, **kw), x="年間の作業面積（㎡）", y="円／年", color="やり方",
+                      color_discrete_map={"人がやる": "#c98a2b", "四足ロボ＋見守り": "#1d4e89"})
+        fig.add_vline(x=area, line_dash="dash", line_color="#c92a2a")
+        fig.update_layout(height=340, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
+        st.plotly_chart(fig, width="stretch")
+        st.caption(f"人の速さ {cc['人の速さ ㎡/時']:.0f} ㎡/時・ロボの速さ {cc['ロボの速さ ㎡/時']:.0f} ㎡/時（どちらも仮置き）。"
+                   "本体価格の初期値は、販売ページの Unitree Go2 のメーカー希望小売価格（道具・アーム・保険は含まない）。")
+    with st.container(border=True):
+        st.markdown("**わたしの判断（ノートに書く）**")
+        st.markdown("「＿＿（作業）を、傾き ＿＿° の場所で年 ＿＿ ㎡ するなら、＿＿＿（人／四足ロボ＋見守り）にする。"
+                    "なぜなら、＿＿＿（費用／転落・熱中症の危険／見分けのまちがい／電池）を一番大事にしたいから。」")
+        st.caption("お金にしにくい「人が斜面で転ぶ危険・暑さ」をどう重く見るかで、答えは変わります。")
+
+    st.markdown("#### 記録を比べる（シミュレーターのCSV）")
+    txt = st.text_area("「CSVをコピー」で写した記録を貼る", ql.SAMPLE_CSV, height=160, key="qd_csv")
+    try:
+        df = ql.parse_records(txt)
+        st.dataframe(ql.compare_modes(df), hide_index=True, width="stretch")
+        for tk in df["task"].unique():
+            p = ql.prob_better(df, "AI＋人", "AIだけ", task=tk)
+            if p is not None:
+                st.write(f"**{tk}**：「AI＋人」の済んだ割合が「AIだけ」より高い確率 **{p:.0%}**（ベータ分布）")
+        st.caption("初期表示は架空の記入例です。自分で試した記録に貼りかえてください。")
+    except Exception as e:  # noqa: BLE001
+        st.warning(f"CSVを読めませんでした：{e}")
+
+    with st.expander("⚠️ 安全について（実機に近づく前に）"):
+        st.dataframe(ql.SAFETY, hide_index=True, width="stretch")
+        st.markdown("- 生徒は実機の刈刃・除草剤を扱いません。シミュレーターの「散布」は薬を使わない練習です。\n"
+                    "- 四足ロボの実機は、販売店・メーカーの取扱説明と、受け入れ先のリスクアセスメントに従います。")
+    with st.expander("出典・参考"):
+        st.markdown("\n".join(f"- {s}" for s in ql.SOURCES + [f"{r['作業']}の事例：{r['出典']}" for _, r in ql.CASES.iterrows()]))
 
 st.divider()
 mg.media_section(ASSETS / "robot", key="robot", title="📂 AIロボットの記録・資料")
