@@ -20,6 +20,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import harvest_lab as hl
+import quadruped_lab as ql
 import security_guard as sg
 
 st.set_page_config(page_title="ハウス収穫ロボ体験実習", page_icon="🍅", layout="wide")
@@ -111,6 +112,9 @@ with T[0]:
 
 # ═════════════════════ 1 体験する ═════════════════════
 with T[1]:
+    with st.expander("ロボットの体のつくりと、得意な場所（除草・四足のシミュレーターと比べる）"):
+        st.dataframe(ql.BODY_TABLE, hide_index=True, width="stretch")
+        st.caption("地面に落ちた果実（栗）を拾う、斜面で草を刈る、といった作業は「AIロボット」ページの 🐕 四足ロボで試せます。")
     st.subheader("体験：人が遠隔で1ラウンド → AIで1ラウンド → 記録を比べる")
     st.markdown(
         "1. 右の操作盤で **遠隔操作（人）** を選び、◀▶で走行・▲▼でアームを上下。小窓（ロボット搭載カメラ）の枠が"
