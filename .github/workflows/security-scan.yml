@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0          # 過去のコミットも秘密情報スキャンの対象にする
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
