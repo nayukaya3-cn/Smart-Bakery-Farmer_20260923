@@ -18,6 +18,7 @@ import streamlit as st
 import media_gallery as mg
 import security_guard as sg
 import shogai_koyo as sk
+import sister_sites as ss
 import soil_vision as sv
 import social as sn
 import teacher_course as tc
@@ -150,6 +151,15 @@ def school_banner() -> None:
         )
         with h2:
             safe_page_link(SAT_PAGE, "衛星データ解析を開く", "➡️")
+        k1, k2 = st.columns([3, 1])
+        _t = ss.SITES["tanpaku"]
+        k1.markdown(
+            f"**{_t['icon']} 姉妹サイト：{_t['name']}（教室での事前学習）**　"
+            "科学と人間生活「ヒトの生命現象」の1単元を Python で動かす教材です。"
+            "教室で「食べ物は材料、設計図は自分の遺伝子」を計算し、ここ（畑・パン工房）で確かめます。"
+            "パン用小麦だけでは足りなくなるアミノ酸（アミノ酸の補足効果）も扱います。"
+        )
+        k2.link_button("姉妹サイトを開く ↗", ss.url("tanpaku") or _t["repo"], width="stretch")
 
 
 st.markdown(

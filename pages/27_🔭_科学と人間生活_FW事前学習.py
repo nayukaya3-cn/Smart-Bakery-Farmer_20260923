@@ -16,11 +16,12 @@ import streamlit as st
 
 import fieldwork_pdca as fp
 import kagaku_ningen_fw as kn
+import sister_sites as ss
 import teacher_course as tc
 
 st.set_page_config(page_title="科学と人間生活＝フィールドワーク事前学習", page_icon="🔭", layout="wide")
 
-UPDATED = "2026-11-03"
+UPDATED = "2026-11-06"
 
 st.markdown(
     """
@@ -77,7 +78,10 @@ with tabs[1]:
     st.markdown(
         f"- 教科書は各社とも令和7年検定済の新版（例：東京書籍 科人002-901、第一学習社 科人183-901）。"
         f"[東京書籍「改訂 科学と人間生活」令和9年度用 教科書・シラバス]({kn.TEXTBOOK_URL})\n"
-        f"- 映像で復習：[NHK高校講座「科学と人間生活」]({kn.NHK_URL})"
+        f"- 映像で復習：[NHK高校講座「科学と人間生活」]({kn.NHK_URL})\n"
+        f"- 教科書の1単元を Python で動かす教材：姉妹サイト"
+        f"[{ss.SITES['tanpaku']['icon']} {ss.SITES['tanpaku']['name']}]({ss.url('tanpaku') or ss.SITES['tanpaku']['repo']})"
+        "（生命の科学「ヒトの生命現象」 ─ 体をつくるタンパク質）"
     )
     st.markdown('<p class="note">教科書の記号・番号は、東京都教育委員会「教科書調査研究資料（令和8年度使用）」によります。'
                 "採択している教科書の単元名に合わせて、表の名前を読み替えてください。</p>", unsafe_allow_html=True)
@@ -106,6 +110,9 @@ with tabs[2]:
             st.markdown(f"- スマートパン屋農家で見るもの：{r['現場で見るもの']}\n"
                         f"- 問いの例：{r['問いのブリッジ']}\n- 観察のレンズ：{fp.LENSES[r['レンズ']]}")
         st.download_button("問いのブリッジをテキストで保存", q.encode("utf-8"), "問いのブリッジ.txt", "text/plain")
+        if ss.pairs_for_unit(unit, "bakery"):
+            st.markdown("**教室で使う事前学習の教材（姉妹サイト）**")
+            ss.render_unit(unit, "bakery")
 
 # ═════════════════════════════════════════════
 # 💻 事前学習の1コマ（情報Ⅰ）
@@ -169,5 +176,6 @@ with tabs[4]:
     except Exception:  # noqa: BLE001
         st.caption("🧭 伴走キットは左メニュー「🎓 学校向けの探究」から開けます")
 
+ss.render("bakery", "科学と人間生活_FW事前学習")
 st.markdown(f'<p class="note">最終更新：{UPDATED}　入力はこの画面の中だけで使い、保存しません。</p>',
             unsafe_allow_html=True)

@@ -15,6 +15,7 @@
       （東京都教育委員会「教科書調査研究資料（令和8年度使用）」による）
   - 光の屈折：見かけの深さ ≒ 実際の深さ ÷ 水の屈折率（約1.33）。真上近くから見たときの近似
   - 浸水時の歩行の目安は自治体・国の防災資料で各自が確かめて入れる（初期値は説明用）
+  - 姉妹サイト（教材ネットワーク）：sister_sites.py。教室側の「🧬 体をつくるタンパク質」と単元名（小項目）を共通語彙にしてつなぐ
   - PDCAの発展形：PDSA（Deming）、OODA（Boyd）、SDCA（TQMの標準化サイクル）。
     「PDCA 2.0（Purpose-Dialogue-Creative-Align）」は実務書・記事で使われる呼び方で、学術用語ではない
 """
@@ -24,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 import fieldwork_pdca as fp
+import sister_sites as ss
 
 TEXTBOOK_URL = "https://ten.tokyo-shoseki.co.jp/text/hs/rika/16737/"  # 東京書籍 令和9年度用 教科書・シラバス
 NHK_URL = "https://edu.web.nhk/kokokoza/kagakuningen/"               # NHK高校講座 科学と人間生活
@@ -181,6 +183,12 @@ def _selftest() -> None:
     assert set(fp.UNIT_BRIDGE["単元"]) <= set(CURRICULUM["小項目"])
     assert "微生物とその利用" in bridge_question("微生物とその利用", "農場", 7)
     assert len(PDCA_VARIANTS) == 5
+    # 姉妹サイト：単元名の語彙がそろっていること、リンク先のページが実在すること
+    assert set(ss.UNITS) <= set(CURRICULUM["小項目"])
+    for _a, _b, units, _w in ss.PAIRS:
+        assert set(units) <= set(fp.UNIT_BRIDGE["単元"]), units
+    from pathlib import Path
+    assert ss.check_local_pages("bakery", Path(__file__).parent) == [], "姉妹サイトのリンク先ページが見つからない"
     print("kagaku_ningen_fw: すべてのチェックに合格しました")
 
 

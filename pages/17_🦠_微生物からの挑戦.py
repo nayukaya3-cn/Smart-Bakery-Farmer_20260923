@@ -28,6 +28,7 @@ import streamlit as st
 import diary_photos as dp
 import microbe_lab as mb
 import security_guard as sg
+import sister_sites as ss
 
 st.set_page_config(page_title="微生物（酵母・乳酸菌等）からの挑戦", page_icon="🦠", layout="wide")
 
@@ -442,4 +443,5 @@ if report:
 else:
     st.info("各タブで計算すると、ここに下書きが出ます。")
 
+ss.render("bakery", "微生物からの挑戦")
 st.caption("© スマートパン屋農家プロジェクト ｜ 初期表示は教材用の架空データです。値の目安・判定の基準は原典・公定法で確かめてください。")
