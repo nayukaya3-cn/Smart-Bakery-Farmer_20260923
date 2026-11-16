@@ -9,10 +9,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+import hatsuga_core as hc
+
+RECORD_CSV = Path(__file__).parent / "data" / "sowing_record.csv"  # 今季の実績（ここに1行足せば画面に出る）
+RECORD_COLS = ["作物", "カレンダー", "作業", "実施日", "出芽確認日", "メモ"]
 
 
 @dataclass(frozen=True)
@@ -29,7 +35,7 @@ class Crop:
 
 # 適期・保存期間は一般的な目安。自分の記録で上書きしていく前提の初期値。
 CROPS = [
-    Crop("パン用小麦（暖地向け品種）", "主食・パン原料", (10, 18), (10, 25), "播種",
+    Crop("パン用小麦（ミナミノカオリ）", "主食・パン原料", (10, 18), (10, 25), "播種",
          "本命。パン屋農家の原料。適期は実体験値（10/20頃が発芽率最適）", 2, 12),
     Crop("ライ麦", "主食・パン原料", (10, 15), (11, 10), "播種",
          "パン原料と緑肥を兼ねる。痩せ地や寒さにも強い", 1, 12),
@@ -112,9 +118,58 @@ def schedule(df: pd.DataFrame, today: date, days_per_week: int) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
+def load_record(path: Path = RECORD_CSV) -> pd.DataFrame:
+    """data/sowing_record.csv（今季の実績）を読む。無い・壊れているときは空の表を返す。"""
+    try:
+        rec = pd.read_csv(path, encoding="utf-8-sig", dtype=str).fillna("")[RECORD_COLS]
+        for col in ("実施日", "出芽確認日"):
+            rec[col] = pd.to_datetime(rec[col], errors="coerce").dt.date
+        return rec.dropna(subset=["実施日"]).sort_values("実施日").reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame(columns=RECORD_COLS)
+
+
+def plan_vs_actual(df: pd.DataFrame, rec: pd.DataFrame) -> pd.DataFrame:
+    """計画（適期）と実績（実施日）のずれ。カレンダーに無い作物は「カレンダー外」。"""
+    rows = []
+    for _, r in rec.iterrows():
+        hit = df[df["作物"].str.startswith(r["カレンダー"])] if r["カレンダー"] else df.iloc[0:0]
+        if hit.empty:
+            window, verdict = "—", "カレンダー外"
+        else:
+            s, e = hit.iloc[0]["開始"], hit.iloc[0]["締切"]
+            window = f"{s:%m/%d}〜{e:%m/%d}"
+            d = r["実施日"]
+            verdict = (f"{(s - d).days}日 早い" if d < s else f"{(d - e).days}日 遅い" if d > e else "適期内")
+        seen = r["出芽確認日"]
+        rows.append(dict(作物=r["作物"], 作業=r["作業"], 実施日=f"{r['実施日']:%m/%d}", カレンダーの適期=window,
+                         ずれ=verdict,
+                         出芽=(f"{seen:%m/%d} に確認（{(seen - r['実施日']).days}日目まで）" if isinstance(seen, date) and seen == seen
+                             else "未確認"),
+                         メモ=r["メモ"]))
+    return pd.DataFrame(rows)
+
+
+def wheat_windows(sown: date, df: pd.DataFrame) -> pd.DataFrame:
+    """小麦の播種日を、3つの物差し（自分の実体験値・公的試験2つ）で見る。"""
+    w = df[df["作物"].str.startswith("パン用小麦")].iloc[0]
+    rows = [("このカレンダー（実体験値）", (w["開始"].month, w["開始"].day), (w["締切"].month, w["締切"].day),
+             "10/20頃が発芽率最適だった、という自分の記録")]
+    rows += list(hc.SOWING_WINDOWS)
+    out = []
+    for name, s, e, why in rows:
+        state, n = hc.window_state(sown, s, e)
+        out.append(dict(物差し=name, 目安=f"{s[0]}/{s[1]}〜{e[0]}/{e[1]}",
+                        実際の播種日は=state if state == "期間内" else f"{n}日 {state}", 根拠=why))
+    return pd.DataFrame(out)
+
+
 def render(today: date | None = None) -> None:
     today = today or date.today()
     df = crop_table(today)
+    rec = load_record()
+    wheat_rec = rec[rec["カレンダー"] == "パン用小麦"]
+    wheat_sown = wheat_rec.iloc[-1]["実施日"] if not wheat_rec.empty else None
 
     st.header("🗓️ 今まく作物：秋の播種カレンダー")
     st.write(
@@ -134,13 +189,25 @@ def render(today: date | None = None) -> None:
         m2.caption(nxt["作物"])
     wheat = df[df["作物"].str.startswith("パン用小麦")].iloc[0]
     sow_day = date(wheat["開始"].year, 10, 20)
-    m3.metric("小麦の最適日", f"{sow_day:%m/%d}",
-              f"あと {(sow_day - today).days} 日" if sow_day >= today else "過ぎました", delta_color="off")
+    if wheat_sown:
+        m3.metric("小麦の播種", f"{wheat_sown:%m/%d} 済み",
+                  f"実体験の最適日 {sow_day:%m/%d} との差 {(wheat_sown - sow_day).days:+d} 日", delta_color="off")
+    else:
+        m3.metric("小麦の最適日", f"{sow_day:%m/%d}",
+                  f"あと {(sow_day - today).days} 日" if sow_day >= today else "過ぎました", delta_color="off")
 
     show = df[["作物", "作業", "開始", "締切", "状態", "締切まで日数", "位置づけ"]].copy()
     show["開始"] = show["開始"].map(lambda d: f"{d:%m/%d}")
     show["締切"] = show["締切"].map(lambda d: f"{d:%m/%d}")
     st.dataframe(show, hide_index=True, width="stretch")
+
+    st.markdown("**今季の実績：計画とのずれ**")
+    if rec.empty:
+        st.caption("まだ記録がありません。`data/sowing_record.csv` に1行足すと、ここに計画とのずれが出ます。")
+    else:
+        st.dataframe(plan_vs_actual(df, rec), hide_index=True, width="stretch")
+        st.caption("「出芽」の日数は**確認した日まで**の日数です。その前に畑を見ていなければ、『その日までのどこかで出た』としか言えません。"
+                   "見に行った日は「まだ出ていない」も `data/sowing_record.csv` のメモに残すと、幅がせばまります。")
 
     # ── ② 可視化する ─────────────────────────
     st.subheader("② 可視化する：播種カウントダウン")
@@ -151,9 +218,14 @@ def render(today: date | None = None) -> None:
     fig.update_yaxes(autorange="reversed", title=None)
     fig.add_vline(x=pd.Timestamp(today), line_dash="dot", line_color="#555")
     fig.add_vline(x=pd.Timestamp(sow_day), line_color="#c98a2b", line_width=2)
+    marks = [(df.loc[df["作物"].str.startswith(r["カレンダー"]), "作物"].iloc[0], r["実施日"])
+             for _, r in rec.iterrows() if r["カレンダー"] and df["作物"].str.startswith(r["カレンダー"]).any()]
+    if marks:
+        fig.add_scatter(x=[pd.Timestamp(d) + pd.Timedelta(hours=12) for _, d in marks], y=[n for n, _ in marks],
+                        mode="markers", name="実施した日", marker=dict(symbol="diamond", size=13, color="#333"))
     fig.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
     st.plotly_chart(fig, width="stretch")
-    st.caption("点線が今日、オレンジの実線が小麦の最適日（10/20）です。棒の右端が各作物の締切です。")
+    st.caption("点線が今日、オレンジの実線が小麦の最適日（10/20）、◆ が実際に作業した日です。棒の右端が各作物の締切です。")
 
     st.markdown("**保存できる期間の目安**（防災・自給の観点）")
     keep = df[df["保存目安_月"] > 0].sort_values("保存目安_月")
@@ -169,21 +241,43 @@ def render(today: date | None = None) -> None:
     st.subheader("③ 自分の条件で判断する：手間の配分")
     c1, c2 = st.columns([1, 2])
     with c1:
-        names = df.loc[df["状態"] != "終了", "作物"].tolist()
+        done_keys = tuple(k for k in rec["カレンダー"] if k)   # 実績のある作物は、これからの作業から外す
+        names = [n for n in df.loc[df["状態"] != "終了", "作物"] if not (done_keys and n.startswith(done_keys))]
         default = [n for n in names if not n.startswith(("葉物", "緑肥", "ライ麦"))]
         chosen = st.multiselect("今季やる作物", names, default=default)
         days = st.slider("1週間に畑に出られる日数", 1, 7, 3)
     with c2:
         plan = schedule(df[df["作物"].isin(chosen)], today, days)
         if plan.empty:
-            st.info("作物を選ぶと、締切が早い順に作業日を割り当てます。")
+            st.info("作物を選ぶと、締切が早い順に作業日を割り当てます。実施済みの作物（上の「今季の実績」）は選択肢から外しています。")
         else:
             st.dataframe(plan, hide_index=True, width="stretch")
             ng = (plan["判定"] != "間に合う").sum()
             if ng:
                 st.warning(f"{ng} 件が締切に間に合いません。畑に出る日を増やすか、優先度の低い作物を外してください。")
             else:
-                st.success("すべて締切内に収まります。小麦 → ソラマメ・ニンニク → エンドウ → タマネギの順で、作業のピークが分散しています。")
+                st.success("選んだ作物は、すべて締切内に収まります。")
+
+    if wheat_sown:
+        st.markdown(f"**小麦（{wheat_sown:%m/%d} 播種）：どの物差しで見るか・いつ芽が出るか**")
+        st.dataframe(wheat_windows(wheat_sown, df), hide_index=True, width="stretch")
+        st.warning(
+            "このカレンダーの適期（実体験値）では遅れですが、ミナミノカオリの公的な試験では11月中〜下旬が目安で、"
+            "早まきは幼穂凍死（春先の寒さで穂のもとが死ぬ）が増えるとされています。どちらも三原西部の値ではありません。"
+            "**来季の目安は、今季の出芽日・越冬のようす・収穫量の記録で決めます。**")
+        f1, f2 = st.columns([1, 2])
+        with f1:
+            temp = st.slider("これからの平均気温（℃）", 2.0, 16.0, 10.0, 0.5, key="sc_temp",
+                             help="仮の値。気象庁の過去の気象データや、畑の温度計の記録で置きかえる")
+        with f2:
+            n = hc.days_to_emerge(temp)
+            g1, g2 = st.columns(2)
+            g1.metric("出芽の予測", f"{wheat_sown + timedelta(days=round(n)):%m/%d} ごろ", f"播種から約 {n:.0f} 日",
+                      delta_color="off")
+            g2.metric("見はじめる日", f"{wheat_sown + timedelta(days=max(round(n) - 3, 1)):%m/%d}",
+                      "予測の3日前から", delta_color="off")
+        st.caption(f"式：積算温度 {hc.WHEAT_GDD} ℃・日 ÷ 平均気温。積算温度は別の品種（さとのそら）での推定値＝参考値です（{hc.GDD_SOURCE}）。"
+                   "予測と実際のずれを記録して、ミナミノカオリ・この畑の値に置きかえます。")
 
     with st.expander("水田20a（委託中）をどう使うか"):
         st.write(
@@ -194,3 +288,23 @@ def render(today: date | None = None) -> None:
     st.markdown('<p class="note">※ 適期は瀬戸内・暖地の一般的な目安です。圃場の標高や今年の地温で前後します。'
                 "小麦は実体験の数値を最優先にし、実測の発芽率を活動ログに残して次年度の目安を更新します。</p>",
                 unsafe_allow_html=True)
+
+
+def _self_check() -> None:
+    today = date(2026, 11, 16)
+    df = crop_table(today)
+    rec = load_record()
+    assert len(rec) >= 4 and list(rec.columns) == RECORD_COLS
+    pv = plan_vs_actual(df, rec).set_index("作物")
+    assert pv.loc["タマネギ（苗）", "ずれ"] == "適期内"
+    assert pv.loc["パン用小麦（ミナミノカオリ）", "ずれ"] == "22日 遅い"
+    assert pv.loc["寒締めほうれん草", "ずれ"] == "1日 遅い" and "15日目まで" in pv.loc["寒締めほうれん草", "出芽"]
+    assert pv.loc["キャベツ", "ずれ"] == "カレンダー外" and pv.loc["キャベツ", "出芽"] == "未確認"
+    ww = wheat_windows(date(2026, 11, 16), df)["実際の播種日は"].tolist()
+    assert ww == ["22日 遅い", "期間内", "5日 早い"], ww
+    assert load_record(Path("無いファイル.csv")).empty
+
+
+if __name__ == "__main__":
+    _self_check()
+    print("sowing_calendar: 自己チェックOK")
